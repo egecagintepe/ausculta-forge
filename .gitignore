@@ -1,0 +1,63 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python virtual environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# Operating System files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Generated audio and multimedia outputs
+*.wav
+*.mp3
+*.flac
+*.ogg
+demo_raw.wav
+demo_filtered.wav
+
+# Datasets and raw data (never commit raw/processed medical datasets to git)
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+*.dat
+*.hea
+*.mat
+*.tar.gz
+*.zip
+*.7z
+
+# Temporary experiment outputs and logs
+experiments/output/*
+experiments/runs/*
+experiments/logs/*
+!experiments/output/.gitkeep
+!experiments/runs/.gitkeep
+!experiments/logs/.gitkeep
+*.log
