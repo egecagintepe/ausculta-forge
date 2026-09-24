@@ -13,9 +13,9 @@ Gömülü sistemlerde (özellikle UART, USB CDC veya DMA tamponlarında) donanı
 Eğer kaybolan bir blok DSP filtresine fark ettirilmeden aradaki boşluk kapatılırsa:
 1. Filtre durum matrisi (`zi`) zaman süreksizliğine uğrar ve sinyale sahte yüksek genlikli yapay klikler (artifacts) enjekte eder.
 2. Kalp atım hızı (BPM) ve ritim hesaplamaları zaman ekseninde geri dönülemez biçimde sapar.
-3. Hekime sunulan sinyalin güvenilirliği sorgulanır hale gelir.
+3. Kullanıcıya ve analiz hattına sunulan sinyalin güvenilirliği kaybolur.
 
-`StreamQualityMonitor`, bu tip anomalileri sinyal işleme katmanına girdiği anda yakalayarak hekimi ve sistemi uyarır.
+`StreamQualityMonitor`, bu tip anomalileri sinyal işleme katmanına girdiği anda yakalayarak operatörü ve sistemi uyarır.
 
 ---
 
@@ -79,4 +79,4 @@ Eğer `dropped_blocks > 0` veya zaman anomalisi varsa `is_healthy` derhal `False
 
 ## Sunumda / Savunmada 30 Saniyelik Açıklama
 
-> *"Tıbbi sinyal edinimi güvenilirlik gerektirir. Seri hatlarda veya tamponlarda oluşabilecek tek bir paket kaybı bile DSP filtre durumunu bozar ve kalp ritmini yanlış hesaplatabilir. AuscultaForge'a entegre ettiğimiz `StreamQualityMonitor`, her gelen bloğun sıra numarasını, zaman damgasını ve örnekleme frekansını anlık olarak denetler. Tek bir paket düşmesi, tekrarı veya zamanlama kayması durumunda filtreyi ve hekimi uyararak sinyal bütünlüğünü garanti altına alır."*
+> *"Gerçek zamanlı sinyal edinimi güvenilirlik gerektirir. Seri hatlarda veya tamponlarda oluşabilecek tek bir paket kaybı bile DSP filtre durumunu bozar ve kalp ritmini yanlış hesaplatabilir. AuscultaForge'a entegre ettiğimiz `StreamQualityMonitor`, her gelen bloğun sıra numarasını, zaman damgasını ve örnekleme frekansını anlık olarak denetler. Tek bir paket düşmesi, tekrarı veya zamanlama kayması durumunda filtreyi ve operatörü uyararak sinyal bütünlüğünü garanti altına alır."*

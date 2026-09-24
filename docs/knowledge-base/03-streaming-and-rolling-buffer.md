@@ -16,15 +16,17 @@ Dijital ses işlemede iki uç yaklaşım vardır:
 **AuscultaForge Çözümü:** Veriler 256 örneklik sabit bloklar halinde akar.
 - $f_s = 2000\text{ Hz}$ için blok süresi: $\frac{256}{2000} = 128\text{ ms}$.
 - $f_s = 4000\text{ Hz}$ için blok süresi: $\frac{256}{4000} = 64\text{ ms}$.
-Bu süre insan algısı ve kullanıcı arayüzü (UI) yenileme hızları (15–30 FPS) açısından fark edilemeyecek kadar düşük bir gecikme (latency) sunarken, Python ve NumPy vektörel işlemlerine optimum verimlilik sağlar.
+
+> [!NOTE]
+> **Gecikme (Latency) Analizi:** 128 ms'lik blok süresi uçtan uca gecikmenin tek belirleyicisi değildir; gecikmeye doğrudan katkı sağlayan temel bileşenlerden biridir. Toplam uçtan uca gecikme; sensör edinimi, iletim (transport/UART), tamponlama, DSP filtreleme hesaplama süresi ve kullanıcı arayüzü (UI) çizim gecikmelerinin toplamından oluşur. 256 örneklik bloklama, Python ve NumPy vektörel işlemlerine yüksek hesaplama verimliliği sunarken gecikmeyi kabul edilebilir sınırlar içinde tutmak için seçilmiş bir mühendislik takasıdır (trade-off).
 
 ---
 
 ## Sıra Numaraları ve Zaman Damgaları
 
 Her `SampleBlock` iki kritik metaveri taşır:
-1. **`sequence` (Sıra Numarası):** $0, 1, 2, \dots$ şeklinde artan tamsayıdır. Paketin kaybolup kaybolmadığını, yinelenip yinelenmediğini ve sırasının bozulup bozulmadığını anlamanın tek yoludur.
-2. **`timestamp_s` (Zaman Damgası):** Bloğun akıştaki başlangıç zamanıdır. Duvar saati gecikmesini (drift) önlemek ve çoklu modalite (ör. ileride EKG eşleme) için zaman senkronizasyonu sağlar.
+1. **`sequence` (Sıra Numarası):** $0, 1, 2, \dots$ şeklinde artan tamsayıdır. Projemizde akış sırasında kaybolan, yinelenen veya sırası bozulan blokları tespit etmek için kullanılan birincil açık (explicit) denetim mekanizmasıdır.
+2. **`timestamp_s` (Zaman Damgası):** Bloğun başlangıç zamanıdır. Zaman damgaları saat kaymasını (drift) tek başına engellemez; ancak zamanlama analizi yapmayı, donanım-yazılım saat kaymalarını tespit etmeyi (drift detection), zamansal hizalamayı ve çoklu modalite (ör. ileride olası EKG entegrasyonu) için senkronizasyonu mümkün kılar.
 
 ---
 
@@ -51,8 +53,8 @@ Kapasite: 5.0 saniye (fs=2000 Hz => 10,000 örnek)
 
 ## Neden Bu Tasarım Seçildi? Hangi Problemleri Önlüyor?
 
-- **Bellek Şişmesini (Memory Leak) Önler:** Sürekli çalışan bir tıbbi cihazda ses dizisi sınırsız büyüyemez; `RollingBuffer` bellek kullanımını sabit (birkaç yüz kilobayt) tutar.
-- **Canlı Metrik Tutarlılığı:** RMS, tepe genlik ve frekans dağılımı tüm sinyalin ortalaması yerine, hastanın *son birkaç saniyedeki* anlık durumunu gösterir.
+- **Bellek Şişmesini (Memory Leak) Önler:** Sürekli çalışan bir canlı sinyal edinim sisteminde ses dizisi sınırsız büyüyemez; `RollingBuffer` bellek kullanımını sabit (birkaç yüz kilobayt) tutar.
+- **Canlı Metrik Tutarlılığı:** RMS, tepe genlik ve frekans dağılımı tüm kaydın ortalaması yerine, incelenen test sinyalinin *son birkaç saniyelik* anlık akustik davranışını yansıtır.
 
 ---
 
@@ -67,4 +69,4 @@ Kapasite: 5.0 saniye (fs=2000 Hz => 10,000 örnek)
 
 ## Sunumda / Savunmada 30 Saniyelik Açıklama
 
-> *"Gerçek zamanlı kalp sesi takibinde veriyi 256 örneklik bloklar halinde işliyoruz; 2000 Hz'de bu yalnızca 128 ms'lik ihmal edilebilir bir gecikme üretir. `RollingBuffer` yapımız ise bellekte hastanın son 5 saniyelik sinyalini kayan bir pencere içinde tutar. Yeni örnekler eklendikçe en eskiler atılır; böylece bellek sabit kalırken hekime anlık ve dinamik olarak güncellenen RMS ve spektrum bilgisi sunulur."*
+> *"Gerçek zamanlı kalp sesi simülasyonunda veriyi 256 örneklik bloklar halinde işliyoruz; bu blok süresi (2000 Hz'de 128 ms), uçtan uca gecikmeyi düşük tutarken NumPy işlemlerinde yüksek hesaplama verimliliği sağlar. `RollingBuffer` yapımız ise bellekte sinyalin son 5 saniyelik geçmişini kayan bir pencere içinde tutar. Yeni bloklar geldikçe en eskiler atılır; böylece bellek sabit kalırken sisteme ve gelecekteki kullanıcı arayüzüne anlık güncellenen RMS ve spektrum bilgisi sunulur."*

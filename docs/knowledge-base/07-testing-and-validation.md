@@ -10,7 +10,7 @@ Bu doküman, AuscultaForge yazılım bileşenlerinin doğruluğunu, sinyal işle
 
 AuscultaForge birim testleri (unit tests) iki katı kurala dayanır:
 1. **Sıfır Ağ Bağımlılığı:** Testler PhysioNet veya internetten dosya indirmeye çalışmaz. İnternetsiz bir geliştirici bilgisayarında veya çevrimdışı CI/CD sunucusunda koşabilmelidir.
-2. **Sentetik Determinizm:** Büyük tıbbi veri setleri yerine, `tmp_path` fixture'ı ile geçici dizinlerde tam olarak bilinen frekansta (ör. 50 Hz saf sinüs) ve bilinen sürede matematiksel sinyaller üretilir. Çıktıların (örneğin tepe frekansının $50\text{ Hz}$ bulunması) kesin matematiksel toleranslarla doğrulanması sağlanır.
+2. **Sentetik Determinizm:** Büyük harici kayıtlar veya ham veri setleri yerine, `tmp_path` fixture'ı ile geçici dizinlerde tam olarak bilinen frekansta (ör. 50 Hz saf sinüs) ve bilinen sürede matematiksel sinyaller üretilir. Çıktıların (örneğin tepe frekansının $50\text{ Hz}$ bulunması) kesin matematiksel toleranslarla doğrulanması sağlanır.
 
 ---
 

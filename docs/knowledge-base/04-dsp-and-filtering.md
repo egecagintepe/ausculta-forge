@@ -11,9 +11,9 @@ Bu modül, mikrofon veya simülatörden gelen ham kalp sesi sinyalini fizyolojik
 [`software/pcg_core/dsp.py`](file:///c:/Users/Ege%20%C3%87a%C4%9F%C4%B1n/Downloads/pcg_software_starter/software/pcg_core/dsp.py) içinde 4. derece Butterworth IIR bant geçiren filtre kullanılmaktadır.
 
 ### Filtre Tipi Seçim Karşılaştırması
-- **Butterworth:** Geçirme bandında azami düz genlik cevabı (maximally flat magnitude response) sunar. Dalgalanma (ripple) yapmaz; kalp seslerinin ve üfürümlerin göreceli harmonik oranlarını yapay olarak bozmaz.
-- **Chebyshev / Eliptik:** Geçiş bandı daha diktir ancak geçirme bandında genlik dalgalanmaları (ripple) oluşturarak akustik doğruluğu saptırır.
-- **FIR (Sonlu Dürtü Cevaplı):** Mükemmel doğrusal faz sağlar ancak düşük frekanslı (20 Hz) keskin kesimler için yüzlerce katsayı gerektirir; bu da gömülü veya canlı akışta kabul edilemez gecikme (latency) ve işlem yükü yaratır.
+- **Butterworth (IIR):** Geçirme bandında azami düz genlik cevabı (maximally flat magnitude response) sunar. Geçirme bandında dalgalanma (ripple) yapmaz; bu sayede spektral analizde yapay tepe veya çukurlar oluşturmaz. Ancak doğrusal faz cevabı vermez ve grup gecikmesi frekansa göre değişir.
+- **Chebyshev / Eliptik:** Geçiş bandı daha diktir ancak geçirme bandında veya durdurma bandında genlik dalgalanmaları (ripple) oluşturur.
+- **FIR (Sonlu Dürtü Cevaplı):** Mükemmel doğrusal faz sağlar; ancak düşük frekanslı (ör. 20 Hz) dar geçiş bantları elde etmek yüksek filtre derecesi (çok sayıda katsayı) gerektirir. Yüksek dereceli FIR filtreler daha fazla işlem yükü ve filtre gecikmesi doğurabileceğinden, mevcut prototip aşamasında IIR Butterworth yapısı tercih edilmiştir. Bu bir tasarım takasıdır (trade-off); ilerleyen aşamalarda donanım ve işlemci kaynaklarına göre FIR alternatifleri değerlendirilebilir.
 
 ### İkinci Dereceden Bölümler (Second-Order Sections - SOS)
 Filtre transfer fonksiyonu doğrudan $b, a$ polinomları yerine SOS (`output="sos"`) matrisi olarak tasarlanmıştır. Bu, 32-bit kayan nokta aritmetiğinde kutup-sıfır yakınsamalarından kaynaklanan sayısal kararsızlıkları (numerical instability) ve yuvarlama hatalarını önler.
@@ -48,9 +48,10 @@ def process(self, block: SampleBlock) -> SampleBlock:
 
 ## Geçici (Provisional) 20–600 Hz Bandı
 
-- **Neden 20 Hz altı kesiliyor?** Solunum göğüs hareketleri, stetoskop çanının tene sürtünmesi (friction noise) ve bağırsak peristaltik hareketleri genellikle 0–20 Hz arasındadır.
-- **Neden 600 Hz üstü kesiliyor?** İskelet kası elektriksel aktivitesi (EMG gürültüsü), ortamdaki insan konuşmaları ve mikrofon RF parazitleri çoğunlukla bu bandın üzerindedir.
-- **Neden bu kesin karar değildir?** Akustik başlığın (Ozan) mekanik rezonansı ve danışman hekimlerin stetoskop tını tercihleri fiziksel prototip üzerinde test edildikten sonra alt ve üst kesim frekansları güncellenecektir. Mimari bu parametreleri tamamen konfigüre edilebilir tutar.
+- **Mühendislik Başlangıç Noktası:** 20–600 Hz aralığı, literatürde PCG temel kalp sesleri ve üfürümler için yaygın kullanılan geçici bir başlangıç referansıdır.
+- **Alt Kesim (20 Hz):** Solunum hareketleri, mekanik temas ve düşük frekanslı temel hat kaymalarının (baseline wander) enerjisinin yoğunlaştığı sub-audible bölgeyi zayıflatmak için seçilmiş bir başlangıç değeridir (tüm çevresel gürültülerin tamamen 20 Hz altında kaldığı iddia edilmez).
+- **Üst Kesim (600 Hz):** Akustik ilgimizin dışındaki yüksek frekanslı çevresel parazitleri ve sensör gürültülerini zayıflatmak için bir ön sınırdır (tüm parazitlerin 600 Hz üstünde olduğu anlamına gelmez).
+- **Neden bu kesin karar değildir?** Akustik başlığın (Ozan) mekanik rezonansı, sensör frekans cevabı ve ilerleyen aşamalarda yapılacak akustik fantom testleri sonucunda alt ve üst kesim frekansları revize edilecektir. Yazılım mimarisi bu kesim parametrelerini tamamen konfigüre edilebilir ve denenebilir tutar.
 
 ---
 
@@ -60,7 +61,7 @@ def process(self, block: SampleBlock) -> SampleBlock:
 
 1. **RMS (Root Mean Square - Etkin Değer):**
    $$\text{RMS} = \sqrt{\frac{1}{N} \sum_{i=1}^{N} x[i]^2}$$
-   Sinyalin ortalama enerji gücünü temsil eder. Filtreleme öncesi ve sonrası RMS oranı, filtrenin bastırdığı gürültü miktarını gösterir.
+   Sinyalin ortalama enerji gücünü temsil eder. Filtreleme öncesi ve sonrası RMS oranı, filtrenin bastırdığı bant dışı enerji miktarını gösterir.
 2. **Mutlak Tepe Değeri (Peak Absolute):**
    $$\text{Peak} = \max(|x[i]|)$$
    Sinyalin doyuma (clipping) ulaşıp ulaşmadığını denetler. $1.0$'a yaklaşan değerler sensör kazancının fazla olduğunu gösterir.
@@ -80,4 +81,4 @@ def process(self, block: SampleBlock) -> SampleBlock:
 
 ## Sunumda / Savunmada 30 Saniyelik Açıklama
 
-> *"Filtreleme katmanımızda 4. derece Butterworth bant geçiren filtre kullanıyoruz; çünkü Butterworth geçirme bandında tamamen düz bir genlik cevabı vererek kalp seslerinin harmonik dengesini bozmaz. En kritik mühendislik detayı filtrenin durumsal (stateful) olmasıdır: SciPy'ın `sosfilt` fonksiyonuyla bloklar arasındaki iç filtre durumunu (`zi`) koruyoruz. Bu sayede blok sınırlarında oluşabilecek tıklama seslerini ve geçici rejim süreksizliklerini matematiksel olarak önlüyoruz."*
+> *"Filtreleme katmanımızda 4. derece Butterworth bant geçiren filtre kullanıyoruz; çünkü Butterworth geçirme bandında azami düz genlik cevabı (maximally flat magnitude response) vererek yapay dalgalanma (ripple) üretmez. En kritik mühendislik detayı filtrenin durumsal (stateful) olmasıdır: SciPy'ın `sosfilt` fonksiyonuyla bloklar arasındaki iç filtre durumunu (`zi`) koruyoruz. Bu sayede blok sınırlarında oluşabilecek tıklama seslerini ve geçici rejim süreksizliklerini matematiksel olarak önlüyoruz."*

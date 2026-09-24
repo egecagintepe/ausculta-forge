@@ -8,7 +8,7 @@
 
 ## AuscultaForge Neden Bunu Kullanıyor?
 
-Geleneksel stetoskoplar hekimin işitsel tecrübesine bağımlıdır; sinyali kaydedemez, spektral bileşenlerini ayrıştıramaz ve objektif metrikler (RMS, tepe değeri, tepe faktörü) üretemez. AuscultaForge, akustik sesi sayısal sinyal bloklarına dönüştürerek tekrarlanabilir bir analiz ve görselleştirme ortamı sunar.
+Geleneksel stetoskoplar kullanıcının anlık işitsel algısına bağımlıdır; sinyali kaydedemez, spektral bileşenlerini ayrıştıramaz ve objektif metrikler (RMS, tepe değeri, tepe faktörü) üretemez. AuscultaForge, akustik sesi sayısal sinyal bloklarına dönüştürerek tekrarlanabilir bir analiz ve görselleştirme ortamı sunar.
 
 ---
 
@@ -52,7 +52,8 @@ AuscultaForge şu prensiple tasarlanmıştır:
 Aşağıdaki unsurlar şu an için **aday/geçici (provisional)** mühendislik tercihleridir ve kesinleştirilmemiştir:
 - **Mikrodenetleyici:** ESP32-S3 güçlü bir adaydır ancak değerlendirme sürecindedir.
 - **Arayüz:** I2S dijital mikrofon veya harici ADC/analog katman seçimi sensör prototip testlerine bağlıdır.
-- **Filtre Bandı:** 20–600 Hz bandı biyomedikal literatür başlangıç varsayımıdır; akustik gövde frekans cevabı ve danışman hekim geri bildirimleriyle revize edilecektir.
+- **Filtre Bandı:** 20–600 Hz bandı biyomedikal literatür başlangıç varsayımıdır; akustik gövde frekans cevabı ve ilerleyen aşamalardaki akustik/fantom doğrulama testleriyle revize edilecektir.
+
 
 ---
 

@@ -10,7 +10,7 @@ Bu sözlük, AuscultaForge projesinde kullanılan temel biyomedikal akustik, say
 
 ### B
 - **Bandpass Filter (Bant Geçiren Filtre):** Belirli bir alt frekans ($f_{low}$) ile üst frekans ($f_{high}$) arasındaki sinyalleri geçiren, bu aralığın dışındakileri ise zayıflatan sayısal veya analog filtre.
-- **Butterworth Filter (Butterworth Filtresi):** Geçirme bandında (passband) tamamen düz genlik cevabına sahip (maximally flat), dalgalanma (ripple) yapmayan frekans seçici filtre türü.
+- **Butterworth Filter (Butterworth Filtresi):** Geçirme bandında (passband) azami düz genlik cevabına sahip (maximally flat), dalgalanma (ripple) üretmeyen frekans seçici IIR filtre türü.
 
 ### C
 - **Clipping (Kırpılma / Doyum):** Sinyal genliğinin ADC'nin veya sayısal veri tipinin izin verdiği azami sınırı aşarak tepe noktalarının düz bir çizgi halinde kesilmesi ve şiddetli harmonik bozulma üretmesi.
@@ -24,7 +24,7 @@ Bu sözlük, AuscultaForge projesinde kullanılan temel biyomedikal akustik, say
 - **FIFO (First-In-First-Out):** İlk giren verinin ilk çıktığı kuyruk mantığı; kayan pencere tamponlarında en eski verinin atılıp en yeninin eklenmesi prensibi.
 
 ### L
-- **Latency (Gecikme Süresi):** Akustik ses dalgasının mikrofona çarptığı an ile PC'de işlenip ekrana/kulağa ulaştığı an arasındaki toplam zaman farkı.
+- **Latency (Gecikme Süresi):** Akustik titreşimin mikrofona çarptığı andan PC'de işlenip ekrana/hoparlöre ulaştığı ana kadar geçen toplam uçtan uca süre (blok süresi, edinim, iletim, tamponlama, DSP ve arayüz gecikmelerinin toplamıdır).
 - **Loose Coupling (Gevşek Bağlılık):** Yazılım modüllerinin (örneğin veri kaynağı ile DSP filtresinin) birbirinin iç detaylarını bilmeden yalnızca standart arayüzler (`SampleBlock`) üzerinden haberleşmesi prensibi.
 
 ### M
