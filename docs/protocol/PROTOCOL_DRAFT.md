@@ -19,5 +19,5 @@ PC yazılımının ihtiyaç duyduğu kavramsal bilgi:
 - UI, seri port/Wi-Fi kodunu doğrudan bilmemeli.
 - Donanımdan gelen veri önce `SampleBlock` nesnesine dönüştürülmeli.
 - Aynı DSP kodu Mock, WAV, USB veya Wi-Fi kaynağında çalışmalı.
-- Gerçek wire format; ESP32-S3, örnek genişliği ve aktarım yöntemi netleşince
+- Gerçek wire format; seçilecek MCU platformu (aday ESP32 ailesi), örnek genişliği ve aktarım yöntemi netleşince
   Kaan ile birlikte belirlenecek.

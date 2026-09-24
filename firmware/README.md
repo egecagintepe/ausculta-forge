@@ -4,9 +4,9 @@ This directory contains the embedded software running on the microcontroller (MC
 
 ## Scope & Responsibility
 - **Owner:** Kaan
-- **Hardware Target:** ESP32 / MCU platform
+- **Hardware Target:** Candidate: ESP32 family (provisional; final selection subject to evaluation)
 - **Key Responsibilities:**
-  - Microphone interface (e.g. I2S digital audio or ADC sampling)
-  - DMA buffer management and sample packaging
+  - Sensor/transducer interface (e.g. I2S digital audio or ADC sampling depending on microphone selection)
+  - DMA / ring buffer management and framing
   - Serial/USB communication driver for PC streaming
   - Status monitoring, packet sequence counters, and transmission health

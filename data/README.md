@@ -24,13 +24,14 @@ When validating the DSP pipeline and heart sound segmentation offline, use bench
 
 1. **PhysioNet / Computing in Cardiology (CinC) Challenge 2016**
    - *Title:* Classification of Normal/Abnormal Heart Sound Recordings
-   - *Description:* Phonocardiogram recordings collected from several medical centers, sampled at 2,000 Hz or 4,000 Hz.
+   - *Description:* Phonocardiogram recordings collected from several clinical centers, provided as mono WAV files resampled to 2,000 Hz.
    - *Link:* [PhysioNet CinC Challenge 2016](https://physionet.org/content/challenge-2016/1.0.0/)
+   - *Example Record:* [training-a/a0001.wav](https://physionet.org/files/challenge-2016/1.0.0/training-a/a0001.wav)
 
 2. **CirCor DigiScope Phonocardiogram Dataset (PhysioNet)**
    - *Title:* The CirCor DigiScope Dataset of Pediatric Heart Sound Recordings
-   - *Description:* Open-access pediatric PCG records collected from 4 auscultation locations (Aortic, Pulmonic, Tricuspid, Mitral) at 4,000 Hz.
-   - *Link:* [CirCor DigiScope on PhysioNet](https://physionet.org/content/circor-digiscope/1.0.3/)
+   - *Description:* Open-access pediatric PCG records collected from 4 auscultation locations (Aortic, Pulmonic, Tricuspid, Mitral) sampled at 4,000 Hz.
+   - *Link:* [CirCor Heart Sound on PhysioNet](https://physionet.org/content/circor-heart-sound/1.0.3/)
 
 3. **In-house Test Recordings**
    - Acquired using the prototype stethoscope (Ozan) and MCU digital stream (Kaan).

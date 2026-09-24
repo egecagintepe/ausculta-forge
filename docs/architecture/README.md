@@ -2,14 +2,14 @@
 
 ## Overview
 
-The AuscultaForge digital stethoscope system acquires cardiac acoustic signals via an acoustic head and microphone sensor, streams digital audio to an MCU, and transfers the data to a host PC for digital signal processing (DSP), visualization, and metrics analysis.
+The AuscultaForge digital stethoscope system acquires cardiac acoustic signals via an acoustic head and microphone/transducer, streams digital audio to an MCU/acquisition unit, and transfers the data to a host PC for digital signal processing (DSP), visualization, and metrics analysis.
 
 ```text
-+-------------------+        +--------------------+        +--------------------+
-|  Acoustic Head &  | -----> |    MCU (ESP32)     | -----> |      Host PC       |
-|  Microphone Unit  | (I2S)  | Sampling & Framing | (Wire) | Ingestion & Buffer |
-|      (Ozan)       |        |       (Kaan)       |        |       (Ege)        |
-+-------------------+        +--------------------+        +--------------------+
++------------------------+        +--------------------------+        +--------------------+
+|    Acoustic Head &     | -----> | MCU / Acquisition Unit   | -----> |      Host PC       |
+| Microphone/Transducer  | (I/F)  | Sampling & Framing       | (Wire) | Ingestion & Buffer |
+|        (Ozan)          |        | (Candidate: ESP32, Kaan) |        |       (Ege)        |
++------------------------+        +--------------------------+        +--------------------+
                                                                       |
                                                                       v
                                                             +-------------------+
@@ -48,6 +48,6 @@ class SampleBlock:
 - **Interchangeable Input Streams:**
   - `MockPCGSource`: Synthetic S1/S2 heart sound generator for off-hardware testing.
   - `WavSource`: Reads benchmark WAV recordings (e.g. PhysioNet CinC 2016).
-  - *Future* `SerialSource`: USB-UART streaming from ESP32.
-  - *Future* `NetworkSource`: Wi-Fi / socket stream.
+  - *Future* `SerialSource`: USB-UART / Serial streaming from MCU acquisition unit.
+  - *Future* `NetworkSource`: Network / socket stream.
 - **Wire Protocol Independence:** The byte format on the wire (serial packets, framing, headers) is translated by a driver into `SampleBlock` instances. The wire format can change without touching DSP or consumer code.

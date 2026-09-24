@@ -1,14 +1,14 @@
 # AuscultaForge
 
-**AuscultaForge** is an engineering capstone design project developing an intelligent, digital phonocardiogram (PCG) stethoscope system capable of high-fidelity heart sound acquisition, embedded pre-processing, real-time PC streaming, and digital signal processing.
+**AuscultaForge** is an engineering capstone design project developing a digital phonocardiogram (PCG) stethoscope system aimed at reliable heart sound acquisition, embedded sampling, real-time PC streaming, and digital signal processing. High-fidelity acoustic reproduction and clinical utility are design targets to be experimentally validated.
 
 ---
 
 ## Current Project Status & Milestone
 
-- **Current Status:** Foundation phase. The core software streaming abstraction, mock PCG generator, stateful Butterworth bandpass filtering, and test suite are operational. No GUI or AI components are introduced at this stage.
+- **Current Status:** Foundation phase. The core software streaming abstraction, mock PCG generator, stateful Butterworth bandpass filtering, and test suite are operational. No GUI, AI, or embedded preprocessing components are implemented yet.
 - **Current Milestone:**
-  $$\text{physical/acoustic source} \longrightarrow \text{microphone} \longrightarrow \text{MCU} \longrightarrow \text{PC} \longrightarrow \text{real-time PCG samples}$$
+  $$\text{physical/acoustic source} \longrightarrow \text{microphone/transducer} \longrightarrow \text{MCU/acquisition unit} \longrightarrow \text{PC} \longrightarrow \text{real-time PCG samples}$$
 
 ---
 
@@ -20,11 +20,14 @@ The system pipeline is designed with strict layer separation. Input acquisition 
 [ Acoustic Head / Sensor ]
           │
           ▼
-   [ Microcontroller ]
- (ESP32 Sampling & DMA)
+ [ Microphone / Transducer ]
+          │  (Analog / Digital interface)
+          ▼
+[ MCU / Acquisition Unit ]
+ (Candidate: ESP32 family)
           │  (Serial / Wire Stream)
           ▼
-   [ PC Ingestion ]
+   [ Host PC Ingestion ]
           │
           ▼
     SampleBlock  ───────────► Common streaming interface
@@ -49,7 +52,7 @@ The PC software does not couple directly to wire-level protocols or specific har
 | Team Member | Area of Responsibility | Key Focus Areas |
 |---|---|---|
 | **Ozan** | Acoustic / Mechanical Acquisition & Physical Prototype | Chest piece acoustic coupling, bell/diaphragm design, noise isolation, 3D casing, mechanical ergonomics. |
-| **Kaan** | Embedded Electronics, ESP32/MCU, Firmware & PCB | Microphone interfacing (I2S/ADC), MCU firmware, DMA buffering, wire protocol, PCB schematics & layout. |
+| **Kaan** | Embedded Electronics, MCU / Acquisition Platform, Firmware & PCB | Sensor interfacing (analog/digital options), MCU firmware, DMA/buffer management, wire communication driver, PCB schematics & layout. |
 | **Ege** | System Architecture, PC Software, DSP & Integration | Software architecture, PC-side ingestion, DSP filtering pipeline, integration testing, verification tools. |
 
 ---
@@ -65,12 +68,14 @@ ausculta-forge/
 │   │   ├── sources.py      # MockPCGSource and WavSource
 │   │   ├── dsp.py          # StreamingBandpass filter (stateful sosfilt)
 │   │   ├── metrics.py      # RMS, peak, crest factor calculations
-│   │   └── demo.py         # Standalone PCG pipeline demonstration
+│   │   ├── demo.py         # Standalone synthetic PCG pipeline demonstration
+│   │   └── analyze.py      # CLI for real PCG WAV analysis
 │   ├── tests/              # Automated unit tests
-│   │   └── test_core.py
-│   ├── pytest.ini          # Pytest configuration for software directory
+│   │   ├── test_core.py
+│   │   └── test_analysis.py
+│   ├── pyproject.toml      # Packaging metadata for editable installation
 │   └── requirements.txt    # Python dependencies (numpy, scipy, pytest)
-├── firmware/               # Microcontroller firmware and drivers (ESP32)
+├── firmware/               # Microcontroller firmware and communication drivers
 ├── hardware/               # Schematics, PCB layouts, mechanical CAD, acoustic models
 ├── experiments/            # Exploratory DSP scripts and validation logs
 │   └── output/             # (Ignored by git) Local experiment outputs
@@ -84,7 +89,7 @@ ausculta-forge/
 │   ├── processed/          # (Ignored by git) Untracked processed data
 │   └── README.md           # Dataset sources and acquisition policies
 ├── .gitignore              # Ignores venvs, cache, audio, IDE, datasets, and logs
-├── pytest.ini              # Pytest configuration for repository root
+├── pytest.ini              # Central pytest configuration
 └── README.md               # Project overview, setup, and architecture
 ```
 
@@ -114,38 +119,36 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
-### 2. Install Dependencies
+### 2. Install Package & Dependencies
+
+Install dependencies and the `software/` package in editable mode:
 
 ```bash
 pip install -r software/requirements.txt
+pip install -e ./software
 ```
 
 ### 3. Run Automated Tests
 
-Tests can be executed from the repository root or from within `software/`:
+Tests can be executed directly from the repository root:
 
 ```bash
-# From repository root:
-pytest
-
-# Or inside software directory:
-cd software
 pytest
 ```
 
-### 4. Run the Pipeline Demo
+### 4. Run the Pipeline Demo & Analysis CLI
 
-Run the demonstration script to verify the synthetic PCG generator, bandpass filter, and metrics calculation:
+Run the synthetic demo:
 
 ```bash
-# From repository root:
 python -m pcg_core.demo
-
-# Or if running without editable install from root:
-$env:PYTHONPATH="software"; python -m pcg_core.demo
 ```
 
-The script will compute RMS and peak values and generate `demo_raw.wav` and `demo_filtered.wav` (which are automatically ignored by Git).
+Or run offline analysis on a real PCG recording:
+
+```bash
+python -m pcg_core.analyze data/raw/a0001.wav
+```
 
 ---
 
