@@ -1,0 +1,18 @@
+{
+  "name": "baseline_pcg_pipeline",
+  "description": "Baseline AuscultaForge provisional PCG filtering and spectral characterization",
+  "block_size": 256,
+  "rolling_window_duration_s": 5.0,
+  "filter": {
+    "enabled": true,
+    "filter_type": "butterworth_bandpass",
+    "low_hz": 20.0,
+    "high_hz": 600.0,
+    "order": 4,
+    "is_provisional": true
+  },
+  "spectral": {
+    "nperseg": 256,
+    "noverlap": 128
+  }
+}
