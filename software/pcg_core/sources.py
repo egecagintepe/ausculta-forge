@@ -90,3 +90,47 @@ class WavSource:
                 samples=chunk,
                 source=self.path.name,
             )
+
+
+class RealtimeWavSource(WavSource):
+    """Replays a mono WAV file as a live streaming SampleBlock source.
+
+    Acts as a software test adapter that simulates live MCU streaming before
+    physical hardware/firmware acquisition is ready.
+    """
+
+    def __init__(
+        self,
+        path: str | Path,
+        block_size: int = 256,
+        realtime: bool = True,
+        speed_factor: float = 1.0,
+    ):
+        super().__init__(path=path, block_size=block_size)
+        self.realtime = bool(realtime)
+        self.speed_factor = float(speed_factor)
+        if self.speed_factor <= 0.0:
+            raise ValueError("speed_factor must be positive.")
+
+    def blocks(self) -> Iterator[SampleBlock]:
+        import time
+
+        base_iterator = super().blocks()
+        if not self.realtime:
+            yield from base_iterator
+            return
+
+        t_wall_start = time.perf_counter()
+        t_stream_start: float | None = None
+
+        for block in base_iterator:
+            if t_stream_start is None:
+                t_stream_start = block.timestamp_s
+
+            stream_elapsed = (block.timestamp_s - t_stream_start) / self.speed_factor
+            wall_elapsed = time.perf_counter() - t_wall_start
+            delay = stream_elapsed - wall_elapsed
+            if delay > 0.001:
+                time.sleep(delay)
+
+            yield block
