@@ -18,6 +18,9 @@ from .dsp import StreamingBandpass
 from .metrics import rms, peak_abs, crest_factor
 
 
+SUPPORTED_FILTER_TYPES = ("butterworth_bandpass",)
+
+
 @dataclass(slots=True)
 class SignalMetrics:
     """Statistical amplitude and crest metrics for a signal segment."""
@@ -45,6 +48,7 @@ class FilterConfig:
     high_hz: float
     order: int
     is_provisional: bool = True
+    enabled: bool = True
 
 
 @dataclass(slots=True)
@@ -104,9 +108,14 @@ def compute_spectrogram_data(
             matrix=None,
         )
 
-    # Adjust segment sizes if audio is shorter than default window
+    if noverlap >= nperseg:
+        raise ValueError(
+            f"noverlap ({noverlap}) must be strictly less than nperseg ({nperseg})"
+        )
+
+    # Adjust segment sizes if audio is shorter than requested window
     actual_nperseg = min(nperseg, len(samples))
-    actual_noverlap = min(noverlap, actual_nperseg // 2)
+    actual_noverlap = min(noverlap, actual_nperseg - 1) if actual_nperseg > 1 else 0
 
     f, t, Sxx = spectrogram(
         samples,
@@ -158,21 +167,32 @@ def compute_spectrogram_data(
 
 def analyze_source(
     source: Any,
+    filter_enabled: bool = True,
+    filter_type: str = "butterworth_bandpass",
     filter_low_hz: float = 20.0,
     filter_high_hz: float = 600.0,
     filter_order: int = 4,
+    spectral_nperseg: int = 256,
+    spectral_noverlap: int = 128,
     include_spectrogram_matrix: bool = False,
 ) -> PCGAnalysisResult:
     """Analyze stream of SampleBlocks from any source (Mock, WAV, Serial, etc.).
     
     Dynamically configures the bandpass filter using the source's detected
-    sample_rate_hz.
+    sample_rate_hz if filter_enabled is True.
     """
+    if filter_enabled and filter_type not in SUPPORTED_FILTER_TYPES:
+        raise ValueError(
+            f"Unsupported filter_type '{filter_type}'. "
+            f"Supported filter types: {list(SUPPORTED_FILTER_TYPES)}"
+        )
+
     raw_blocks: list[np.ndarray] = []
     filtered_blocks: list[np.ndarray] = []
 
     bp_filter: StreamingBandpass | None = None
     detected_fs: int | None = None
+    actual_high_hz: float = filter_high_hz
     source_name = getattr(source, "name", getattr(source, "source", "stream"))
 
     for block in source.blocks():
@@ -180,25 +200,29 @@ def analyze_source(
             detected_fs = block.sample_rate_hz
             source_name = block.source
 
-            # Validate requested provisional filter range against Nyquist
-            nyquist = detected_fs / 2.0
-            actual_high_hz = min(filter_high_hz, nyquist - 1.0)
-            if actual_high_hz <= filter_low_hz:
-                raise ValueError(
-                    f"Invalid filter parameters for sample rate {detected_fs} Hz: "
-                    f"low={filter_low_hz} Hz, high={actual_high_hz} Hz (Nyquist={nyquist} Hz)"
+            if filter_enabled:
+                # Validate requested provisional filter range against Nyquist
+                nyquist = detected_fs / 2.0
+                actual_high_hz = min(filter_high_hz, nyquist - 1.0)
+                if actual_high_hz <= filter_low_hz:
+                    raise ValueError(
+                        f"Invalid filter parameters for sample rate {detected_fs} Hz: "
+                        f"low={filter_low_hz} Hz, high={actual_high_hz} Hz (Nyquist={nyquist} Hz)"
+                    )
+
+                bp_filter = StreamingBandpass(
+                    sample_rate_hz=detected_fs,
+                    low_hz=filter_low_hz,
+                    high_hz=actual_high_hz,
+                    order=filter_order,
                 )
 
-            bp_filter = StreamingBandpass(
-                sample_rate_hz=detected_fs,
-                low_hz=filter_low_hz,
-                high_hz=actual_high_hz,
-                order=filter_order,
-            )
-
         raw_blocks.append(block.samples)
-        filtered_block = bp_filter.process(block)
-        filtered_blocks.append(filtered_block.samples)
+        if filter_enabled and bp_filter is not None:
+            filtered_block = bp_filter.process(block)
+            filtered_blocks.append(filtered_block.samples)
+        else:
+            filtered_blocks.append(block.samples)
 
     if detected_fs is None or len(raw_blocks) == 0:
         raise ValueError("Source produced no SampleBlocks to analyze.")
@@ -212,17 +236,30 @@ def analyze_source(
     raw_metrics = SignalMetrics.from_samples(raw_signal)
     filtered_metrics = SignalMetrics.from_samples(filtered_signal)
 
-    filter_cfg = FilterConfig(
-        filter_type="butterworth_bandpass",
-        low_hz=filter_low_hz,
-        high_hz=min(filter_high_hz, detected_fs / 2.0 - 1.0),
-        order=filter_order,
-        is_provisional=True,
-    )
+    if filter_enabled:
+        filter_cfg = FilterConfig(
+            enabled=True,
+            filter_type=filter_type,
+            low_hz=filter_low_hz,
+            high_hz=actual_high_hz,
+            order=filter_order,
+            is_provisional=True,
+        )
+    else:
+        filter_cfg = FilterConfig(
+            enabled=False,
+            filter_type="none",
+            low_hz=0.0,
+            high_hz=0.0,
+            order=0,
+            is_provisional=False,
+        )
 
     spec_data = compute_spectrogram_data(
         filtered_signal,
         fs=detected_fs,
+        nperseg=spectral_nperseg,
+        noverlap=spectral_noverlap,
         include_matrix=include_spectrogram_matrix,
     )
 
@@ -241,9 +278,13 @@ def analyze_source(
 def analyze_wav(
     path: str | Path,
     block_size: int = 256,
+    filter_enabled: bool = True,
+    filter_type: str = "butterworth_bandpass",
     filter_low_hz: float = 20.0,
     filter_high_hz: float = 600.0,
     filter_order: int = 4,
+    spectral_nperseg: int = 256,
+    spectral_noverlap: int = 128,
     include_spectrogram_matrix: bool = False,
 ) -> PCGAnalysisResult:
     """Convenience helper to analyze a WAV file using WavSource."""
@@ -254,8 +295,12 @@ def analyze_wav(
     source = WavSource(path=wav_path, block_size=block_size)
     return analyze_source(
         source=source,
+        filter_enabled=filter_enabled,
+        filter_type=filter_type,
         filter_low_hz=filter_low_hz,
         filter_high_hz=filter_high_hz,
         filter_order=filter_order,
+        spectral_nperseg=spectral_nperseg,
+        spectral_noverlap=spectral_noverlap,
         include_spectrogram_matrix=include_spectrogram_matrix,
     )

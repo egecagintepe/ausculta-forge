@@ -21,7 +21,7 @@ import numpy as np
 import scipy
 
 from .sources import WavSource
-from .analysis import analyze_source, PCGAnalysisResult
+from .analysis import analyze_source, PCGAnalysisResult, SUPPORTED_FILTER_TYPES
 
 
 @dataclass(slots=True)
@@ -30,7 +30,6 @@ class ExperimentConfig:
     name: str = "baseline_pcg_pipeline"
     description: str = ""
     block_size: int = 256
-    rolling_window_duration_s: float = 5.0
     filter_enabled: bool = True
     filter_type: str = "butterworth_bandpass"
     filter_low_hz: float = 20.0
@@ -49,7 +48,6 @@ class ExperimentConfig:
             name=data.get("name", "experiment"),
             description=data.get("description", ""),
             block_size=int(data.get("block_size", 256)),
-            rolling_window_duration_s=float(data.get("rolling_window_duration_s", 5.0)),
             filter_enabled=bool(filter_data.get("enabled", True)),
             filter_type=str(filter_data.get("filter_type", "butterworth_bandpass")),
             filter_low_hz=float(filter_data.get("low_hz", 20.0)),
@@ -79,9 +77,12 @@ class ExperimentConfig:
     def validate(self) -> None:
         if self.block_size <= 0:
             raise ValueError(f"block_size must be positive, got {self.block_size}")
-        if self.rolling_window_duration_s <= 0.0:
-            raise ValueError(f"rolling_window_duration_s must be positive, got {self.rolling_window_duration_s}")
         if self.filter_enabled:
+            if self.filter_type not in SUPPORTED_FILTER_TYPES:
+                raise ValueError(
+                    f"Unsupported filter_type '{self.filter_type}'. "
+                    f"Supported filter types: {list(SUPPORTED_FILTER_TYPES)}"
+                )
             if not (0 < self.filter_low_hz < self.filter_high_hz):
                 raise ValueError(
                     f"Invalid filter frequencies: 0 < low ({self.filter_low_hz}) < high ({self.filter_high_hz}) required"
@@ -137,12 +138,38 @@ def run_single_experiment(
     source = WavSource(path=input_file, block_size=config.block_size)
     analysis_res: PCGAnalysisResult = analyze_source(
         source=source,
+        filter_enabled=config.filter_enabled,
+        filter_type=config.filter_type,
         filter_low_hz=config.filter_low_hz,
         filter_high_hz=config.filter_high_hz,
         filter_order=config.filter_order,
+        spectral_nperseg=config.spectral_nperseg,
+        spectral_noverlap=config.spectral_noverlap,
     )
 
     t_runtime_s = time.perf_counter() - t_start
+
+    # Determine effective parameters applied during execution
+    nyquist_hz = analysis_res.sample_rate_hz / 2.0
+    filter_adjusted_for_nyquist = bool(
+        config.filter_enabled and (config.filter_high_hz > nyquist_hz - 1.0)
+    )
+    effective_nperseg = min(config.spectral_nperseg, analysis_res.total_samples)
+    effective_noverlap = min(config.spectral_noverlap, effective_nperseg - 1) if effective_nperseg > 1 else 0
+
+    effective_config: dict[str, Any] = {
+        "block_size": config.block_size,
+        "filter_enabled": analysis_res.filter_config.enabled,
+        "filter_type": analysis_res.filter_config.filter_type,
+        "filter_low_hz": analysis_res.filter_config.low_hz if analysis_res.filter_config.enabled else None,
+        "filter_high_hz": analysis_res.filter_config.high_hz if analysis_res.filter_config.enabled else None,
+        "filter_order": analysis_res.filter_config.order if analysis_res.filter_config.enabled else None,
+        "filter_is_provisional": analysis_res.filter_config.is_provisional,
+        "spectral_nperseg": effective_nperseg,
+        "spectral_noverlap": effective_noverlap,
+        "nyquist_hz": nyquist_hz,
+        "filter_adjusted_for_nyquist": filter_adjusted_for_nyquist,
+    }
 
     # Assemble comprehensive traceable report
     report: dict[str, Any] = {
@@ -169,7 +196,9 @@ def run_single_experiment(
             "total_samples": analysis_res.total_samples,
             "duration_s": analysis_res.duration_s,
         },
-        "configuration": asdict(config),
+        "requested_configuration": asdict(config),
+        "effective_configuration": effective_config,
+        "configuration": asdict(config),  # Preserved alias for backwards compatibility
         "results": {
             "raw_metrics": {
                 "rms": round(analysis_res.raw_metrics.rms, 6),

@@ -82,3 +82,28 @@ def test_analyze_wav_missing_file():
     """Verify FileNotFoundError is raised on missing file."""
     with pytest.raises(FileNotFoundError):
         analyze_wav("non_existent_file_path.wav")
+
+
+def test_analyze_source_unsupported_filter_type():
+    """Verify ValueError is raised if an unsupported filter_type is specified."""
+    source = MockPCGSource(sample_rate_hz=2000, duration_s=0.2, block_size=128)
+    with pytest.raises(ValueError, match="Unsupported filter_type"):
+        analyze_source(source, filter_type="chebyshev_type1")
+
+
+def test_analyze_source_filter_disabled():
+    """Verify analyze_source with filter_enabled=False performs no filtering."""
+    source = MockPCGSource(sample_rate_hz=2000, duration_s=0.2, block_size=128)
+    result = analyze_source(source, filter_enabled=False)
+    assert result.filter_config.enabled is False
+    assert result.filter_config.filter_type == "none"
+    assert result.raw_metrics.rms == pytest.approx(result.filtered_metrics.rms)
+    assert result.raw_metrics.peak_abs == pytest.approx(result.filtered_metrics.peak_abs)
+
+
+def test_compute_spectrogram_noverlap_validation():
+    """Verify ValueError when noverlap >= nperseg."""
+    from pcg_core.analysis import compute_spectrogram_data
+    samples = np.ones(500, dtype=np.float32)
+    with pytest.raises(ValueError, match="noverlap .* must be strictly less than nperseg"):
+        compute_spectrogram_data(samples, fs=2000, nperseg=128, noverlap=128)

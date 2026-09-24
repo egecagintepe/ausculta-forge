@@ -23,7 +23,6 @@ def test_experiment_config_parsing(tmp_path: Path):
         "name": "unit_test_cfg",
         "description": "Config for testing",
         "block_size": 128,
-        "rolling_window_duration_s": 3.0,
         "filter": {
             "enabled": True,
             "filter_type": "butterworth_bandpass",
@@ -46,6 +45,12 @@ def test_experiment_config_parsing(tmp_path: Path):
     assert cfg.filter_high_hz == 400.0
     assert cfg.filter_order == 4
 
+    # Unsupported filter type
+    with pytest.raises(ValueError, match="Unsupported filter_type"):
+        invalid_data = dict(cfg_data)
+        invalid_data["filter"] = {"enabled": True, "filter_type": "chebyshev", "low_hz": 20.0, "high_hz": 400.0, "order": 4}
+        ExperimentConfig.from_dict(invalid_data)
+
     # Invalid low >= high
     with pytest.raises(ValueError, match="Invalid filter frequencies"):
         invalid_data = dict(cfg_data)
@@ -57,6 +62,7 @@ def test_experiment_config_parsing(tmp_path: Path):
         invalid_data = dict(cfg_data)
         invalid_data["filter"] = {"enabled": True, "low_hz": 0.0, "high_hz": 200.0, "order": 4}
         ExperimentConfig.from_dict(invalid_data)
+
 
     # Invalid block size
     with pytest.raises(ValueError, match="block_size must be positive"):
@@ -184,3 +190,72 @@ def test_git_commit_sha_fallback(monkeypatch, tmp_path: Path):
     cfg = ExperimentConfig()
     rep = run_single_experiment(wav_path, cfg, output_dir=tmp_path / "fb_out")
     assert rep["provenance"]["git_commit_sha"] is None
+
+
+def test_experiment_filter_enabled_toggle(tmp_path: Path):
+    """Verify that disabling filtering genuinely skips filtering and reports truthful provenance."""
+    # Signal with a low 5 Hz out-of-band component and a 60 Hz in-band signal
+    fs = 2000
+    duration_s = 0.5
+    n_samples = int(fs * duration_s)
+    t = np.arange(n_samples) / fs
+    sig = (0.4 * np.sin(2 * np.pi * 5.0 * t) + 0.4 * np.sin(2 * np.pi * 60.0 * t)) * 32767
+    wav_path = tmp_path / "filter_toggle.wav"
+    wavfile.write(str(wav_path), fs, sig.astype(np.int16))
+
+    # 1. With filtering enabled (bandpass 20 - 400 Hz removes the 5 Hz component)
+    cfg_on = ExperimentConfig(filter_enabled=True, filter_low_hz=20.0, filter_high_hz=400.0)
+    rep_on = run_single_experiment(wav_path, cfg_on, output_dir=tmp_path / "on_out")
+    assert rep_on["effective_configuration"]["filter_enabled"] is True
+    assert rep_on["effective_configuration"]["filter_type"] == "butterworth_bandpass"
+    # Filtered RMS must be lower than raw RMS because 5 Hz was suppressed
+    assert rep_on["results"]["filtered_metrics"]["rms"] < rep_on["results"]["raw_metrics"]["rms"]
+
+    # 2. With filtering disabled (raw and processed must be identical)
+    cfg_off = ExperimentConfig(filter_enabled=False)
+    rep_off = run_single_experiment(wav_path, cfg_off, output_dir=tmp_path / "off_out")
+    assert rep_off["effective_configuration"]["filter_enabled"] is False
+    assert rep_off["effective_configuration"]["filter_type"] == "none"
+    assert rep_off["results"]["filtered_metrics"]["rms"] == pytest.approx(rep_off["results"]["raw_metrics"]["rms"])
+    assert rep_off["results"]["filtered_metrics"]["peak_abs"] == pytest.approx(rep_off["results"]["raw_metrics"]["peak_abs"])
+
+
+def test_experiment_spectral_parameters_affect_output(tmp_path: Path):
+    """Verify changing nperseg/noverlap actually changes the computed spectral summary."""
+    wav_path = make_test_wav(tmp_path / "spec_test.wav", fs=2000, duration_s=1.0, freq_hz=50.0)
+
+    cfg_small = ExperimentConfig(spectral_nperseg=128, spectral_noverlap=64)
+    rep_small = run_single_experiment(wav_path, cfg_small, output_dir=tmp_path / "spec_small")
+
+    cfg_large = ExperimentConfig(spectral_nperseg=256, spectral_noverlap=128)
+    rep_large = run_single_experiment(wav_path, cfg_large, output_dir=tmp_path / "spec_large")
+
+    shape_small = rep_small["results"]["spectral_summary"]["grid_shape"]
+    shape_large = rep_large["results"]["spectral_summary"]["grid_shape"]
+
+    # Frequency bin count is nperseg // 2 + 1
+    assert shape_small[0] == 65
+    assert shape_large[0] == 129
+    assert shape_small != shape_large
+
+    res_small = rep_small["results"]["spectral_summary"]["f_resolution_hz"]
+    res_large = rep_large["results"]["spectral_summary"]["f_resolution_hz"]
+    assert res_small != res_large
+
+
+def test_experiment_effective_config_nyquist_adjustment(tmp_path: Path):
+    """Verify report distinguishes requested vs effective configuration when adjusted for Nyquist."""
+    # Create 1000 Hz file (Nyquist = 500 Hz)
+    wav_path = make_test_wav(tmp_path / "low_fs.wav", fs=1000, duration_s=0.5, freq_hz=50.0)
+
+    # Request high cutoff 600 Hz (which is > 500 Hz Nyquist)
+    cfg = ExperimentConfig(filter_enabled=True, filter_low_hz=20.0, filter_high_hz=600.0)
+    rep = run_single_experiment(wav_path, cfg, output_dir=tmp_path / "nyquist_out")
+
+    # Requested must be 600 Hz
+    assert rep["requested_configuration"]["filter_high_hz"] == 600.0
+
+    # Effective must be adjusted to 499.0 Hz (Nyquist - 1.0)
+    assert rep["effective_configuration"]["filter_high_hz"] == 499.0
+    assert rep["effective_configuration"]["filter_adjusted_for_nyquist"] is True
+    assert rep["effective_configuration"]["nyquist_hz"] == 500.0
