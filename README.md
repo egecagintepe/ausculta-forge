@@ -65,14 +65,18 @@ ausculta-forge/
 │   ├── pcg_core/           # PCG streaming abstractions, sources, DSP, metrics
 │   │   ├── __init__.py
 │   │   ├── models.py       # SampleBlock data structure
-│   │   ├── sources.py      # MockPCGSource and WavSource
+│   │   ├── sources.py      # MockPCGSource, WavSource, and RealtimeWavSource
 │   │   ├── dsp.py          # StreamingBandpass filter (stateful sosfilt)
+│   │   ├── buffers.py      # RollingBuffer audio sliding window
+│   │   ├── streaming.py    # StreamQualityMonitor and LiveStreamingPipeline
 │   │   ├── metrics.py      # RMS, peak, crest factor calculations
 │   │   ├── demo.py         # Standalone synthetic PCG pipeline demonstration
-│   │   └── analyze.py      # CLI for real PCG WAV analysis
+│   │   ├── analyze.py      # CLI for real PCG WAV analysis
+│   │   └── stream_demo.py  # CLI for live PCG streaming simulation
 │   ├── tests/              # Automated unit tests
 │   │   ├── test_core.py
-│   │   └── test_analysis.py
+│   │   ├── test_analysis.py
+│   │   └── test_streaming.py
 │   ├── pyproject.toml      # Packaging metadata for editable installation
 │   └── requirements.txt    # Python dependencies (numpy, scipy, pytest)
 ├── firmware/               # Microcontroller firmware and communication drivers
@@ -136,7 +140,7 @@ Tests can be executed directly from the repository root:
 pytest
 ```
 
-### 4. Run the Pipeline Demo & Analysis CLI
+### 4. Run Demonstration & Analysis CLIs
 
 Run the synthetic demo:
 
@@ -144,10 +148,20 @@ Run the synthetic demo:
 python -m pcg_core.demo
 ```
 
-Or run offline analysis on a real PCG recording:
+Run offline analysis on a real PCG recording:
 
 ```bash
 python -m pcg_core.analyze data/raw/a0001.wav
+```
+
+Simulate live MCU streaming playback from a PCG recording:
+
+```bash
+# Live playback at wall-clock speed:
+python -m pcg_core.stream_demo data/raw/a0001.wav
+
+# Or fast unpaced mode for quick benchmarks:
+python -m pcg_core.stream_demo data/raw/a0001.wav --fast
 ```
 
 ---
