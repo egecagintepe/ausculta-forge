@@ -70,21 +70,26 @@ ausculta-forge/
 │   │   ├── buffers.py      # RollingBuffer audio sliding window
 │   │   ├── streaming.py    # StreamQualityMonitor and LiveStreamingPipeline
 │   │   ├── metrics.py      # RMS, peak, crest factor calculations
+│   │   ├── analysis.py     # Offline PCG metrics and spectrogram computation
+│   │   ├── experiment.py   # Reproducible experiment runner & JSON reporter
 │   │   ├── demo.py         # Standalone synthetic PCG pipeline demonstration
 │   │   ├── analyze.py      # CLI for real PCG WAV analysis
 │   │   └── stream_demo.py  # CLI for live PCG streaming simulation
 │   ├── tests/              # Automated unit tests
 │   │   ├── test_core.py
 │   │   ├── test_analysis.py
-│   │   └── test_streaming.py
+│   │   ├── test_streaming.py
+│   │   └── test_experiment.py
 │   ├── pyproject.toml      # Packaging metadata for editable installation
 │   └── requirements.txt    # Python dependencies (numpy, scipy, pytest)
 ├── firmware/               # Microcontroller firmware and communication drivers
 ├── hardware/               # Schematics, PCB layouts, mechanical CAD, acoustic models
-├── experiments/            # Exploratory DSP scripts and validation logs
-│   └── output/             # (Ignored by git) Local experiment outputs
+├── experiments/            # Reproducible experiment configurations and runner
+│   ├── configs/            # Tracked experiment configuration files (e.g. baseline.json)
+│   └── output/             # (Ignored by git) Generated experiment JSON reports
 ├── docs/                   # Architectural specs, protocols, and meeting notes
 │   ├── architecture/       # Detailed system design documents
+│   ├── knowledge-base/     # AuscultaForge Engineering Knowledge Base (study & capstone defense)
 │   ├── protocol/           # Draft MCU-to-PC communication specifications
 │   │   └── PROTOCOL_DRAFT.md
 │   └── meeting-notes/      # Engineering sprint & advisor meeting minutes
@@ -96,6 +101,23 @@ ausculta-forge/
 ├── pytest.ini              # Central pytest configuration
 └── README.md               # Project overview, setup, and architecture
 ```
+
+---
+
+## Engineering Knowledge Base
+
+Comprehensive engineering explanations, design rationale, mathematical formulations, and capstone defense summaries for all AuscultaForge subsystems are maintained in the [Engineering Knowledge Base](docs/knowledge-base/README.md).
+
+The knowledge base covers:
+- [00. Proje Genel Bakışı & Ekip Rolleri](docs/knowledge-base/00-project-overview.md)
+- [01. PCG Temelleri & Örnekleme Prensipleri](docs/knowledge-base/01-pcg-fundamentals.md)
+- [02. SampleBlock ve Veri Kaynağı Soyutlaması](docs/knowledge-base/02-sampleblock-and-sources.md)
+- [03. Blok Tabanlı Akış ve Kayan Tampon](docs/knowledge-base/03-streaming-and-rolling-buffer.md)
+- [04. Sayısal İşaret İşleme (DSP) ve Durumlu Filtreleme](docs/knowledge-base/04-dsp-and-filtering.md)
+- [05. Spektral Analiz: FFT, Welch PSD ve Spektrogram](docs/knowledge-base/05-spectral-analysis.md)
+- [06. Akış Kalitesi İzleme (Stream Quality Monitoring)](docs/knowledge-base/06-stream-quality-monitoring.md)
+- [07. Test Stratejisi ve Doğrulama](docs/knowledge-base/07-testing-and-validation.md)
+- [Mühendislik Terimleri Sözlüğü (Glossary)](docs/knowledge-base/GLOSSARY.md)
 
 ---
 
@@ -162,6 +184,16 @@ python -m pcg_core.stream_demo data/raw/a0001.wav
 
 # Or fast unpaced mode for quick benchmarks:
 python -m pcg_core.stream_demo data/raw/a0001.wav --fast
+```
+
+Run reproducible experiment and generate verifiable JSON report:
+
+```bash
+# Single file analysis:
+python -m pcg_core.experiment --input data/raw/a0001.wav --config experiments/configs/baseline.json
+
+# Batch processing over a directory:
+python -m pcg_core.experiment --input data/raw --config experiments/configs/baseline.json
 ```
 
 ---
