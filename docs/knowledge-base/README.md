@@ -18,6 +18,7 @@ Buradaki dokümanlar genel teorik ders notu yığını değil; doğrudan Auscult
 | 05 | [Spektral Analiz](file:///c:/Users/Ege%20%C3%87a%C4%9F%C4%B1n/Downloads/pcg_software_starter/docs/knowledge-base/05-spectral-analysis.md) | FFT, Welch PSD ve Spektrogram karşılaştırması, zaman-frekans çözünürlüğü ve canlı spektral çerçeveler. |
 | 06 | [Akış Kalite Denetimi](file:///c:/Users/Ege%20%C3%87a%C4%9F%C4%B1n/Downloads/pcg_software_starter/docs/knowledge-base/06-stream-quality-monitoring.md) | `StreamQualityMonitor`, paket kaybı, sıra atlama, zaman gerilemesi ve örnekleme frekansı değişim tespiti. |
 | 07 | [Test ve Doğrulama Stratejisi](file:///c:/Users/Ege%20%C3%87a%C4%9F%C4%B1n/Downloads/pcg_software_starter/docs/knowledge-base/07-testing-and-validation.md) | Ağdan bağımsız sentetik birim testler, fast mode test yürütümü ve tekrarlanabilir deney altyapısı. |
+| 08 | [Referans ve Yakalanan Sinyal Doğrulama](file:///c:/Users/Ege%20%C3%87a%C4%9F%C4%B1n/Downloads/pcg_software_starter/docs/knowledge-base/08-reference-vs-capture-validation.md) | Çapraz korelasyonla gecikme tespiti, sinyal hizalama, kazanç, RMSE/SER, uyum ve fantom test gerekçesi. |
 | -- | [Terimler Sözlüğü (Glossary)](file:///c:/Users/Ege%20%C3%87a%C4%9F%C4%B1n/Downloads/pcg_software_starter/docs/knowledge-base/GLOSSARY.md) | Biyomedikal, gömülü sistem ve DSP terimlerinin Türkçe-İngilizce tanımları. |
 
 ---

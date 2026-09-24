@@ -72,14 +72,17 @@ ausculta-forge/
 │   │   ├── metrics.py      # RMS, peak, crest factor calculations
 │   │   ├── analysis.py     # Offline PCG metrics and spectrogram computation
 │   │   ├── experiment.py   # Reproducible experiment runner & JSON reporter
+│   │   ├── validation.py   # Reference-vs-capture alignment and quantitative metrics
 │   │   ├── demo.py         # Standalone synthetic PCG pipeline demonstration
 │   │   ├── analyze.py      # CLI for real PCG WAV analysis
-│   │   └── stream_demo.py  # CLI for live PCG streaming simulation
+│   │   ├── stream_demo.py  # CLI for live PCG streaming simulation
+│   │   └── validate_capture.py # CLI for reference-vs-capture validation & simulation
 │   ├── tests/              # Automated unit tests
 │   │   ├── test_core.py
 │   │   ├── test_analysis.py
 │   │   ├── test_streaming.py
-│   │   └── test_experiment.py
+│   │   ├── test_experiment.py
+│   │   └── test_validation.py
 │   ├── pyproject.toml      # Packaging metadata for editable installation
 │   └── requirements.txt    # Python dependencies (numpy, scipy, pytest)
 ├── firmware/               # Microcontroller firmware and communication drivers
@@ -117,6 +120,7 @@ The knowledge base covers:
 - [05. Spektral Analiz: FFT, Welch PSD ve Spektrogram](docs/knowledge-base/05-spectral-analysis.md)
 - [06. Akış Kalitesi İzleme (Stream Quality Monitoring)](docs/knowledge-base/06-stream-quality-monitoring.md)
 - [07. Test Stratejisi ve Doğrulama](docs/knowledge-base/07-testing-and-validation.md)
+- [08. Referans ve Yakalanan Sinyal Doğrulama](docs/knowledge-base/08-reference-vs-capture-validation.md)
 - [Mühendislik Terimleri Sözlüğü (Glossary)](docs/knowledge-base/GLOSSARY.md)
 
 ---
@@ -194,6 +198,16 @@ python -m pcg_core.experiment --input data/raw/a0001.wav --config experiments/co
 
 # Batch processing over a directory:
 python -m pcg_core.experiment --input data/raw --config experiments/configs/baseline.json
+```
+
+Validate reference PCG against captured recording (or distorted simulation):
+
+```bash
+# Synthetic distorted bench simulation:
+python -m pcg_core.validate_capture --reference data/raw/a0001.wav --simulate --delay-ms 45 --gain 0.8 --noise-std 0.01 --save-report
+
+# Physical recording vs. reference validation:
+python -m pcg_core.validate_capture --reference data/raw/a0001.wav --capture data/raw/phantom_recording.wav --save-report
 ```
 
 ---
