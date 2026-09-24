@@ -18,4 +18,13 @@ def __getattr__(name: str):
     if name in ("ExperimentConfig", "run_experiment", "run_single_experiment"):
         from . import experiment
         return getattr(experiment, name)
+    if name in (
+        "ValidationResult",
+        "validate_signals",
+        "validate_wav_files",
+        "simulate_distorted_capture",
+        "estimate_delay_and_align",
+    ):
+        from . import validation
+        return getattr(validation, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
