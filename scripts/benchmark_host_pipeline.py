@@ -59,11 +59,18 @@ class BenchmarkMockWebSocket:
     def __init__(self, slow_ms: float = 0.0) -> None:
         self.slow_ms = slow_ms
         self.received_frames: int = 0
+        self.legacy_signal_frames: int = 0
+        self.display_frames: int = 0
 
     async def send_json(self, msg: dict) -> None:
         if self.slow_ms > 0:
             await asyncio.sleep(self.slow_ms / 1000.0)
         self.received_frames += 1
+        msg_type = msg.get("type")
+        if msg_type == "signal_frame":
+            self.legacy_signal_frames += 1
+        elif msg_type == "display_frame":
+            self.display_frames += 1
 
 
 import tempfile
@@ -104,18 +111,18 @@ async def run_benchmark(
             )
         )
 
+        # Normal production display configuration:
+        # DisplayPipelineConfig defaults emit_legacy_signal_frames to False.
         display_cfg = DisplayPipelineConfig(
             target_display_hz=target_display_hz,
             points_per_frame=128,
             client_queue_size=2,
-            emit_legacy_signal_frames=False,
         )
 
         manager = StreamManager(
             sessions_dir=sessions_path,
             device_runtime=runtime,
             display_config=display_cfg,
-            enable_legacy_signal_frames=False,
         )
 
         # Attach mock client
@@ -180,6 +187,7 @@ async def run_benchmark(
             "recorded_samples": recorded_samples,
             "display_frames_produced": produced_display,
             "display_frames_dropped": dropped_display,
+            "legacy_signal_frames": mock_ws.legacy_signal_frames,
             "hardware_sequence_gaps": runtime.stats.sequence_gaps,
             "hardware_crc_failures": runtime.stats.crc_failures,
         }
@@ -237,6 +245,7 @@ def main():
     print(f"  Samples recorded in WAV  : {results['recorded_samples']:,} (100.0% preserved)")
     print(f"  Display frames produced  : {results['display_frames_produced']}")
     print(f"  Display frames dropped   : {results['display_frames_dropped']}")
+    print(f"  Legacy signal frames     : {results['legacy_signal_frames']} (STRICTLY ZERO under default config)")
     print(f"  Hardware sequence gaps   : {results['hardware_sequence_gaps']} (STRICTLY ZERO)")
     print(f"  Hardware CRC failures    : {results['hardware_crc_failures']}")
     print("-" * 76)

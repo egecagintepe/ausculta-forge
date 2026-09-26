@@ -64,7 +64,7 @@ AuscultaForge, `decimate_min_max` fonksiyonunu kullanır:
 - Verilen zaman dilimi $K = M / 2$ eşit kovaya (bin/bucket) bölünür ($M$ hedef nokta sayısı, örn. 128 nokta).
 - Her kova içerisindeki **minimum** ve **maksimum** değer bulunur.
 - Bu iki tepe noktası, orijinal sinyalde oluştukları **kronolojik sıra korunarak** çıktı dizisine yazılır.
-- Bu sayede 1-örnek genişliğindeki dar bir tıklama veya ani dip noktası asla kaybolmaz; dalga formunun zarfı ve tepe genlikleri ekranda matematiksel kesinlikle görünür kalır.
+- Bu sayede kova içi yerel uç değerler (minimum ve maksimum) korunarak naive periyodik örneklemeye kıyasla tepe noktalarının görsel tespiti ve dalga formu zarfı çok daha başarılı korunur (fakat her sıfır geçişi veya tüm morfolojik detayların kusursuz korunması gibi matematiksel bir aşırı iddiada bulunulmaz).
 
 ---
 

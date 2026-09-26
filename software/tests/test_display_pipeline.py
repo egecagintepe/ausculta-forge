@@ -241,6 +241,94 @@ class TestRecorderIsolationUnderBackpressure:
     """Verifies that slow WebSocket UI consumption NEVER drops recording samples or causes sequence gaps."""
 
     @pytest.mark.anyio
+    async def test_default_production_configuration_backpressure_and_zero_legacy_frames(self, tmp_path: Path):
+        """Regression test: default StreamManager config must emit display_frame, zero signal_frame,
+        record 100% of samples, and preserve 0 sequence gaps under an intentionally slow client.
+
+        Strictly NO explicit enable_legacy_signal_frames or emit_legacy_signal_frames overrides.
+        """
+        runtime = setup_streaming_rev_a_runtime()
+        # Normal production default StreamManager configuration:
+        manager = StreamManager(
+            sessions_dir=tmp_path / "sessions",
+            device_runtime=runtime,
+        )
+
+        # Verify authoritative default configuration
+        assert manager.display_config.emit_legacy_signal_frames is False
+        assert manager.enable_legacy_signal_frames is False
+
+        # Intentionally slow WebSocket client (50 ms send latency)
+        slow_ws = SlowMockWebSocket(delay_s=0.05)
+        manager.register_client(slow_ws)
+
+        manager.select_source("hardware")
+        assert manager.is_streaming is True
+        assert runtime.state == DeviceState.STREAMING
+
+        # Active SessionRecorder
+        sid = manager.start_recording()
+        assert manager.recorder.is_recording is True
+
+        fs = 48000
+        samples_per_block = 512
+        total_blocks = 100  # 51,200 samples (~1.067s of audio)
+        expected_total_samples = total_blocks * samples_per_block
+
+        # Ingest Rev-A 48 kHz semantic hardware packets
+        t_start = time.perf_counter()
+        for seq in range(total_blocks):
+            t_s = seq * (samples_per_block / fs)
+            raw_pcm = np.full(samples_per_block, 150000 + (seq % 500), dtype=np.int32)
+            pkt = DeviceSamplePacket(
+                sequence=seq,
+                timestamp_s=t_s,
+                raw_samples=raw_pcm,
+                crc_ok=True,
+                meaningful_bits=24,
+                sample_rate_hz=fs,
+            )
+            await manager.ingest_device_packet(pkt)
+        ingest_duration = time.perf_counter() - t_start
+
+        # Ingestion does not wait for the slow client's network delay:
+        # Awaiting 50ms across 100 blocks would take >= 5.0 seconds.
+        # Decoupled ingestion completes in < 1.0 second.
+        assert ingest_duration < 2.5
+
+        # Stop recording and inspect metadata
+        meta = manager.stop_recording()
+
+        # 1. Full acquisition sample count is still recorded exactly
+        assert meta.total_samples == expected_total_samples  # Exactly 51,200 samples
+        assert meta.total_blocks == total_blocks  # Exactly 100 blocks
+        assert meta.sample_rate_hz == fs
+
+        # 2. Hardware sequence gaps remain strictly zero
+        stats = runtime.stats
+        assert stats.packets_received == total_blocks
+        assert stats.sequence_gaps == 0
+        assert stats.samples_received == expected_total_samples
+
+        # Yield briefly so the slow client sender background task finishes in-flight send
+        await asyncio.sleep(0.08)
+
+        # 3. Default config produces and emits display_frame
+        assert manager.display_aggregator.total_display_frames_produced > 0
+        display_frames = [m for m in slow_ws.messages if m.get("type") == "display_frame"]
+        assert len(display_frames) > 0
+        assert "raw_points" in display_frames[0]
+        assert "filtered_points" in display_frames[0]
+
+        # 4. Default config emits zero legacy signal_frame messages
+        legacy_frames = [m for m in slow_ws.messages if m.get("type") == "signal_frame"]
+        assert len(legacy_frames) == 0
+
+        # 5. Slow client causes obsolete DISPLAY frames to drop
+        session = manager._clients[slow_ws]
+        assert session.dropped_display_frames > 0
+
+    @pytest.mark.anyio
     async def test_slow_ui_does_not_corrupt_full_rate_recording(self, tmp_path: Path):
         """Inject 200 sequential 48 kHz packets into a StreamManager with an intentionally slow UI client."""
         runtime = setup_streaming_rev_a_runtime()
@@ -248,13 +336,11 @@ class TestRecorderIsolationUnderBackpressure:
             target_display_hz=25.0,
             points_per_frame=128,
             client_queue_size=2,
-            emit_legacy_signal_frames=False,  # Pure display-frame pipeline
         )
         manager = StreamManager(
             sessions_dir=tmp_path / "sessions",
             device_runtime=runtime,
             display_config=display_cfg,
-            enable_legacy_signal_frames=False,
         )
 
         # Attach an intentionally slow WebSocket client (50 ms per send)
@@ -337,13 +423,11 @@ class TestMultiClientIsolation:
         display_cfg = DisplayPipelineConfig(
             target_display_hz=25.0,
             client_queue_size=2,
-            emit_legacy_signal_frames=False,
         )
         manager = StreamManager(
             sessions_dir=tmp_path / "sessions",
             device_runtime=runtime,
             display_config=display_cfg,
-            enable_legacy_signal_frames=False,
         )
 
         fast_ws = FastMockWebSocket()
@@ -407,7 +491,6 @@ class TestRevAMetadataAndReplay:
         manager = StreamManager(
             sessions_dir=tmp_path / "sessions",
             device_runtime=runtime,
-            enable_legacy_signal_frames=False,
         )
         manager.select_source("hardware")
         manager.start_recording()

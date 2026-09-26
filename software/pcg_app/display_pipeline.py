@@ -9,8 +9,8 @@ The display aggregator consumes full-rate processed SampleBlocks and periodicall
 produces display-oriented frames at a controlled, configurable display cadence
 (e.g., 20–30 display updates/second).
 
-Peak-preserving decimation (min/max bucket aggregation) guarantees that narrow
-transient physiological peaks (S1/S2 clicks, murmurs) are never lost when
+Peak-preserving decimation (min/max bucket aggregation) preserves local
+extrema/peaks better than naive periodic subsampling when
 downsampling for UI display.
 """
 
@@ -39,7 +39,7 @@ class DisplayPipelineConfig:
     spectral_nperseg: int = 256
     enable_spectral: bool = True
     client_queue_size: int = 2
-    emit_legacy_signal_frames: bool = True
+    emit_legacy_signal_frames: bool = False  # Legacy compatibility only; disabled by default
 
 
 def decimate_min_max(samples: np.ndarray, target_points: int) -> np.ndarray:
@@ -48,7 +48,7 @@ def decimate_min_max(samples: np.ndarray, target_points: int) -> np.ndarray:
     Unlike naive subsampling (taking every N-th sample), min/max bucket aggregation
     divides the signal into target_points / 2 bins and extracts both the minimum and
     maximum values in each bin (in the chronological order in which they appear).
-    This guarantees that narrow transient peaks and zero-crossings are preserved
+    This preserves local extrema/peaks better than naive periodic subsampling
     for visual display.
 
     Parameters

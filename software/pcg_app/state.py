@@ -133,12 +133,12 @@ class StreamManager:
         # Device runtime foundation
         self.device_runtime: DeviceRuntime = device_runtime or DeviceRuntime()
 
-        # Display pipeline configuration and aggregator
+        # Display pipeline configuration and aggregator (single source of truth)
         self.display_config = display_config or DisplayPipelineConfig()
         if enable_legacy_signal_frames is not None:
-            self.enable_legacy_signal_frames = enable_legacy_signal_frames
-        else:
-            self.enable_legacy_signal_frames = True
+            # Opt-in override: map directly into single authoritative display_config
+            self.display_config.emit_legacy_signal_frames = enable_legacy_signal_frames
+
         self.display_aggregator = DisplayAggregator(self.display_config)
         self._clients: dict[Any, ClientSession] = {}
 
@@ -176,6 +176,11 @@ class StreamManager:
         self.recorder = SessionRecorder(output_dir=self.sessions_dir, wav_format="float32")
         self._recording_started_wall: float = 0.0
 
+    @property
+    def enable_legacy_signal_frames(self) -> bool:
+        """Compatibility property; authoritative source is display_config.emit_legacy_signal_frames."""
+        return self.display_config.emit_legacy_signal_frames
+
     def get_capabilities(self) -> dict[str, Any]:
         return {
             "sample_rate_hz": self.sample_rate_hz,
@@ -193,6 +198,7 @@ class StreamManager:
                 "points_per_frame": self.display_config.points_per_frame,
                 "spectral_update_hz": self.display_config.spectral_update_hz,
                 "max_rolling_window_s": self.display_config.max_rolling_window_s,
+                "emit_legacy_signal_frames": self.display_config.emit_legacy_signal_frames,
             },
         }
 
@@ -557,8 +563,8 @@ class StreamManager:
         if display_frame is not None:
             self.publish_display_frame(display_frame)
 
-        # 5. Legacy signal_frame broadcast if enabled for backward compatibility
-        if self.enable_legacy_signal_frames:
+        # 5. Legacy signal_frame broadcast if explicitly opted-in (compatibility/dev only)
+        if self.display_config.emit_legacy_signal_frames:
             raw_list = [round(float(v), 5) for v in block.samples]
             filt_list = [round(float(v), 5) for v in frame.filtered_block.samples]
             msg = make_signal_frame_message(
