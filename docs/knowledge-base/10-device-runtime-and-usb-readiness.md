@@ -123,19 +123,44 @@ Kayıt & DSP Boru Hattı                   Ekran Desimasyonu / Pencereli Tampon
 
 ---
 
-## 4. Yetenek Doğrulama ve Müzakere (`DeviceCapabilities`)
+## 4. Çekme Esaslı (Pull-Driven) Çevrimdışı Kaynaklar vs İtme Esaslı (Push-Driven) Fiziksel Donanım
 
-Cihaz bağlandığında (`HANDSHAKING`), donanım tarafından bildirilen yetenekler aktif `AcquisitionProfile` ile karşılaştırılır:
+Masaüstü köprü katmanı iki zıt akış paradigmasını tek bir paylaşılan DSP ve kayıt boru hattında birleştirir:
+
+| Boyut | Çevrimdışı Kaynaklar (WAV / Oturum Replay / Sentetik) | Fiziksel Donanım (ESP32-S3 USB) |
+|---|---|---|
+| **Akış Paradigması** | **Çekme Esaslı (Pull-Driven)** | **İtme Esaslı (Push-Driven)** |
+| **Zamanlama Kontrolü** | Ana bilgisayar (Host PC) CPU zamanlayıcısı kontrolündedir. | Donanım (MCU kristali, I2S donanım saati ve DMA) kontrolündedir. |
+| **Veri Giriş Mekanizması** | Python `generator` (`next(source_generator)`) blok blok çeker. | USB uç noktasından paket geldikçe `ingest_device_packet(packet)` metoduna itilir. |
+| **Hız Ayarı (Pacing)** | Gerçek zamanlı hissi vermek için `asyncio.sleep(block_duration)` uygulanır. | Donanım örnekleme hızı doğal hızdır; host pacing uygulamaz. |
+| **Hata / Askıda Kalma** | Dosya bittiğinde döngü başa sarar veya durur. | Kablo çıkarsa durum makinesi `INTERRUPTED` durumuna geçer ve kaydı anında mühürler. |
+
+### Ortak Dağıtım Noktası (`_dispatch_sample_block`)
+
+İster pull-driven çevrimdışı kaynaklar ister push-driven fiziksel donanım paketleri olsun, dönüştürülen `SampleBlock`:
+1. `LiveStreamingPipeline` üzerinden durumlu Butterworth bandpass filtrelemeden geçer.
+2. Aktif bir kayıt varsa `SessionRecorder` ile tam çözünürlükte diske yazılır.
+3. `make_signal_frame_message()` ile WebSocket üzerinden React UI'a yayınlanır.
+
+Bu mimari, donanım henüz fiziksel olarak üretilmeden tüm masaüstü kayıt, filtreleme ve osiloskop mantığının yüzde yüz aynı kod yolunu (code path) kullanmasını ve doğrulanmasını garanti eder.
+
+---
+
+## 5. Yetenek Doğrulama ve Müzakere (`DeviceCapabilities`)
+
+Cihaz bağlandığında (`HANDSHAKING`), donanım tarafından bildirilen yetenekler aktif `AcquisitionProfile` ile kesin olarak karşılaştırılır:
 - **Protokol Sürümü:** `"1.0"` olmalıdır.
 - **Kanal Sayısı:** Aktif profilin kanal sayısıyla eşleşmelidir (Rev-A mono: `1`).
 - **Örnekleme Hızı:** Aktif profille birebir eşleşmelidir (`48000 Hz`). Eski geliştirme profili kullanılıyorsa `4000 Hz` kabul edilir.
-- **Örnek Temsili:** `meaningful_data_bits <= sample_container_bits` olmalıdır.
+- **Örnek Temsili:** `sample_format == "signed_pcm"` (kanonik biçim zorunludur; `float32` veya `int32` gibi gevşek takma adlar fiziksel el sıkışmada reddedilir).
+- **Yuva ve Anlamlı Bit:** `sample_container_bits == 32` ve `meaningful_data_bits == 24` kesin eşleşmelidir.
+- **Blok Boyutu Müzakeresi:** Donanımın bildirdiği `max_block_size` ile profilin `preferred_block_size` değerinin minimumu (`min(preferred, max)`) alınarak savunulabilir müzakere edilmiş blok boyutu (`negotiated_block_size`) belirlenir.
 
 Uyumsuzluk halinde cihaz `INCOMPATIBLE` durumuna çekilir ve denetim günlüğüne kaydedilir.
 
 ---
 
-## 5. Taşıma Karar Sınırı (Transport Decision Boundary)
+## 6. Taşıma Karar Sınırı (Transport Decision Boundary)
 
 - **ESP32-S3 Yerel USB (Native USB):** Projenin Faz-1 kararı olarak kesinleşmiştir (final).
 - **USB CDC-ACM:** Donanım Rev-A için önerilen ve ekip incelemesinde olan temel öneridir.
@@ -145,7 +170,7 @@ Uyumsuzluk halinde cihaz `INCOMPATIBLE` durumuna çekilir ve denetim günlüğü
 
 ---
 
-## 6. Dürüst Çalışma Zamanı Bütünlük Telemetrisi (10 Sayaç)
+## 7. Dürüst Çalışma Zamanı Bütünlük Telemetrisi (10 Sayaç)
 
 Kullanıcı arayüzünde ve tanılama çekmecesinde yalnızca yazılım tarafından gerçekten hesaplanan 10 sayaç gösterilir; hiçbir dekoratif veya sıfır kalan yapay sayaç bulunmaz:
 
@@ -164,7 +189,7 @@ Kullanıcı arayüzünde ve tanılama çekmecesinde yalnızca yazılım tarafın
 
 ---
 
-## 7. Bağlantı Kopması ve Güvenli Kayıt Mühürleme
+## 8. Bağlantı Kopması ve Güvenli Kayıt Mühürleme
 
 Akış veya kayıt esnasında USB kablosu çekilirse:
 1. `StreamManager.handle_device_disconnect()` çağrılır.
@@ -174,7 +199,7 @@ Akış veya kayıt esnasında USB kablosu çekilirse:
 
 ---
 
-## 8. Donanım Rev-A ve PC Çalışma Zamanı Senkronizasyon Notu
+## 9. Donanım Rev-A ve PC Çalışma Zamanı Senkronizasyon Notu
 
 > [!IMPORTANT]
 > **Revizyon Kontrolü ve Ekip Senkronizasyonu:**<br/>
@@ -182,6 +207,6 @@ Akış veya kayıt esnasında USB kablosu çekilirse:
 
 ---
 
-## 9. 30 Saniyelik Bitirme Savunması Açıklaması
+## 10. 30 Saniyelik Bitirme Savunması Açıklaması
 
 > *"AuscultaForge masaüstü uygulaması, donanım Rev-A mimarisine tam uyumlu, yapılandırılabilir bir edinim profili (`AcquisitionProfile`) ve 9 durumlu bir yaşam döngüsü durum makinesi üzerine kurulmuştur. Fiziksel donanım masaya gelene kadar sahte bir cihaz takılıymış gibi davranmıyoruz; sistem dürüstçe 'No Device' durumunda bekler. PUI DMM-4026-B-I2S-R mikrofonu için 48 kHz mono 24-in-32 bit edinim hızı hedeflenirken, PC çalışma zamanı disk kaydında tam 48 kHz çözünürlüğü korurken UI render döngüsünü desimasyonla ayırır. Kablo kopması esnasında kayıtların mühürlenmesi ve el sıkışma uyumluluğu otomatik testlerle kanıtlanmıştır."*

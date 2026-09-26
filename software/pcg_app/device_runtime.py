@@ -161,16 +161,22 @@ class DeviceCapabilities:
                 f"got {self.sample_rate_hz} Hz"
             )
 
-        if self.sample_format != profile.sample_encoding and self.sample_format not in SUPPORTED_SAMPLE_ENCODINGS:
+        if self.sample_format != profile.sample_encoding:
             raise ValueError(
-                f"Unsupported sample format: {self.sample_format!r}. "
-                f"Expected {profile.sample_encoding} or supported: {sorted(SUPPORTED_SAMPLE_ENCODINGS)}"
+                f"Sample format mismatch: profile requires canonical {profile.sample_encoding!r}, "
+                f"got {self.sample_format!r}"
             )
 
-        if self.meaningful_data_bits > self.sample_container_bits:
+        if self.sample_container_bits != profile.sample_container_bits:
             raise ValueError(
-                f"Invalid bit representation: meaningful_data_bits ({self.meaningful_data_bits}) "
-                f"cannot exceed sample_container_bits ({self.sample_container_bits})"
+                f"Container bit width mismatch: profile requires {profile.sample_container_bits}-bit container, "
+                f"got {self.sample_container_bits}-bit"
+            )
+
+        if self.meaningful_data_bits != profile.meaningful_data_bits:
+            raise ValueError(
+                f"Meaningful data bit width mismatch: profile requires {profile.meaningful_data_bits}-bit data, "
+                f"got {self.meaningful_data_bits}-bit"
             )
 
         if self.max_block_size <= 0 or self.max_block_size > 16384:
@@ -253,9 +259,20 @@ def packet_to_sample_block(
     if np.issubdtype(raw.dtype, np.floating):
         normalized = raw.astype(np.float32)
     elif np.issubdtype(raw.dtype, np.integer):
+        min_legal = -(1 << (meaningful_bits - 1))
+        max_legal = (1 << (meaningful_bits - 1)) - 1
+
+        if len(raw) > 0:
+            raw_min = int(np.min(raw))
+            raw_max = int(np.max(raw))
+            if raw_min < min_legal or raw_max > max_legal:
+                raise ValueError(
+                    f"Raw sample integer out of legal {meaningful_bits}-bit signed range "
+                    f"[{min_legal}, {max_legal}]: min found {raw_min}, max found {raw_max}"
+                )
+
         scale = float(1 << (meaningful_bits - 1))
         normalized = (raw.astype(np.float32) / scale).astype(np.float32)
-        normalized = np.clip(normalized, -1.0, 1.0)
     else:
         normalized = np.asarray(raw, dtype=np.float32)
 
@@ -601,12 +618,17 @@ class DeviceRuntime:
         try:
             capabilities.validate_compatibility(self.profile)
             self._capabilities = capabilities
+
+            # Compute defensible negotiated block size: cannot exceed device's advertised max_block_size
+            negotiated = min(self.profile.preferred_block_size, capabilities.max_block_size)
+            self.profile.negotiated_block_size = negotiated
+
             self.transition_to(DeviceState.READY)
             self.event_log.log(
                 "HANDSHAKE_COMPLETE",
-                f"Handshake validated for {capabilities.device_id} at {capabilities.sample_rate_hz} Hz ({capabilities.sample_format})",
+                f"Handshake validated for {capabilities.device_id} at {capabilities.sample_rate_hz} Hz ({capabilities.sample_format}), negotiated block size: {negotiated}",
                 severity="info",
-                metadata=capabilities.to_dict(),
+                metadata={**capabilities.to_dict(), "negotiated_block_size": negotiated},
             )
         except ValueError as e:
             err = f"Device rejected during handshake: {e}"
@@ -676,5 +698,6 @@ class DeviceRuntime:
             "disconnected_at_utc": self._disconnected_at_utc,
             "last_error": self._last_error,
             "discovery_status": self.discovery_provider.get_status_description(),
+            "negotiated_block_size": self.profile.negotiated_block_size,
             "acquisition_profile": self.profile.to_dict(),
         }

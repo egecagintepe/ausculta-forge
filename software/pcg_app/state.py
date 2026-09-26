@@ -212,6 +212,10 @@ class StreamManager:
 
         Does NOT silently fall back to mock on invalid requests.
         """
+        # If switching away from hardware, stop device streaming cleanly
+        if self.source_type == "hardware" and source_type != "hardware":
+            self.device_runtime.stop_streaming()
+
         if source_type == "none":
             self.source_type = "none"
             self.source_path = None
@@ -267,6 +271,7 @@ class StreamManager:
             self.active_source_name = f"Hardware: {dev_id}"
             if self.device_runtime.capabilities:
                 self.sample_rate_hz = self.device_runtime.capabilities.sample_rate_hz
+                self.block_size = self.device_runtime.profile.negotiated_block_size
             self.device_runtime.start_streaming()
             self._source_generator = None
             self.is_streaming = True
@@ -345,6 +350,8 @@ class StreamManager:
 
     def stop_stream(self) -> None:
         self.is_streaming = False
+        if self.source_type == "hardware":
+            self.device_runtime.stop_streaming()
 
     async def start_streaming_task(self) -> None:
         """Start the background stream generator task."""
@@ -361,12 +368,97 @@ class StreamManager:
                 pass
             self._loop_task = None
 
+    async def ingest_device_packet(self, packet: DeviceSamplePacket) -> None:
+        """Entry point for push-driven physical hardware sample packets.
+
+        Called by the transport decoder when new physical packets arrive from USB.
+        Flow:
+        1. Only accept packets when hardware is actively STREAMING and stream manager is active
+        2. Update DeviceIntegrityStats
+        3. Drop CRC-failed packets without feeding DSP or recording
+        4. Convert valid packet to SampleBlock (checks integer range, normalizes to float32)
+        5. Process through DSP pipeline, record if active, and broadcast signal_frame
+        """
+        if (
+            self.device_runtime.state != DeviceState.STREAMING
+            or self.source_type != "hardware"
+            or not self.is_streaming
+            or self.is_paused
+        ):
+            return
+
+        # Update integrity telemetry
+        self.device_runtime.stats.record_packet(packet)
+
+        # Drop CRC-failed packets without feeding DSP or recording
+        if not packet.crc_ok:
+            return
+
+        # Adapt to SampleBlock (checks legal integer range and normalizes to float32)
+        block = packet_to_sample_block(
+            packet,
+            sample_rate_hz=self.sample_rate_hz,
+            profile=self.device_runtime.profile,
+        )
+
+        # Dispatch to shared processing, recording, and WebSocket broadcast
+        await self._dispatch_sample_block(block)
+
+    async def _dispatch_sample_block(self, block: SampleBlock) -> None:
+        """Shared pipeline processing, session recording, and WebSocket broadcast.
+
+        Invoked by both pull-driven offline sources and push-driven hardware packets.
+        """
+        # Process through DSP pipeline
+        frame = self.pipeline.process_block(block)
+
+        # Record if session active
+        if self.recorder.is_recording:
+            try:
+                self.recorder.record_block(block)
+            except Exception as e:
+                await self.broadcast(make_error_message(f"Recording error: {e}", "RECORDING_ERROR"))
+
+        # Broadcast signal frame to clients
+        quality_rep = self.pipeline.quality_monitor.report
+        quality_summary = {
+            "total_blocks": quality_rep.total_blocks,
+            "dropped_blocks": quality_rep.dropped_blocks,
+            "repeated_sequences": quality_rep.repeated_sequences,
+            "sequence_discontinuities": quality_rep.sequence_discontinuities,
+            "is_healthy": quality_rep.is_healthy,
+        }
+
+        raw_list = [round(float(v), 5) for v in block.samples]
+        filt_list = [round(float(v), 5) for v in frame.filtered_block.samples]
+
+        msg = make_signal_frame_message(
+            sequence=block.sequence,
+            timestamp_s=block.timestamp_s,
+            sample_rate_hz=block.sample_rate_hz,
+            raw_samples=raw_list,
+            filtered_samples=filt_list,
+            rms_val=frame.metrics.rms,
+            peak_val=frame.metrics.peak_abs,
+            crest_factor_val=frame.metrics.crest_factor,
+            quality_summary=quality_summary,
+            recording_active=self.recorder.is_recording,
+        )
+
+        await self.broadcast(msg)
+
     async def _stream_loop(self) -> None:
         """Continuous background loop consuming blocks, filtering, and broadcasting."""
         while True:
             try:
                 # Do not emit signal frames when idle, paused, or no source selected
                 if not self.is_streaming or self.is_paused or self.source_type == "none":
+                    await asyncio.sleep(0.05)
+                    continue
+
+                if self.source_type == "hardware":
+                    # Hardware acquisition is push-driven via ingest_device_packet().
+                    # The background generator loop idles while physical hardware is active.
                     await asyncio.sleep(0.05)
                     continue
 
@@ -388,46 +480,11 @@ class StreamManager:
                         continue
                     block = next(self._source_generator)
 
-                # Process through pipeline
-                frame = self.pipeline.process_block(block)
-
-                # Record if session active
-                if self.recorder.is_recording:
-                    try:
-                        self.recorder.record_block(block)
-                    except Exception as e:
-                        await self.broadcast(make_error_message(f"Recording error: {e}", "RECORDING_ERROR"))
-
                 # Duration of current block in seconds
                 block_duration = len(block.samples) / block.sample_rate_hz
 
-                # Broadcast signal frame to clients
-                quality_rep = self.pipeline.quality_monitor.report
-                quality_summary = {
-                    "total_blocks": quality_rep.total_blocks,
-                    "dropped_blocks": quality_rep.dropped_blocks,
-                    "repeated_sequences": quality_rep.repeated_sequences,
-                    "sequence_discontinuities": quality_rep.sequence_discontinuities,
-                    "is_healthy": quality_rep.is_healthy,
-                }
-
-                raw_list = [round(float(v), 5) for v in block.samples]
-                filt_list = [round(float(v), 5) for v in frame.filtered_block.samples]
-
-                msg = make_signal_frame_message(
-                    sequence=block.sequence,
-                    timestamp_s=block.timestamp_s,
-                    sample_rate_hz=block.sample_rate_hz,
-                    raw_samples=raw_list,
-                    filtered_samples=filt_list,
-                    rms_val=frame.metrics.rms,
-                    peak_val=frame.metrics.peak_abs,
-                    crest_factor_val=frame.metrics.crest_factor,
-                    quality_summary=quality_summary,
-                    recording_active=self.recorder.is_recording,
-                )
-
-                await self.broadcast(msg)
+                # Dispatch block through shared processing
+                await self._dispatch_sample_block(block)
 
                 # Wall-clock pacing
                 await asyncio.sleep(block_duration)

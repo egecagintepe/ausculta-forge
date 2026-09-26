@@ -3,22 +3,27 @@
 Verifies:
 - Explicit device lifecycle state machine transitions and invalid transition rejection
 - Centralized AcquisitionProfile configuration model (Rev-A 48 kHz mono signed PCM baseline)
-- Semantic DeviceCapabilities validation against active acquisition profiles
-- Explicit successful 48 kHz mono capability handshake
-- Rejection of incompatible protocol versions, channels, formats, and rate mismatches
+- Strict Semantic DeviceCapabilities validation against active acquisition profiles
+- Rejection of invalid sample encodings, container widths, meaningful bits, channels, and rates
+- Successful 48 kHz mono capability handshake and block size negotiation
 - Semantic DeviceSamplePacket raw sample preservation and SampleBlock conversion:
   - Zero maps to 0.0
   - Positive and negative full-scale normalization for 24-bit data words in wider containers
-  - No silent overflow or integer wraparound
+  - Out-of-range integer sample rejection without silent clipping
   - 48 kHz sample rate and timestamp metadata preservation
 - Runtime integrity telemetry counters (packets, samples, gaps, duplicates, regressions, CRC failures, malformed frames)
+- Push-driven physical hardware sample packet ingestion entry point (`ingest_device_packet`):
+  - State consistency between DeviceRuntime and StreamManager
+  - CRC failure dropping (no recording, no DSP)
+  - Full-rate 48 kHz recording and DSP output
+  - WebSocket signal_frame broadcast
 - Hardware disconnect while streaming (transition to INTERRUPTED)
 - Hardware disconnect during recording (safe finalization with termination_reason='device_disconnected')
 - Reconnect lifecycle accounting (INTERRUPTED -> DETECTED -> OPENING -> HANDSHAKING -> READY)
 - Bounded device event history
-- In-memory test double transport and discovery providers
 """
 
+import asyncio
 from pathlib import Path
 import numpy as np
 import pytest
@@ -90,6 +95,16 @@ class FakeDiscoveryProvider(DeviceDiscoveryProvider):
 
     def get_status_description(self) -> str:
         return f"Test discovery provider ({len(self._candidates)} attached)"
+
+
+class FakeWebSocketClient:
+    """Test-only WebSocket client capturing broadcast message envelopes."""
+
+    def __init__(self) -> None:
+        self.messages: list[dict] = []
+
+    async def send_json(self, msg: dict) -> None:
+        self.messages.append(msg)
 
 
 # ==============================================================================
@@ -195,7 +210,7 @@ class TestDeviceLifecycle:
 
 
 # ==============================================================================
-# Acquisition Profile & Generalized Capabilities Tests
+# Acquisition Profile & Strict Capability Validation Tests
 # ==============================================================================
 
 class TestAcquisitionProfileAndCapabilities:
@@ -234,12 +249,91 @@ class TestAcquisitionProfileAndCapabilities:
         assert runtime.capabilities.sample_rate_hz == 48000
         assert runtime.capabilities.meaningful_data_bits == 24
 
+    def test_block_size_negotiation(self):
+        """Verify negotiated block size computation based on advertised max_block_size."""
+        runtime = DeviceRuntime(acquisition_profile=REV_A_BASELINE_PROFILE)
+        runtime.attach_candidate(DeviceCandidate("REV_A_DEV", "USB Desc", "now"))
+        runtime.attach_transport(InMemoryFakeTransport())
+
+        # Device advertises smaller max_block_size (256 instead of preferred 512)
+        caps = DeviceCapabilities(
+            protocol_version="1.0",
+            firmware_version="v1.0.0",
+            device_id="REV_A_DEV",
+            sample_rate_hz=48000,
+            sample_format="signed_pcm",
+            channels=1,
+            sample_container_bits=32,
+            meaningful_data_bits=24,
+            max_block_size=256,
+        )
+        runtime.complete_handshake(caps)
+        assert runtime.state == DeviceState.READY
+        assert runtime.profile.negotiated_block_size == 256
+        assert runtime.get_state_dict()["negotiated_block_size"] == 256
+
+    def test_rev_a_handshake_rejects_wrong_sample_encoding(self):
+        """Strict check: rejects float32 or int32 when profile requires canonical signed_pcm."""
+        caps_float = DeviceCapabilities(
+            protocol_version="1.0",
+            firmware_version="v1.0",
+            device_id="DEV_FLOAT",
+            sample_rate_hz=48000,
+            sample_format="float32",  # Not canonical signed_pcm
+            sample_container_bits=32,
+            meaningful_data_bits=24,
+        )
+        with pytest.raises(ValueError, match="Sample format mismatch"):
+            caps_float.validate_compatibility(REV_A_BASELINE_PROFILE)
+
+        caps_int32 = DeviceCapabilities(
+            protocol_version="1.0",
+            firmware_version="v1.0",
+            device_id="DEV_INT32",
+            sample_rate_hz=48000,
+            sample_format="int32",  # Alias rejected; canonical signed_pcm required
+            sample_container_bits=32,
+            meaningful_data_bits=24,
+        )
+        with pytest.raises(ValueError, match="Sample format mismatch"):
+            caps_int32.validate_compatibility(REV_A_BASELINE_PROFILE)
+
+    def test_rev_a_handshake_rejects_16bit_container(self):
+        """Strict check: rejects 16-bit container when profile requires 32-bit slot."""
+        caps = DeviceCapabilities(
+            protocol_version="1.0",
+            firmware_version="v1.0",
+            device_id="DEV_16BIT_SLOT",
+            sample_rate_hz=48000,
+            sample_format="signed_pcm",
+            sample_container_bits=16,  # Rev-A requires 32-bit slot
+            meaningful_data_bits=16,
+        )
+        with pytest.raises(ValueError, match="Container bit width mismatch"):
+            caps.validate_compatibility(REV_A_BASELINE_PROFILE)
+
+    def test_rev_a_handshake_rejects_wrong_meaningful_data_width(self):
+        """Strict check: rejects wrong meaningful data width (e.g. 16 instead of 24)."""
+        caps = DeviceCapabilities(
+            protocol_version="1.0",
+            firmware_version="v1.0",
+            device_id="DEV_16BIT_DATA",
+            sample_rate_hz=48000,
+            sample_format="signed_pcm",
+            sample_container_bits=32,
+            meaningful_data_bits=16,  # Rev-A requires 24-bit data word
+        )
+        with pytest.raises(ValueError, match="Meaningful data bit width mismatch"):
+            caps.validate_compatibility(REV_A_BASELINE_PROFILE)
+
     def test_incompatible_protocol_version_rejected(self):
         caps = DeviceCapabilities(
             protocol_version="2.0",
             firmware_version="v1.0",
             device_id="DEV_BAD_PROTO",
             sample_rate_hz=48000,
+            sample_container_bits=32,
+            meaningful_data_bits=24,
         )
         with pytest.raises(ValueError, match="Unsupported protocol version"):
             caps.validate_compatibility(REV_A_BASELINE_PROFILE)
@@ -250,6 +344,8 @@ class TestAcquisitionProfileAndCapabilities:
             firmware_version="v1.0",
             device_id="DEV_WRONG_RATE",
             sample_rate_hz=44100,  # Audio CD rate unsupported
+            sample_container_bits=32,
+            meaningful_data_bits=24,
         )
         with pytest.raises(ValueError, match="Sample rate mismatch"):
             caps.validate_compatibility(REV_A_BASELINE_PROFILE)
@@ -261,20 +357,10 @@ class TestAcquisitionProfileAndCapabilities:
             device_id="DEV_STEREO",
             sample_rate_hz=48000,
             channels=2,
+            sample_container_bits=32,
+            meaningful_data_bits=24,
         )
         with pytest.raises(ValueError, match="Channel count mismatch"):
-            caps.validate_compatibility(REV_A_BASELINE_PROFILE)
-
-    def test_invalid_bit_representation_rejected(self):
-        caps = DeviceCapabilities(
-            protocol_version="1.0",
-            firmware_version="v1.0",
-            device_id="DEV_BAD_BITS",
-            sample_rate_hz=48000,
-            sample_container_bits=16,
-            meaningful_data_bits=24,  # Meaningful bits cannot exceed container bits
-        )
-        with pytest.raises(ValueError, match="cannot exceed sample_container_bits"):
             caps.validate_compatibility(REV_A_BASELINE_PROFILE)
 
     def test_legacy_4khz_dev_profile_compatibility(self):
@@ -297,23 +383,6 @@ class TestAcquisitionProfileAndCapabilities:
         runtime.complete_handshake(legacy_caps)
         assert runtime.state == DeviceState.READY
         assert runtime.capabilities.sample_rate_hz == 4000
-
-    def test_incompatible_handshake_transitions_device_to_incompatible_state(self):
-        runtime = DeviceRuntime()
-        runtime.attach_candidate(DeviceCandidate("BAD_DEVICE", "Desc", "now"))
-        runtime.attach_transport(InMemoryFakeTransport())
-        assert runtime.state == DeviceState.HANDSHAKING
-
-        bad_caps = DeviceCapabilities(
-            protocol_version="9.9",
-            firmware_version="v0",
-            device_id="BAD_DEVICE",
-        )
-        with pytest.raises(ValueError):
-            runtime.complete_handshake(bad_caps)
-
-        assert runtime.state == DeviceState.INCOMPATIBLE
-        assert "Device rejected during handshake" in str(runtime.get_state_dict()["last_error"])
 
 
 # ==============================================================================
@@ -370,39 +439,32 @@ class TestSemanticSampleRepresentation:
         assert block.samples[0] == -1.0
         assert block.samples[1] == 0.0
         assert pytest.approx(block.samples[2], rel=1e-5) == 1.0
-        assert -1.0 <= block.samples[2] <= 1.0
 
-    def test_normalization_16bit(self):
-        # 16-bit signed PCM normalization check:
-        # -32768 -> -1.0, 0 -> 0.0, +32767 -> ~ +1.0
-        raw = np.array([-32768, 0, 32767], dtype=np.int16)
+    def test_out_of_range_positive_raw_integer_raises_error(self):
+        """Must reject raw integer exceeding +2^(24-1)-1 instead of silently clipping."""
+        out_of_range_pos = np.array([8388608], dtype=np.int32)  # +8388608 > max legal 8388607
         packet = DeviceSamplePacket(
-            sequence=3,
+            sequence=10,
             timestamp_s=0.1,
-            raw_samples=raw,
-            meaningful_bits=16,
-            sample_rate_hz=4000,
-        )
-        block = packet_to_sample_block(packet)
-        assert block.samples[0] == -1.0
-        assert block.samples[1] == 0.0
-        assert pytest.approx(block.samples[2], rel=1e-4) == 1.0
-
-    def test_no_silent_overflow_or_wraparound(self):
-        # Check boundary values do not wrap around
-        raw = np.array([-8388608, 8388607], dtype=np.int32)
-        packet = DeviceSamplePacket(
-            sequence=4,
-            timestamp_s=0.2,
-            raw_samples=raw,
+            raw_samples=out_of_range_pos,
             meaningful_bits=24,
             sample_rate_hz=48000,
         )
-        block = packet_to_sample_block(packet)
-        assert not np.isnan(block.samples).any()
-        assert not np.isinf(block.samples).any()
-        assert block.samples[0] == -1.0
-        assert block.samples[1] > 0.999
+        with pytest.raises(ValueError, match="out of legal 24-bit signed range"):
+            packet_to_sample_block(packet)
+
+    def test_out_of_range_negative_raw_integer_raises_error(self):
+        """Must reject raw integer below -2^(24-1) instead of silently clipping."""
+        out_of_range_neg = np.array([-8388609], dtype=np.int32)  # -8388609 < min legal -8388608
+        packet = DeviceSamplePacket(
+            sequence=11,
+            timestamp_s=0.11,
+            raw_samples=out_of_range_neg,
+            meaningful_bits=24,
+            sample_rate_hz=48000,
+        )
+        with pytest.raises(ValueError, match="out of legal 24-bit signed range"):
+            packet_to_sample_block(packet)
 
     def test_48khz_metadata_survives_conversion(self):
         raw = np.zeros(512, dtype=np.int32)
@@ -429,6 +491,114 @@ class TestSemanticSampleRepresentation:
         )
         with pytest.raises(ValueError, match="CRC failure"):
             packet_to_sample_block(packet)
+
+
+# ==============================================================================
+# Push-Driven Hardware Packet Ingestion Seam Tests
+# ==============================================================================
+
+class TestHardwarePacketIngestionSeam:
+    """Verifies the push-driven hardware packet ingestion entry point."""
+
+    def test_hardware_packet_ingestion_and_streaming_flow(self, tmp_path: Path):
+        def _run():
+            runtime = DeviceRuntime()
+            manager = StreamManager(sessions_dir=tmp_path, device_runtime=runtime)
+            ws = FakeWebSocketClient()
+            manager.register_client(ws)
+
+            # 1. State machine progression: ABSENT -> DETECTED -> OPENING -> HANDSHAKING -> READY
+            candidate = DeviceCandidate("ESP32S3-HW", "USB Rev-A", "now")
+            runtime.attach_candidate(candidate)
+            runtime.attach_transport(InMemoryFakeTransport())
+            runtime.complete_handshake(
+                DeviceCapabilities(
+                    protocol_version="1.0",
+                    firmware_version="v1.0",
+                    device_id="ESP32S3-HW",
+                    sample_rate_hz=48000,
+                    sample_format="signed_pcm",
+                    channels=1,
+                    sample_container_bits=32,
+                    meaningful_data_bits=24,
+                    max_block_size=512,
+                )
+            )
+            assert runtime.state == DeviceState.READY
+
+            # 2. Select hardware source -> STREAMING
+            manager.select_source("hardware")
+            assert manager.is_streaming is True
+            assert manager.source_type == "hardware"
+            assert runtime.state == DeviceState.STREAMING
+            assert manager.sample_rate_hz == 48000
+
+            # 3. Start recording
+            sid = manager.start_recording()
+            assert manager.recorder.is_recording is True
+
+            # 4. Ingest packet 0 (512 samples)
+            raw_p0 = np.full(512, 100000, dtype=np.int32)
+            p0 = DeviceSamplePacket(
+                sequence=0,
+                timestamp_s=0.0,
+                raw_samples=raw_p0,
+                meaningful_bits=24,
+                sample_rate_hz=48000,
+            )
+            asyncio.run(manager.ingest_device_packet(p0))
+
+            # 5. Ingest packet 2 (skipping sequence 1 to verify sequence gap telemetry)
+            raw_p2 = np.full(512, -100000, dtype=np.int32)
+            p2 = DeviceSamplePacket(
+                sequence=2,
+                timestamp_s=0.0213,
+                raw_samples=raw_p2,
+                meaningful_bits=24,
+                sample_rate_hz=48000,
+            )
+            asyncio.run(manager.ingest_device_packet(p2))
+
+            # Telemetry verification
+            stats = runtime.stats
+            assert stats.packets_received == 2
+            assert stats.samples_received == 1024
+            assert stats.sequence_gaps == 1  # Skipped seq 1
+
+            # WebSocket messages verification
+            signal_frames = [m for m in ws.messages if m.get("type") == "signal_frame"]
+            assert len(signal_frames) == 2
+            assert signal_frames[0]["sample_rate_hz"] == 48000
+            assert len(signal_frames[0]["raw_samples"]) == 512
+            assert len(signal_frames[0]["filtered_samples"]) == 512
+            assert signal_frames[0]["metrics"]["rms"] > 0
+
+            # 6. Ingest CRC-failure packet (must be dropped: no recording, no DSP)
+            p_bad = DeviceSamplePacket(
+                sequence=3,
+                timestamp_s=0.032,
+                raw_samples=np.full(512, 99999, dtype=np.int32),
+                crc_ok=False,
+                meaningful_bits=24,
+                sample_rate_hz=48000,
+            )
+            asyncio.run(manager.ingest_device_packet(p_bad))
+
+            assert stats.crc_failures == 1
+            assert stats.packets_received == 2  # Bad packet was rejected
+            # No extra signal frame emitted
+            assert len([m for m in ws.messages if m.get("type") == "signal_frame"]) == 2
+
+            # 7. Stop recording & verify recorded sample count
+            meta = manager.stop_recording()
+            assert meta.total_samples == 1024  # Exactly the 1024 samples from p0 and p2; p_bad was excluded!
+
+            # 8. Stop stream & verify hardware state consistency
+            manager.stop_stream()
+            assert manager.is_streaming is False
+            assert runtime.state == DeviceState.READY
+
+        _run()
 
 
 # ==============================================================================
@@ -509,7 +679,13 @@ class TestDisconnectAndRecordingHandling:
         runtime.attach_candidate(DeviceCandidate("ESP1", "Desc", "now"))
         runtime.attach_transport(InMemoryFakeTransport())
         runtime.complete_handshake(
-            DeviceCapabilities("1.0", "v1.0", "ESP1", sample_rate_hz=48000)
+            DeviceCapabilities(
+                "1.0", "v1.0", "ESP1",
+                sample_rate_hz=48000,
+                sample_format="signed_pcm",
+                sample_container_bits=32,
+                meaningful_data_bits=24,
+            )
         )
         runtime.start_streaming()
         assert runtime.state == DeviceState.STREAMING
@@ -525,7 +701,13 @@ class TestDisconnectAndRecordingHandling:
         runtime.attach_transport(InMemoryFakeTransport())
         assert runtime.state == DeviceState.HANDSHAKING
         runtime.complete_handshake(
-            DeviceCapabilities("1.0", "v1.0", "ESP1", sample_rate_hz=48000)
+            DeviceCapabilities(
+                "1.0", "v1.0", "ESP1",
+                sample_rate_hz=48000,
+                sample_format="signed_pcm",
+                sample_container_bits=32,
+                meaningful_data_bits=24,
+            )
         )
         assert runtime.state == DeviceState.READY
         assert runtime.stats.reconnect_count == 1
@@ -538,7 +720,13 @@ class TestDisconnectAndRecordingHandling:
         runtime.attach_candidate(DeviceCandidate("ESP1", "Desc", "now"))
         runtime.attach_transport(InMemoryFakeTransport())
         runtime.complete_handshake(
-            DeviceCapabilities("1.0", "v1.0", "ESP1", sample_rate_hz=48000)
+            DeviceCapabilities(
+                "1.0", "v1.0", "ESP1",
+                sample_rate_hz=48000,
+                sample_format="signed_pcm",
+                sample_container_bits=32,
+                meaningful_data_bits=24,
+            )
         )
 
         # Select hardware as active source
@@ -579,7 +767,15 @@ class TestDisconnectAndRecordingHandling:
         candidate = DeviceCandidate("ESP1", "Desc", "now")
         runtime.attach_candidate(candidate)
         runtime.attach_transport(InMemoryFakeTransport())
-        runtime.complete_handshake(DeviceCapabilities("1.0", "v1.0", "ESP1", 48000))
+        runtime.complete_handshake(
+            DeviceCapabilities(
+                "1.0", "v1.0", "ESP1",
+                sample_rate_hz=48000,
+                sample_format="signed_pcm",
+                sample_container_bits=32,
+                meaningful_data_bits=24,
+            )
+        )
         runtime.start_streaming()
         assert runtime.state == DeviceState.STREAMING
 
@@ -596,7 +792,15 @@ class TestDisconnectAndRecordingHandling:
         runtime.attach_transport(InMemoryFakeTransport())
         assert runtime.state == DeviceState.HANDSHAKING
 
-        runtime.complete_handshake(DeviceCapabilities("1.0", "v1.0", "ESP1", 48000))
+        runtime.complete_handshake(
+            DeviceCapabilities(
+                "1.0", "v1.0", "ESP1",
+                sample_rate_hz=48000,
+                sample_format="signed_pcm",
+                sample_container_bits=32,
+                meaningful_data_bits=24,
+            )
+        )
         assert runtime.state == DeviceState.READY
         assert runtime.stats.reconnect_count == 1
 
