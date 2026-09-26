@@ -42,6 +42,7 @@ def print_validation_report(res: ValidationResult) -> None:
     print("AMPLITUDE & GAIN:")
     print(f"  Gain Ratio (RMS)         : {res.gain_ratio_rms:.4f}")
     print(f"  Gain Ratio (Peak)        : {res.gain_ratio_peak:.4f}")
+    print(f"  Least-Squares Gain       : {res.least_squares_gain:.4f}")
     print(f"  RMSE (Raw Amplitude)     : {res.rmse:.6f}")
     print(f"  Normalized RMSE (NRMSE)  : {res.normalized_rmse:.5f}")
     print(f"  Signal-to-Error (SER)    : {res.signal_to_error_ratio_db:.2f} dB")

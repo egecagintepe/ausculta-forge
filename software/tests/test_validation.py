@@ -121,6 +121,40 @@ class TestSignalValidation:
         # RMSE reflects amplitude mismatch
         assert result.rmse > 0.0
 
+
+    def test_least_squares_gain_recovery_under_additive_noise(self):
+        """Demonstrate that least-squares gain accurately estimates true scaling under additive noise,
+        whereas RMS gain ratio is positively biased by noise energy.
+        """
+        fs = 2000
+        ref = _generate_synthetic_pcg(duration_s=4.0, fs=fs)
+        known_gain = 0.70
+        noise_std = 0.05  # moderate additive noise
+
+        # Scaled signal + additive noise
+        cap = simulate_distorted_capture(
+            ref,
+            fs=fs,
+            delay_ms=0.0,
+            gain=known_gain,
+            noise_std=noise_std,
+            seed=42,
+        )
+
+        result = validate_signals(ref, cap, reference_fs=fs, captured_fs=fs)
+
+        # Least squares gain is an unbiased estimator: closely tracks known_gain
+        assert pytest.approx(result.least_squares_gain, abs=0.03) == known_gain
+        # RMS gain ratio is positively biased by the noise energy (RMS_cap = sqrt(g^2 * RMS_ref^2 + noise^2))
+        assert result.gain_ratio_rms > known_gain
+        assert result.gain_ratio_rms > result.least_squares_gain
+
+    def test_least_squares_gain_zero_energy_handles_safely(self):
+        from pcg_core.validation import compute_least_squares_gain
+        zeros = np.zeros(100, dtype=np.float32)
+        sig = np.ones(100, dtype=np.float32)
+        assert compute_least_squares_gain(zeros, sig) == 0.0
+
     def test_additive_noise_lowers_correlation_and_increases_error(self):
         fs = 2000
         ref = _generate_synthetic_pcg(duration_s=2.0, fs=fs)

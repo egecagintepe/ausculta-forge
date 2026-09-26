@@ -38,6 +38,7 @@ class ValidationResult:
     normalized_cross_correlation: float
     gain_ratio_rms: float
     gain_ratio_peak: float
+    least_squares_gain: float
     rmse: float
     normalized_rmse: float
     signal_to_error_ratio_db: float
@@ -126,6 +127,27 @@ def simulate_distorted_capture(
         out = out[shift:] if shift < len(out) else np.zeros(1, dtype=np.float32)
 
     return out.astype(np.float32)
+
+
+def compute_least_squares_gain(reference: np.ndarray, captured: np.ndarray) -> float:
+    """Compute optimal amplitude scaling factor g that minimizes ||captured - g * reference||^2.
+
+    Formula:
+        g = (reference · capture) / (reference · reference)
+
+    Engineering Notes:
+    - RMS gain ratio is influenced by additive noise (noise energy adds to captured RMS).
+    - Least-squares gain is a different amplitude-scale estimator, providing an unbiased
+      estimate under zero-mean uncorrelated additive noise.
+    - Neither RMS gain ratio nor least-squares gain should automatically be interpreted
+      as clinical quality.
+    """
+    ref = np.asarray(reference, dtype=np.float64)
+    cap = np.asarray(captured, dtype=np.float64)
+    ref_energy = float(np.dot(ref, ref))
+    if ref_energy <= 1e-15:
+        return 0.0
+    return float(np.dot(ref, cap) / ref_energy)
 
 
 def estimate_delay_and_align(
@@ -219,6 +241,8 @@ def validate_signals(
     cap_pk = float(peak_abs(aligned_cap))
     gain_ratio_peak = float(cap_pk / (ref_pk + 1e-12))
 
+    ls_gain = compute_least_squares_gain(aligned_ref, aligned_cap)
+
     # 4. Normalized Cross-Correlation (Shape Similarity)
     ref_centered = aligned_ref - float(np.mean(aligned_ref))
     cap_centered = aligned_cap - float(np.mean(aligned_cap))
@@ -288,6 +312,7 @@ def validate_signals(
         normalized_cross_correlation=round(ncc, 5),
         gain_ratio_rms=round(gain_ratio_rms, 4),
         gain_ratio_peak=round(gain_ratio_peak, 4),
+        least_squares_gain=round(ls_gain, 4),
         rmse=round(rmse_val, 6),
         normalized_rmse=round(nrmse_val, 5),
         signal_to_error_ratio_db=round(ser_db, 2),

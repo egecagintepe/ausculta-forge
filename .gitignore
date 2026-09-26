@@ -69,3 +69,18 @@ experiments/logs/*
 !experiments/runs/.gitkeep
 !experiments/logs/.gitkeep
 *.log
+
+# Frontend dependencies, builds, and caches
+software/frontend/node_modules/
+software/frontend/dist/
+software/frontend/.vite/
+software/frontend/.env.local
+software/frontend/.env.*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Session recording outputs
+experiments/sessions/*
+!experiments/sessions/.gitkeep
