@@ -11,7 +11,7 @@ import { DiagnosticsDrawer } from './components/DiagnosticsDrawer';
 import { ConfirmDiscardDialog, SaveAsDialog, ToastNotification, ToastInfo } from './components/Dialogs';
 import { audioEngine } from './audio/audioEngine';
 import { STARTER_SAMPLES, generateSyntheticHeartAudio } from './audio/samplesData';
-import { bridgeClient, SignalFrameData, StreamStateData, RecordingStateData } from './api/bridgeClient';
+import { bridgeClient, SignalFrameData, DisplayFrameData, StreamStateData, RecordingStateData } from './api/bridgeClient';
 import {
   NavigationDestination,
   AudioSourceType,
@@ -261,47 +261,105 @@ export default function App() {
       }
     });
 
-    const capacity = 15 * 4000;
-    const rawBuf = new Float32Array(capacity);
-    const filtBuf = new Float32Array(capacity);
+    // Bounded rolling display buffers (max 15s of decimated display points ~ 48,000 points)
+    const maxDisplayPoints = 15 * 3200;
+    const rawDisplayBuf = new Float32Array(maxDisplayPoints);
+    const filtDisplayBuf = new Float32Array(maxDisplayPoints);
     let totalWritten = 0;
+    let animFrameId: number | null = null;
+    let pendingUpdate = false;
+    let latestMetrics: { rms: number; peak: number; crest_factor: number } | null = null;
+    let latestQuality: { total_blocks: number; dropped_blocks: number; repeated_sequences: number; sequence_discontinuities: number; is_healthy: boolean } | null = null;
+    let latestTimestamp = 0;
+    let currentFs = 48000;
 
-    const unsubFrame = bridgeClient.onSignalFrame((frame: SignalFrameData) => {
-      setLiveMetrics(frame.metrics);
-      setStreamQuality(frame.stream_quality);
+    const commitDisplayUpdate = () => {
+      animFrameId = null;
+      if (!pendingUpdate) return;
+      pendingUpdate = false;
 
-      const n = frame.raw_samples.length;
-      if (totalWritten + n <= capacity) {
-        rawBuf.set(frame.raw_samples, totalWritten);
-        filtBuf.set(frame.filtered_samples, totalWritten);
+      if (latestMetrics) setLiveMetrics(latestMetrics);
+      if (latestQuality) setStreamQuality(latestQuality);
+
+      setRawData(new Float32Array(rawDisplayBuf.subarray(0, totalWritten)));
+      setFilteredData(new Float32Array(filtDisplayBuf.subarray(0, totalWritten)));
+      setSampleRate(currentFs);
+      setCurrentTime(latestTimestamp);
+      setDuration(Math.max(visibleWindowSec, latestTimestamp));
+      setIsPlaying(true);
+    };
+
+    const scheduleUpdate = () => {
+      pendingUpdate = true;
+      if (animFrameId === null) {
+        animFrameId = requestAnimationFrame(commitDisplayUpdate);
+      }
+    };
+
+    // 1. Primary decoupled display-frame listener (runs at controlled UI cadence ~25 Hz)
+    const unsubDisplay = bridgeClient.onDisplayFrame((frame: DisplayFrameData) => {
+      latestMetrics = frame.metrics;
+      latestQuality = frame.stream_quality;
+      latestTimestamp = frame.window_end_ts;
+      currentFs = frame.sample_rate_hz;
+
+      const raw = frame.raw_points;
+      const filt = frame.filtered_points;
+      const n = raw.length;
+
+      if (totalWritten + n <= maxDisplayPoints) {
+        rawDisplayBuf.set(raw, totalWritten);
+        filtDisplayBuf.set(filt, totalWritten);
         totalWritten += n;
       } else {
-        rawBuf.copyWithin(0, n);
-        filtBuf.copyWithin(0, n);
-        rawBuf.set(frame.raw_samples, capacity - n);
-        filtBuf.set(frame.filtered_samples, capacity - n);
-        totalWritten = capacity;
+        rawDisplayBuf.copyWithin(0, n);
+        filtDisplayBuf.copyWithin(0, n);
+        rawDisplayBuf.set(raw, maxDisplayPoints - n);
+        filtDisplayBuf.set(filt, maxDisplayPoints - n);
+        totalWritten = maxDisplayPoints;
       }
 
-      setRawData(new Float32Array(rawBuf.subarray(0, totalWritten)));
-      setFilteredData(new Float32Array(filtBuf.subarray(0, totalWritten)));
-      const dur = totalWritten / frame.sample_rate_hz;
-      setDuration(dur);
-      setCurrentTime(dur);
-      setIsPlaying(true);
+      scheduleUpdate();
+    });
+
+    // 2. Legacy fallback listener (if legacy signal_frame emitted)
+    const unsubFrame = bridgeClient.onSignalFrame((frame: SignalFrameData) => {
+      latestMetrics = frame.metrics;
+      latestQuality = frame.stream_quality;
+      latestTimestamp = frame.timestamp_s;
+      currentFs = frame.sample_rate_hz;
+
+      const n = frame.raw_samples.length;
+      if (totalWritten + n <= maxDisplayPoints) {
+        rawDisplayBuf.set(frame.raw_samples, totalWritten);
+        filtDisplayBuf.set(frame.filtered_samples, totalWritten);
+        totalWritten += n;
+      } else {
+        rawDisplayBuf.copyWithin(0, n);
+        filtDisplayBuf.copyWithin(0, n);
+        rawDisplayBuf.set(frame.raw_samples, maxDisplayPoints - n);
+        filtDisplayBuf.set(frame.filtered_samples, maxDisplayPoints - n);
+        totalWritten = maxDisplayPoints;
+      }
+
+      scheduleUpdate();
     });
 
     return () => {
+      if (animFrameId !== null) {
+        cancelAnimationFrame(animFrameId);
+      }
       unsubConn();
       unsubState();
       unsubRec();
       unsubDevState();
       unsubDevEvt();
       unsubDevStats();
+      unsubDisplay();
       unsubFrame();
       bridgeClient.disconnect();
     };
-  }, [addLog, addToast]);
+  }, [addLog, addToast, visibleWindowSec]);
 
   // Subscribe to audio engine time updates
   useEffect(() => {

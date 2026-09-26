@@ -135,17 +135,17 @@ def test_websocket_handshake_and_frames(test_app_and_dir):
             # Select synthetic source via WebSocket command
             ws.send_json({"action": "select_source", "source_type": "synthetic_dev"})
 
-            # Receive stream_state or signal_frame
+            # Receive stream_state or display_frame
             msg = ws.receive_json()
-            while msg.get("type") != "signal_frame":
+            while msg.get("type") != "display_frame":
                 if msg.get("type") == "stream_state":
                     assert msg["source_type"] == "synthetic_dev"
                 msg = ws.receive_json()
 
-            assert msg["type"] == "signal_frame"
-            assert "raw_samples" in msg
-            assert "filtered_samples" in msg
-            assert len(msg["raw_samples"]) > 0
+            assert msg["type"] == "display_frame"
+            assert "raw_points" in msg
+            assert "filtered_points" in msg
+            assert len(msg["raw_points"]) > 0
             assert "metrics" in msg
             assert "rms" in msg["metrics"]
             assert "stream_quality" in msg
@@ -153,7 +153,7 @@ def test_websocket_handshake_and_frames(test_app_and_dir):
             # Test command: set_filter
             ws.send_json({"action": "set_filter", "preset": "diaphragm"})
             state_msg = ws.receive_json()
-            while state_msg.get("type") == "signal_frame":
+            while state_msg.get("type") == "display_frame":
                 state_msg = ws.receive_json()
             assert state_msg["type"] == "stream_state"
             assert state_msg["filter_preset"] == "diaphragm"
@@ -204,8 +204,8 @@ def test_streaming_from_realtime_wav_source(test_app_and_dir, tmp_path: Path):
             frame = ws.receive_json()
             while frame.get("type") in ("device_state", "stream_state"):
                 frame = ws.receive_json()
-            assert frame["type"] == "signal_frame"
-            assert len(frame["raw_samples"]) > 0
+            assert frame["type"] == "display_frame"
+            assert len(frame["raw_points"]) > 0
             assert frame["sample_rate_hz"] == fs
 
 

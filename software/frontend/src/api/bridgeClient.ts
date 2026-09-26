@@ -28,6 +28,39 @@ export interface SignalFrameData {
   recording_active: boolean;
 }
 
+export interface DisplayFrameData {
+  type: 'display_frame';
+  version: string;
+  source_seq_start: number;
+  source_seq_end: number;
+  window_start_ts: number;
+  window_end_ts: number;
+  sample_rate_hz: number;
+  source_sample_count: number;
+  raw_points: number[];
+  filtered_points: number[];
+  metrics: {
+    rms: number;
+    peak: number;
+    crest_factor: number;
+  };
+  stream_quality: {
+    total_blocks: number;
+    dropped_blocks: number;
+    repeated_sequences: number;
+    sequence_discontinuities: number;
+    is_healthy: boolean;
+  };
+  recording_active: boolean;
+  dropped_display_frames: number;
+  spectral_frame?: {
+    frequencies_hz: number[];
+    power_db: number[];
+    peak_frequency_hz: number;
+    dominant_band: string;
+  };
+}
+
 export interface StreamStateData {
   is_streaming: boolean;
   is_paused: boolean;
@@ -74,6 +107,7 @@ export interface SessionItem {
 }
 
 type FrameCallback = (frame: SignalFrameData) => void;
+type DisplayFrameCallback = (frame: DisplayFrameData) => void;
 type StreamStateCallback = (state: StreamStateData) => void;
 type RecordingStateCallback = (state: RecordingStateData) => void;
 type DeviceStateCallback = (state: DeviceRuntimeState) => void;
@@ -89,6 +123,7 @@ class BridgeClient {
   private reconnectTimer: number | null = null;
 
   private frameListeners: Set<FrameCallback> = new Set();
+  private displayFrameListeners: Set<DisplayFrameCallback> = new Set();
   private stateListeners: Set<StreamStateCallback> = new Set();
   private recordingListeners: Set<RecordingStateCallback> = new Set();
   private deviceStateListeners: Set<DeviceStateCallback> = new Set();
@@ -166,7 +201,10 @@ class BridgeClient {
 
   private handleMessage(msg: Record<string, unknown>) {
     const type = msg.type;
-    if (type === 'signal_frame') {
+    if (type === 'display_frame') {
+      const frame = msg as unknown as DisplayFrameData;
+      this.displayFrameListeners.forEach(cb => cb(frame));
+    } else if (type === 'signal_frame') {
       const frame = msg as unknown as SignalFrameData;
       this.frameListeners.forEach(cb => cb(frame));
     } else if (type === 'stream_state') {
@@ -202,6 +240,11 @@ class BridgeClient {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(cmd));
     }
+  }
+
+  public onDisplayFrame(cb: DisplayFrameCallback) {
+    this.displayFrameListeners.add(cb);
+    return () => this.displayFrameListeners.delete(cb);
   }
 
   public onSignalFrame(cb: FrameCallback) {

@@ -47,6 +47,7 @@ from pcg_app.device_runtime import (
     DEV_LEGACY_PROFILE,
 )
 from pcg_app.state import StreamManager
+from pcg_app.display_pipeline import DisplayPipelineConfig
 
 
 # ==============================================================================
@@ -503,7 +504,11 @@ class TestHardwarePacketIngestionSeam:
     def test_hardware_packet_ingestion_and_streaming_flow(self, tmp_path: Path):
         def _run():
             runtime = DeviceRuntime()
-            manager = StreamManager(sessions_dir=tmp_path, device_runtime=runtime)
+            manager = StreamManager(
+                sessions_dir=tmp_path,
+                device_runtime=runtime,
+                display_config=DisplayPipelineConfig(emit_legacy_signal_frames=True),
+            )
             ws = FakeWebSocketClient()
             manager.register_client(ws)
 

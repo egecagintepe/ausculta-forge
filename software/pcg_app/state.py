@@ -39,12 +39,82 @@ from .protocol import (
     make_hello_message,
     make_stream_state_message,
     make_signal_frame_message,
+    make_display_frame_message,
     make_recording_state_message,
     make_device_state_message,
     make_device_event_message,
     make_device_stats_message,
     make_error_message,
 )
+from .display_pipeline import (
+    DisplayPipelineConfig,
+    DisplayAggregator,
+    DisplayFrame,
+)
+
+
+class ClientSession:
+    """Encapsulates a connected WebSocket client with bounded display frame queuing and an isolated sender."""
+
+    def __init__(self, ws: Any, queue_size: int = 2) -> None:
+        self.ws = ws
+        self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=queue_size)
+        self.dropped_display_frames: int = 0
+        self.total_frames_sent: int = 0
+        self.is_alive: bool = True
+        self._sender_task: Optional[asyncio.Task] = None
+
+    def start(self) -> None:
+        if self.is_alive and (self._sender_task is None or self._sender_task.done()):
+            try:
+                loop = asyncio.get_running_loop()
+                self._sender_task = loop.create_task(self._sender_loop())
+            except RuntimeError:
+                pass
+
+    def stop(self) -> None:
+        self.is_alive = False
+        if self._sender_task and not self._sender_task.done():
+            self._sender_task.cancel()
+
+    def push_display_frame(self, frame_dict: dict[str, Any]) -> bool:
+        """Bounded drop-oldest enqueue. Never blocks ingestion or recording."""
+        if not self.is_alive:
+            return False
+
+        self.start()
+        dropped = False
+
+        if self.queue.full():
+            try:
+                _ = self.queue.get_nowait()
+                self.dropped_display_frames += 1
+                dropped = True
+            except asyncio.QueueEmpty:
+                pass
+
+        try:
+            self.queue.put_nowait(frame_dict)
+        except asyncio.QueueFull:
+            self.dropped_display_frames += 1
+            dropped = True
+
+        return dropped
+
+    async def _sender_loop(self) -> None:
+        try:
+            while self.is_alive:
+                msg = await self.queue.get()
+                try:
+                    await self.ws.send_json(msg)
+                    self.total_frames_sent += 1
+                except Exception:
+                    self.is_alive = False
+                    break
+                finally:
+                    self.queue.task_done()
+        except asyncio.CancelledError:
+            pass
 
 
 class StreamManager:
@@ -54,6 +124,8 @@ class StreamManager:
         self,
         sessions_dir: str | Path = "experiments/sessions",
         device_runtime: Optional[DeviceRuntime] = None,
+        display_config: Optional[DisplayPipelineConfig] = None,
+        enable_legacy_signal_frames: Optional[bool] = None,
     ) -> None:
         self.sessions_dir = Path(sessions_dir)
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
@@ -61,13 +133,22 @@ class StreamManager:
         # Device runtime foundation
         self.device_runtime: DeviceRuntime = device_runtime or DeviceRuntime()
 
+        # Display pipeline configuration and aggregator (single source of truth)
+        self.display_config = display_config or DisplayPipelineConfig()
+        if enable_legacy_signal_frames is not None:
+            # Opt-in override: map directly into single authoritative display_config
+            self.display_config.emit_legacy_signal_frames = enable_legacy_signal_frames
+
+        self.display_aggregator = DisplayAggregator(self.display_config)
+        self._clients: dict[Any, ClientSession] = {}
+
         # Filter configuration
         self.filter_preset: str = "recommended"
         low, high = FILTER_PRESETS[self.filter_preset]
         self.filter_low_hz: float = low
         self.filter_high_hz: float = high
 
-        # Ingestion pipeline
+        # Ingestion pipeline — decoupled spectral computation (handled by display pipeline)
         self.sample_rate_hz: int = 4000
         self.block_size: int = 128
         self.pipeline = LiveStreamingPipeline(
@@ -75,6 +156,7 @@ class StreamManager:
             filter_low_hz=self.filter_low_hz,
             filter_high_hz=self.filter_high_hz,
             filter_order=4,
+            enable_spectral_frame=False,
         )
 
         # Source management — Core Rule: starts with NO active source and NO streaming
@@ -94,6 +176,11 @@ class StreamManager:
         self.recorder = SessionRecorder(output_dir=self.sessions_dir, wav_format="float32")
         self._recording_started_wall: float = 0.0
 
+    @property
+    def enable_legacy_signal_frames(self) -> bool:
+        """Compatibility property; authoritative source is display_config.emit_legacy_signal_frames."""
+        return self.display_config.emit_legacy_signal_frames
+
     def get_capabilities(self) -> dict[str, Any]:
         return {
             "sample_rate_hz": self.sample_rate_hz,
@@ -105,6 +192,13 @@ class StreamManager:
                 "transport": "native_usb_pending",
                 "rev_a_proposal": "cdc_acm_under_review",
                 "active_profile": self.device_runtime.profile.to_dict(),
+            },
+            "display_pipeline": {
+                "target_display_hz": self.display_config.target_display_hz,
+                "points_per_frame": self.display_config.points_per_frame,
+                "spectral_update_hz": self.display_config.spectral_update_hz,
+                "max_rolling_window_s": self.display_config.max_rolling_window_s,
+                "emit_legacy_signal_frames": self.display_config.emit_legacy_signal_frames,
             },
         }
 
@@ -123,28 +217,52 @@ class StreamManager:
             "device_state": self.device_runtime.state.value,
             "device_info": self.device_runtime.get_state_dict(),
             "connected_clients": len(self._active_connections),
+            "display_telemetry": {
+                "frames_produced": self.display_aggregator.total_display_frames_produced,
+                "frames_dropped": self.display_aggregator.total_display_frames_dropped,
+                "target_display_hz": self.display_config.target_display_hz,
+            },
         }
 
     def register_client(self, websocket: Any) -> None:
         self._active_connections.add(websocket)
+        session = ClientSession(websocket, queue_size=self.display_config.client_queue_size)
+        session.start()
+        self._clients[websocket] = session
 
     def unregister_client(self, websocket: Any) -> None:
         self._active_connections.discard(websocket)
+        session = self._clients.pop(websocket, None)
+        if session:
+            session.stop()
+
+    def publish_display_frame(self, frame: DisplayFrame) -> None:
+        """Publish display frame to all connected clients with backpressure isolation."""
+        frame_dict = frame.to_dict()
+        dead = []
+        for ws, session in list(self._clients.items()):
+            if not session.is_alive:
+                dead.append(ws)
+                continue
+            if session.push_display_frame(frame_dict):
+                self.display_aggregator.total_display_frames_dropped += 1
+        for ws in dead:
+            self.unregister_client(ws)
 
     async def broadcast(self, message: dict[str, Any]) -> None:
-        """Broadcast a message to all connected clients."""
+        """Broadcast control/state messages to all connected clients."""
         if not self._active_connections:
             return
 
         dead_clients = set()
-        for ws in self._active_connections:
+        for ws in list(self._active_connections):
             try:
                 await ws.send_json(message)
             except Exception:
                 dead_clients.add(ws)
 
         for dead in dead_clients:
-            self._active_connections.discard(dead)
+            self.unregister_client(dead)
 
     def _create_source_generator(self):
         """Construct the generator for the active source."""
@@ -199,6 +317,7 @@ class StreamManager:
             filter_low_hz=self.filter_low_hz,
             filter_high_hz=self.filter_high_hz,
             filter_order=4,
+            enable_spectral_frame=False,
         )
         return self.get_state_dict()
 
@@ -215,6 +334,8 @@ class StreamManager:
         # If switching away from hardware, stop device streaming cleanly
         if self.source_type == "hardware" and source_type != "hardware":
             self.device_runtime.stop_streaming()
+
+        self.display_aggregator.reset()
 
         if source_type == "none":
             self.source_type = "none"
@@ -334,6 +455,7 @@ class StreamManager:
             self.active_source_name = "None"
             self._source_generator = None
 
+        self.display_aggregator.reset()
         self.device_runtime.handle_disconnect(error_msg)
 
     def start_stream(self) -> None:
@@ -350,6 +472,7 @@ class StreamManager:
 
     def stop_stream(self) -> None:
         self.is_streaming = False
+        self.display_aggregator.reset()
         if self.source_type == "hardware":
             self.device_runtime.stop_streaming()
 
@@ -405,21 +528,21 @@ class StreamManager:
         await self._dispatch_sample_block(block)
 
     async def _dispatch_sample_block(self, block: SampleBlock) -> None:
-        """Shared pipeline processing, session recording, and WebSocket broadcast.
+        """Shared pipeline processing, session recording, and decoupled display publishing.
 
         Invoked by both pull-driven offline sources and push-driven hardware packets.
         """
-        # Process through DSP pipeline
+        # 1. Process through full-rate DSP pipeline
         frame = self.pipeline.process_block(block)
 
-        # Record if session active
+        # 2. Record if session active (FULL-RATE: every valid sample recorded immediately)
         if self.recorder.is_recording:
             try:
                 self.recorder.record_block(block)
             except Exception as e:
                 await self.broadcast(make_error_message(f"Recording error: {e}", "RECORDING_ERROR"))
 
-        # Broadcast signal frame to clients
+        # 3. Stream quality report
         quality_rep = self.pipeline.quality_monitor.report
         quality_summary = {
             "total_blocks": quality_rep.total_blocks,
@@ -429,23 +552,37 @@ class StreamManager:
             "is_healthy": quality_rep.is_healthy,
         }
 
-        raw_list = [round(float(v), 5) for v in block.samples]
-        filt_list = [round(float(v), 5) for v in frame.filtered_block.samples]
-
-        msg = make_signal_frame_message(
-            sequence=block.sequence,
-            timestamp_s=block.timestamp_s,
-            sample_rate_hz=block.sample_rate_hz,
-            raw_samples=raw_list,
-            filtered_samples=filt_list,
-            rms_val=frame.metrics.rms,
-            peak_val=frame.metrics.peak_abs,
-            crest_factor_val=frame.metrics.crest_factor,
+        # 4. Decoupled display frame aggregation
+        display_frame = self.display_aggregator.add_block(
+            raw_block=block,
+            filtered_block=frame.filtered_block,
             quality_summary=quality_summary,
             recording_active=self.recorder.is_recording,
         )
 
-        await self.broadcast(msg)
+        if display_frame is not None:
+            self.publish_display_frame(display_frame)
+
+        # 5. Legacy signal_frame broadcast if explicitly opted-in (compatibility/dev only)
+        if self.display_config.emit_legacy_signal_frames:
+            raw_list = [round(float(v), 5) for v in block.samples]
+            filt_list = [round(float(v), 5) for v in frame.filtered_block.samples]
+            msg = make_signal_frame_message(
+                sequence=block.sequence,
+                timestamp_s=block.timestamp_s,
+                sample_rate_hz=block.sample_rate_hz,
+                raw_samples=raw_list,
+                filtered_samples=filt_list,
+                rms_val=frame.metrics.rms,
+                peak_val=frame.metrics.peak_abs,
+                crest_factor_val=frame.metrics.crest_factor,
+                quality_summary=quality_summary,
+                recording_active=self.recorder.is_recording,
+            )
+            await self.broadcast(msg)
+
+        # 6. Yield briefly so client sender background tasks can dispatch
+        await asyncio.sleep(0)
 
     async def _stream_loop(self) -> None:
         """Continuous background loop consuming blocks, filtering, and broadcasting."""
