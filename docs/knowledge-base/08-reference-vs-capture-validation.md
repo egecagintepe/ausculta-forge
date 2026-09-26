@@ -68,10 +68,21 @@ Akustik yayılım, ADC arabelleğe alma ve USB/seri iletişim nedeniyle yakalana
   $$\text{delay\_ms} = \frac{\text{delay\_samples}}{f_s} \times 1000$$
 - Sinyaller bulunan gecikme kadar kaydırılarak kesişen örtüşme bölgesine (`overlap`) hizalanır (Signal Alignment).
 
-### 3. Kazanç Oranları (Gain Ratios)
-Donanım yükselteci (preamp/PGA) veya akustik zayıflama genliği değiştirir. Modül hem RMS hem Tepe (Peak) kazanç oranlarını hesaplar:
-$$\text{Gain}_{\text{RMS}} = \frac{\text{RMS}(y_{\text{aligned}})}{\text{RMS}(x_{\text{aligned}})}, \quad \text{Gain}_{\text{Peak}} = \frac{\max |y_{\text{aligned}}|}{\max |x_{\text{aligned}}|}$$
-Böylece gerçek genlik kaybı veya yükseltmesi yapay olarak yok edilmeden ölçülür.
+### 3. Kazanç Oranları ve En Küçük Kareler Kazancı (Gain Ratios & Least-Squares Gain)
+Donanım yükselteci (preamp/PGA), fantom kuplajı veya akustik zayıflama genlik ölçeğini değiştirir. Modül üç farklı genlik oranı hesaplar:
+
+1. **RMS Kazanç Oranı:**
+   $$\text{Gain}_{\text{RMS}} = \frac{\text{RMS}(y_{\text{aligned}})}{\text{RMS}(x_{\text{aligned}})}$$
+2. **Tepe (Peak) Kazanç Oranı:**
+   $$\text{Gain}_{\text{Peak}} = \frac{\max |y_{\text{aligned}}|}{\max |x_{\text{aligned}}|}$$
+3. **En Küçük Kareler Kazancı (Least-Squares Gain, $g$):**
+   Zaman hizalaması sonrasında $\|y_{\text{aligned}} - g \cdot x_{\text{aligned}}\|^2$ hata enerjisini minimize eden optimal doğrusal ölçekleme faktörü:
+   $$g = \frac{x_{\text{aligned}} \cdot y_{\text{aligned}}}{x_{\text{aligned}} \cdot x_{\text{aligned}}} = \frac{\sum_{n} x[n] y[n]}{\sum_{n} x[n]^2}$$
+
+#### Mühendislik Yorumu ve Gürültü Altında Davranış Farkı:
+- **RMS Kazanç Oranı Gürültüden Etkilenir (Pozitif Sapmalı):** Toplamsal ilişkisiz gürültü varlığında yakalanan sinyalin RMS değeri $\text{RMS}(y) = \sqrt{g^2 \text{RMS}(x)^2 + \sigma_{\text{noise}}^2}$ olacağından, gürültü arttıkça RMS kazancı yapay olarak büyür.
+- **En Küçük Kareler Kazancı Sapmasızdır (Unbiased Estimator):** Gürültü sıfır ortalamalı ve referansla ilişkisiz olduğunda ($E[x \cdot \text{noise}] = 0$), iç çarpım gürültüyü sönümlendirir ve $g$ gerçek fiziksel kazancı korur.
+- **Kritik Sınır:** Ne RMS kazanç oranı ne de en küçük kareler kazancı **asla otomatik olarak "klinik kalite" şeklinde yorumlanamaz**. Yalnızca donanım genlik ölçeklemesini ve gürültü katkısını matematiksel olarak karakterize ederler.
 
 ### 4. Normalize Çapraz Korelasyon (Normalized Cross-Correlation - NCC)
 Genlik farklarından bağımsız olarak sinyallerin dalga formu şekil benzerliğini (waveform shape similarity) ölçer:
