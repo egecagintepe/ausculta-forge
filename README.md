@@ -12,6 +12,23 @@
 
 ---
 
+## Scientific Traceability & Research Foundation
+
+AuscultaForge is an engineering validation and research platform, **not a clinical diagnostic tool**. To ensure scientific integrity, all digital signal processing, spectral estimation, filtering, and phantom validation methods are governed by peer-reviewed literature and formal discrete-time signal processing theory.
+
+Every algorithm in AuscultaForge follows the strict **Traceability Chain**:
+$$\text{Physical Problem} \longrightarrow \text{Mathematical Model} \longrightarrow \text{Assumptions} \longrightarrow \text{Literature Citation} \longrightarrow \text{Implementation} \longrightarrow \text{Deterministic Tests} \longrightarrow \text{Provenance Metadata} \longrightarrow \text{UI Interpretation}$$
+
+### Core Architectural Invariants:
+1. **Three Signal Representations:** Absolute separation between **Acquisition Signal** (48 kHz bit-exact raw stream), **Analysis Signal** (explicitly filtered/resampled for declared engineering tasks), and **Display Signal** (bounded $\le 600$ points peak-preserving representation for UI rendering only).
+2. **Units & Calibration Policy:** Uncalibrated acoustic units ($\text{Pa}$, $\text{dB SPL}$) are strictly prohibited. Allowed units are raw PCM codes, normalized full scale ($\text{FS}$), $\text{FS}^2/\text{Hz}$, and explicit relative $\text{dBFS}$.
+3. **No Unsupported Clinical Claims:** Literature presets (e.g. 20–600 Hz Butterworth) are labeled as development presets, never as universal medical or diagnostic standards.
+
+For detailed documentation, literature citations (R001–R008), mathematical definitions, algorithm decision logs, and open metrology research gaps, refer to the [**Research Foundation Registry**](docs/research/README.md).
+
+---
+
+
 ## High-Level Architecture
 
 The system pipeline is designed with strict layer separation. Input acquisition is abstracted behind a common `SampleBlock` container, allowing identical DSP algorithms and downstream analysis to run seamlessly on synthetic mock signals, offline WAV files, USB-UART serial streams, or future wireless transports.
