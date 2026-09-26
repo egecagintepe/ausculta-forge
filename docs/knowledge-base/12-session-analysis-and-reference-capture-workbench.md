@@ -106,16 +106,17 @@ Sistem üç farklı genlik oranı hesaplar:
 
 ### 4.6. Spektral Karşılaştırma ve Bant Enerjisi Farkları (PSD & Band Energy)
 Welch periyodogramı kullanılarak referans ve yakalanan sinyalin güç spektral yoğunlukları (PSD, dB/Hz) hesaplanır.
-Ayrıca PCG için kritik 4 frekans bandındaki enerji oranları karşılaştırılır:
-- **0–20 Hz (Alt-akustik / Hareket Artefaktı Bandı):** Sensör hareketleri, sürtünme ve kablo gürültüsü.
+Ayrıca PCG analizi için tanımlanan 4 mühendislik bandındaki enerji oranları karşılaştırılır:
+- **0–20 Hz (Çok Düşük Frekans / VLF Bölgesi):** Temel hat kayması (drift), temas/hareket artefaktları içerebileceği gibi meşru mekanik/akustik kardiyak titreşimler de barındırabilir; otomatik olarak gürültü veya patoloji olarak etiketlenemez.
 - **20–150 Hz (Temel Kalp Sesleri Bandı):** S1 ve S2 kalp seslerinin ana mekanik akustik enerjisi.
-- **150–600 Hz (Üfürüm / Yüksek Frekans Bandı):** Patolojik sistolik/diyastolik üfürümler, klikler ve kapak açılma sesleri.
-- **>600 Hz (Yüksek Akustik / Sensör Gürültü Bandı):** Sensör termal gürültüsü ve çevre gürültüsü.
+- **150–600 Hz (Genişletilmiş Kardiyak Akustik Bandı):** Yüksek frekanslı kalp sesleri, klikler ve üfürümler.
+- **>600 Hz (Genişletilmiş Yüksek Frekans Bölgesi):** Geliştirme geçiş bandı dışındaki genişletilmiş akustik içerik (otomatik olarak yalnızca sensör gürültüsü olarak adlandırılamaz).
+Bu bant bölüntüleri tanısal patoloji göstergesi değil, tanımlayıcı mühendislik metrikleridir.
 
 ### 4.7. Büyüklük-Karesi Tutarlılığı (Magnitude-Squared Coherence, $\gamma^2(f)$)
-İki sinyalin frekansa bağlı doğrusal ilişkisini gösterir:
+İki sinyalin kestirici varsayımları altındaki frekansa bağımlı doğrusal ilişkisini gösterir:
 $$\gamma_{xy}^2(f) = \frac{|P_{xy}(f)|^2}{P_{xx}(f) P_{yy}(f)}$$
-$\gamma^2(f) \in [0, 1]$ aralığındadır. Değerin 1'e yakın olması, o frekanstaki yakalanan sinyalin doğrudan referans sinyalin doğrusal bir cevabı olduğunu kanıtlar. Değerin düşmesi, o frekansta sisteme gürültü eklendiğini veya doğrusal olmayan harmonik bozulmalar olduğunu gösterir. Workbench, klinik PCG bandı olan 20–600 Hz arasındaki ortalama tutarlılığı (`mean_coherence_pcg_band`) özet metrik olarak raporlar.
+$\gamma^2(f) \in [0, 1]$ aralığındadır. Değerin 1'e yakın olması, kestirici varsayımları altında o frekansta referans ile yakalanan sinyal arasında yüksek bir frekansa bağımlı doğrusal ilişki (linear association) olduğunu gösterir. Büyüklük-karesi tutarlılığı tek başına nedensellik (causality) kanıtlamaz; sistemdeki ortak gözlemlenmeyen kaynaklar veya doğrusal olmayan bozunumlar da tutarlılığı etkileyebilir. Workbench, geçici `GENERAL_PCG` mühendislik bandı olan 20–600 Hz arasındaki ortalama tutarlılığı (`mean_coherence_pcg_band`) bir mühendislik özeti olarak raporlar.
 
 ---
 

@@ -40,14 +40,22 @@ The AuscultaForge desktop software architecture is structured into strictly isol
 
 ---
 
-## 2. Fundamental Architectural Rule: No DSP in the Frontend
+## 2. Fundamental Architectural Invariants
 
 1. **Strict Consumer Model:**
-   The React frontend is strictly a visualization and presentation consumer. All filtering, decimation, RMS calculation, peak detection, crest factor computation, and stream quality inspection are executed exclusively within `pcg_core`.
-2. **Deterministic Processing:**
-   Running DSP in Python guarantees that the exact same filtering algorithms run during automated batch testing, interactive replay, and live bench testing.
-3. **Decoupled Render Cadence:**
-   Waveform frames arrive in chunks of 128 samples ($\approx 32\text{ ms}$ at $4\text{ kHz}$, yielding $\approx 31\text{ fps}$). The HTML5 Canvas batches min/max bins across its pixel width, rendering smooth physiological waveforms without overloading the browser's main thread.
+    The React frontend is strictly a visualization and presentation consumer. All filtering, decimation, RMS calculation, peak detection, crest factor computation, and stream quality inspection are executed exclusively within `pcg_core`.
+ 2. **Deterministic Processing:**
+    Running DSP in Python guarantees that the exact same filtering algorithms run during automated batch testing, interactive replay, and live bench testing.
+ 3. **Decoupled Render Cadence:**
+    Waveform frames arrive in chunks of 128 samples ($\approx 32\text{ ms}$ at $4\text{ kHz}$, yielding $\approx 31\text{ fps}$). The HTML5 Canvas batches min/max bins across its pixel width, rendering smooth physiological waveforms without overloading the browser's main thread.
+ 4. **Three Signal Representations Invariant:**
+    AuscultaForge maintains strict separation across:
+    - **Acquisition Signal:** Full-rate master stream from hardware (Hardware Rev-A: 48 kHz, mono, 24 transmitted bits in 32-bit container), ingested as normalized full-rate float32 on the host.
+    - **Analysis Signal:** Explicitly processed/resampled signal with declared filter parameters for quantitative evaluation.
+    - **Display Signal:** Bounded, decimated representation ($\le 600$ points) computed via peak-preserving shared-time decimation strictly for UI rendering. Display data is never fed into quantitative metric calculations.
+ 5. **Versioned Analysis Profiles:**
+    All offline analysis and phantom validation are parameterized through explicit, typed `AnalysisProfile` declarations (`software/pcg_core/scientific_config.py`). Profiles (e.g. `PHANTOM_VALIDATION_V1`, `GENERAL_PCG_V1`) embed provenance metadata (`analysis_profile_id`, `analysis_profile_version`) into persisted session reports while preserving backward compatibility with legacy reports.
+
 
 ---
 
