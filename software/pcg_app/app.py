@@ -5,17 +5,19 @@ device runtime foundation, and the React frontend desktop client.
 """
 
 from contextlib import asynccontextmanager
+import json
 from pathlib import Path
 from typing import Any, Optional
 import time
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, File, UploadFile, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from pcg_core.recording import list_sessions, get_session, validate_session_id
 from .state import StreamManager
 from .device_runtime import DeviceRuntime
+from .analysis_service import AnalysisService
 from .protocol import (
     make_hello_message,
     make_stream_state_message,
@@ -40,8 +42,16 @@ def create_app(
     sessions_dir: str | Path = "experiments/sessions",
     allowed_origins: Optional[list[str]] = None,
     device_runtime: Optional[DeviceRuntime] = None,
+    assets_dir: str | Path = "experiments/analysis-assets",
+    analysis_dir: str | Path = "experiments/analysis",
+    analysis_service: Optional[AnalysisService] = None,
 ) -> FastAPI:
     manager = StreamManager(sessions_dir=sessions_dir, device_runtime=device_runtime)
+    analysis = analysis_service or AnalysisService(
+        assets_dir=assets_dir,
+        analysis_dir=analysis_dir,
+        sessions_dir=sessions_dir,
+    )
     origins = list(allowed_origins) if allowed_origins is not None else list(DEFAULT_ALLOWED_ORIGINS)
 
     @asynccontextmanager
@@ -63,12 +73,13 @@ def create_app(
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
 
-    # Store manager in state
+    # Store manager and analysis service in state
     app.state.manager = manager
+    app.state.analysis = analysis
 
     # Request models
     class FilterRequest(BaseModel):
@@ -83,6 +94,11 @@ def create_app(
 
     class RecordingStartRequest(BaseModel):
         source: Optional[str] = None
+
+    class CompareRequest(BaseModel):
+        asset_id: str
+        session_id: str
+        max_points: Optional[int] = 600
 
     # REST Endpoints
     @app.get("/api/status")
@@ -136,6 +152,93 @@ def create_app(
         manager.start_stream()
         await manager.broadcast(make_stream_state_message(new_state))
         return {"status": "replaying", "session_id": valid_id, "state": new_state}
+
+    @app.get("/api/sessions/{session_id}/analysis-summary")
+    def api_get_session_analysis_summary(session_id: str, max_points: int = 600) -> dict[str, Any]:
+        try:
+            return analysis.get_session_analysis_summary(session_id, max_waveform_points=max_points)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+    # Reference Asset Endpoints
+    @app.post("/api/analysis/assets", status_code=201)
+    async def api_upload_reference_asset(file: UploadFile = File(...)) -> dict[str, Any]:
+        try:
+            content = await file.read()
+            return analysis.import_reference_wav(content, original_filename=file.filename or "reference.wav")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to process reference audio: {e}")
+
+    @app.get("/api/analysis/assets")
+    def api_list_reference_assets() -> list[dict[str, Any]]:
+        return analysis.list_reference_assets()
+
+    @app.get("/api/analysis/assets/{asset_id}")
+    def api_get_reference_asset(asset_id: str) -> dict[str, Any]:
+        asset = analysis.get_reference_asset(asset_id)
+        if not asset:
+            raise HTTPException(status_code=404, detail=f"Reference asset not found: {asset_id}")
+        return asset
+
+    @app.delete("/api/analysis/assets/{asset_id}")
+    def api_delete_reference_asset(asset_id: str) -> dict[str, Any]:
+        try:
+            removed = analysis.delete_reference_asset(asset_id)
+            if not removed:
+                raise HTTPException(status_code=404, detail=f"Reference asset not found: {asset_id}")
+            return {"status": "deleted", "asset_id": asset_id}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # Comparison Workbench Endpoints
+    @app.post("/api/analysis/compare")
+    def api_compare_reference_and_capture(req: CompareRequest) -> dict[str, Any]:
+        try:
+            return analysis.compare_reference_and_capture(
+                asset_id=req.asset_id,
+                session_id=req.session_id,
+                max_waveform_points=req.max_points or 600,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+    @app.get("/api/analysis/reports")
+    def api_list_comparison_reports() -> list[dict[str, Any]]:
+        return analysis.list_comparison_reports()
+
+    @app.get("/api/analysis/{analysis_id}")
+    def api_get_comparison_report(analysis_id: str) -> dict[str, Any]:
+        try:
+            report = analysis.get_comparison_report(analysis_id)
+            if not report:
+                raise HTTPException(status_code=404, detail=f"Comparison report not found: {analysis_id}")
+            return report
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.get("/api/analysis/{analysis_id}/export")
+    def api_export_comparison_report(analysis_id: str) -> Response:
+        try:
+            report = analysis.get_comparison_report(analysis_id)
+            if not report:
+                raise HTTPException(status_code=404, detail=f"Comparison report not found: {analysis_id}")
+            content = json.dumps(report, indent=2)
+            filename = f"comparison_{analysis_id}.json"
+            return Response(
+                content=content,
+                media_type="application/json",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"'
+                },
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     @app.post("/api/stream/start")
     async def api_start_stream() -> dict[str, Any]:

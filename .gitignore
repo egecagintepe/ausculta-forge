@@ -84,3 +84,9 @@ pnpm-debug.log*
 # Session recording outputs
 experiments/sessions/*
 !experiments/sessions/.gitkeep
+
+# Analysis reference assets and comparison reports
+experiments/analysis-assets/*
+!experiments/analysis-assets/.gitkeep
+experiments/analysis/*
+!experiments/analysis/.gitkeep

@@ -11,11 +11,13 @@ from .device_runtime import (
     DeviceTransport,
     packet_to_sample_block,
 )
+from .analysis_service import AnalysisService
 
 __all__ = [
     "PROTOCOL_VERSION",
     "FILTER_PRESETS",
     "StreamManager",
+    "AnalysisService",
     "create_app",
     "DeviceState",
     "DeviceRuntime",
