@@ -36,12 +36,20 @@ def test_status_endpoint(test_app_and_dir):
         assert "capabilities" in data
         assert "state" in data
         assert data["capabilities"]["sample_rate_hz"] == 4000
-        assert data["state"]["is_streaming"] is True
+        assert data["state"]["is_streaming"] is False
+        assert data["state"]["source_type"] == "none"
+        assert data["state"]["device_state"] == "absent"
 
 
 def test_stream_controls_endpoints(test_app_and_dir):
     app, _ = test_app_and_dir
     with TestClient(app) as client:
+        # Explicitly select an engineering mock source
+        resp_src = client.post("/api/stream/source", json={"source_type": "mock"})
+        assert resp_src.status_code == 200
+        assert resp_src.json()["source_type"] == "synthetic_dev"
+        assert resp_src.json()["is_streaming"] is True
+
         # Pause
         resp = client.post("/api/stream/pause")
         assert resp.status_code == 200
@@ -68,6 +76,14 @@ def test_recording_lifecycle_and_sessions_endpoint(test_app_and_dir):
         assert resp.status_code == 200
         assert resp.json() == []
 
+        # Starting recording with no active source must fail with 400
+        resp_no_src = client.post("/api/recording/start", json={"source": "test_recording"})
+        assert resp_no_src.status_code == 400
+        assert "no active stream" in resp_no_src.json()["detail"].lower()
+
+        # Explicitly select mock source for test
+        client.post("/api/stream/source", json={"source_type": "mock"})
+
         # Start recording
         resp = client.post("/api/recording/start", json={"source": "test_recording"})
         assert resp.status_code == 200
@@ -84,6 +100,8 @@ def test_recording_lifecycle_and_sessions_endpoint(test_app_and_dir):
         assert meta["session_id"] == sid
         assert meta["total_samples"] > 0
         assert meta["raw_wav_relpath"] == "raw.wav"
+        assert meta["acquisition_mode"] == "synthetic_dev"
+        assert meta["termination_reason"] == "completed"
 
         # Verify listed in /api/sessions
         resp = client.get("/api/sessions")
@@ -109,24 +127,59 @@ def test_websocket_handshake_and_frames(test_app_and_dir):
             assert "capabilities" in hello_msg
             assert "state" in hello_msg
 
-            # Next message is a signal_frame from background stream
-            frame_msg = ws.receive_json()
-            assert frame_msg["type"] == "signal_frame"
-            assert "raw_samples" in frame_msg
-            assert "filtered_samples" in frame_msg
-            assert len(frame_msg["raw_samples"]) > 0
-            assert "metrics" in frame_msg
-            assert "rms" in frame_msg["metrics"]
-            assert "stream_quality" in frame_msg
+            # Second message is device_state (truthful absent state)
+            dev_msg = ws.receive_json()
+            assert dev_msg["type"] == "device_state"
+            assert dev_msg["device_state"] == "absent"
+
+            # Select synthetic source via WebSocket command
+            ws.send_json({"action": "select_source", "source_type": "synthetic_dev"})
+
+            # Receive stream_state or signal_frame
+            msg = ws.receive_json()
+            while msg.get("type") != "signal_frame":
+                if msg.get("type") == "stream_state":
+                    assert msg["source_type"] == "synthetic_dev"
+                msg = ws.receive_json()
+
+            assert msg["type"] == "signal_frame"
+            assert "raw_samples" in msg
+            assert "filtered_samples" in msg
+            assert len(msg["raw_samples"]) > 0
+            assert "metrics" in msg
+            assert "rms" in msg["metrics"]
+            assert "stream_quality" in msg
 
             # Test command: set_filter
             ws.send_json({"action": "set_filter", "preset": "diaphragm"})
             state_msg = ws.receive_json()
-            # Could receive another signal_frame first or stream_state
             while state_msg.get("type") == "signal_frame":
                 state_msg = ws.receive_json()
             assert state_msg["type"] == "stream_state"
             assert state_msg["filter_preset"] == "diaphragm"
+
+
+def test_device_api_endpoints_and_protocol_schemas(test_app_and_dir):
+    app, _ = test_app_and_dir
+    with TestClient(app) as client:
+        # GET /api/device/state
+        resp_state = client.get("/api/device/state")
+        assert resp_state.status_code == 200
+        state = resp_state.json()
+        assert state["device_state"] == "absent"
+        assert state["is_connected"] is False
+
+        # GET /api/device/events
+        resp_events = client.get("/api/device/events")
+        assert resp_events.status_code == 200
+        assert isinstance(resp_events.json(), list)
+
+        # GET /api/device/stats
+        resp_stats = client.get("/api/device/stats")
+        assert resp_stats.status_code == 200
+        stats = resp_stats.json()
+        assert "packets_received" in stats
+        assert "crc_failures" in stats
 
 
 def test_streaming_from_realtime_wav_source(test_app_and_dir, tmp_path: Path):
@@ -149,6 +202,8 @@ def test_streaming_from_realtime_wav_source(test_app_and_dir, tmp_path: Path):
             assert hello["type"] == "hello"
 
             frame = ws.receive_json()
+            while frame.get("type") in ("device_state", "stream_state"):
+                frame = ws.receive_json()
             assert frame["type"] == "signal_frame"
             assert len(frame["raw_samples"]) > 0
             assert frame["sample_rate_hz"] == fs
