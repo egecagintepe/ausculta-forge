@@ -5,7 +5,15 @@
  * Decouples waveform ingestion from hardware protocols.
  */
 
-import { FilterPreset, DeviceRuntimeState, DeviceEventItem, DeviceIntegrityStats } from '../types';
+import {
+  FilterPreset,
+  DeviceRuntimeState,
+  DeviceEventItem,
+  DeviceIntegrityStats,
+  ReferenceAssetItem,
+  SessionAnalysisSummary,
+  AnalysisComparisonResult,
+} from '../types';
 
 export interface SignalFrameData {
   sequence: number;
@@ -374,6 +382,86 @@ class BridgeClient {
     } catch {
       return null;
     }
+  }
+
+  // =========================================================================
+  // Analysis & Validation Workbench APIs
+  // =========================================================================
+
+  public async listReferenceAssets(): Promise<ReferenceAssetItem[]> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/analysis/assets`);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async uploadReferenceAsset(file: File): Promise<ReferenceAssetItem> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const resp = await fetch(`${this.apiUrl}/analysis/assets`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(err.detail || `Upload failed with status ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
+  public async deleteReferenceAsset(assetId: string): Promise<boolean> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/analysis/assets/${encodeURIComponent(assetId)}`, {
+        method: 'DELETE',
+      });
+      return resp.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  public async getSessionAnalysisSummary(sessionId: string, maxPoints: number = 600): Promise<SessionAnalysisSummary | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}/analysis-summary?max_points=${maxPoints}`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public async compareReferenceAndCapture(
+    assetId: string,
+    sessionId: string,
+    maxPoints: number = 600
+  ): Promise<AnalysisComparisonResult> {
+    const resp = await fetch(`${this.apiUrl}/analysis/compare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ asset_id: assetId, session_id: sessionId, max_points: maxPoints }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Comparison failed' }));
+      throw new Error(err.detail || `Comparison failed with status ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
+  public async getComparisonReport(analysisId: string): Promise<AnalysisComparisonResult | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/analysis/${encodeURIComponent(analysisId)}`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public getExportReportUrl(analysisId: string): string {
+    return `${this.apiUrl}/analysis/${encodeURIComponent(analysisId)}/export`;
   }
 }
 
