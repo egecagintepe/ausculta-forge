@@ -3,68 +3,59 @@ import { HeartSoundMetadata } from '../types';
 export const STARTER_SAMPLES: HeartSoundMetadata[] = [
   {
     id: 'sample_normal_01',
-    title: 'Normal S1/S2 Sound',
+    title: 'Synthetic Normal S1/S2 Model',
     filename: 'normal_sample_01.wav',
-    category: 'Normal Physiological Sounds',
+    category: 'Synthetic Development Models',
     durationSeconds: 15.0,
     sampleRateHz: 4000,
     channels: 1,
-    description: 'Bicuspid and tricuspid valve closure (S1) followed by aortic and pulmonic valve closure (S2) at 72 BPM. Minimal baseline sway.',
-    sourceAttribution: 'PhysioNet / Computing in Cardiology Clinical Acoustic Dataset Archive',
+    description: 'Synthetic baseline phonocardiogram model generating periodic S1/S2 acoustic impulses at 72 BPM with synthetic baseline noise for UI and DSP pipeline development.',
+    sourceAttribution: 'AuscultaForge synthetic development signal',
     quality: {
-      rating: 'Good',
-      score: 86,
-      snrDb: 22.4,
-      message: 'Zero clipping, minimal baseline sway. Calibrated 100 mV/Pa transducer.'
+      rating: 'Unavailable',
+      score: null,
+      message: 'Synthetic mathematical model for UI/DSP testing (not a clinical recording)'
     },
-    heartRateBpm: 72,
-    spectralCentroidHz: 68.4,
-    noiseFloorDb: -72
+    heartRateBpm: 72
   },
   {
     id: 'sample_aortic_stenosis_02',
-    title: 'Aortic Valve Stenosis',
+    title: 'Synthetic Systolic Murmur Model',
     filename: 'aortic_stenosis_02.wav',
-    category: 'Valvular Murmurs',
+    category: 'Synthetic Development Models',
     durationSeconds: 15.0,
     sampleRateHz: 4000,
     channels: 1,
-    description: 'Crescendo-decrescendo harsh ejection murmur between S1 and S2 best heard at right upper sternal border with radiation.',
-    sourceAttribution: 'Clinical Phonocardiography Archive (University Reference Corpus)',
+    description: 'Synthetic mathematical model simulating crescendo-decrescendo mid-frequency systolic turbulence for filter benchmarking. For DSP/UI development only; not a validated clinical exemplar.',
+    sourceAttribution: 'AuscultaForge synthetic development signal',
     quality: {
-      rating: 'Good',
-      score: 82,
-      snrDb: 19.8,
-      message: 'Turbulent flow acoustic signature with preserved fundamental cadence.'
+      rating: 'Unavailable',
+      score: null,
+      message: 'Synthetic mathematical model for UI/DSP testing (not a clinical recording)'
     },
-    heartRateBpm: 74,
-    spectralCentroidHz: 142.2,
-    noiseFloorDb: -68
+    heartRateBpm: 72
   },
   {
     id: 'sample_mitral_regurgitation_03',
-    title: 'Mitral Regurgitation',
+    title: 'Synthetic Holosystolic Murmur Model',
     filename: 'mitral_regurgitation_03.wav',
-    category: 'Valvular Murmurs',
+    category: 'Synthetic Development Models',
     durationSeconds: 15.0,
     sampleRateHz: 4000,
     channels: 1,
-    description: 'Plateau-shaped high-frequency pansystolic blowing murmur radiating to the left axilla. Holosystolic blowing pass.',
-    sourceAttribution: 'Stethoscope Reference Library (Acoustic Evaluation Standards)',
+    description: 'Synthetic mathematical model simulating plateau-shaped broadband systolic noise for filter benchmarking. For DSP/UI development only; not a validated clinical exemplar.',
+    sourceAttribution: 'AuscultaForge synthetic development signal',
     quality: {
-      rating: 'Fair',
-      score: 68,
-      snrDb: 14.1,
-      message: 'Slight respiratory artifact detected in baseline window; valve closure distinct.'
+      rating: 'Unavailable',
+      score: null,
+      message: 'Synthetic mathematical model for UI/DSP testing (not a clinical recording)'
     },
-    heartRateBpm: 70,
-    spectralCentroidHz: 185.6,
-    noiseFloorDb: -64
+    heartRateBpm: 72
   }
 ];
 
 /**
- * Synthesize genuine physiological phonocardiogram heart audio (raw vs filtered)
+ * Synthesize mathematical development heart sound waveforms (raw vs filtered) for UI/DSP testing
  */
 export function generateSyntheticHeartAudio(
   sampleId: string,

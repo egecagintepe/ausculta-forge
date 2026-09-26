@@ -109,7 +109,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                 </h3>
                 <p className="text-xs text-[var(--on-surface-variant)] leading-relaxed">
                   Real-time DSP stream powered by <code className="font-mono-code text-[11px]">pcg_core</code>.
-                  Streams synthetic physiological PCG, benchmark WAV recordings, or replayed acquisition sessions.
+                  Streams synthetic PCG benchmarks, WAV recordings, or replayed acquisition sessions.
                 </p>
 
                 <div className="p-2.5 rounded bg-[var(--surface-muted)] border border-[var(--border-subtle)] flex flex-col gap-1 font-mono-code text-xs mt-1">
@@ -213,7 +213,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
             </div>
             <div className="flex flex-col p-2.5 rounded bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
               <span className="text-[10px] text-[var(--on-surface-variant)] uppercase">SAMPLE RATE</span>
-              <span className="font-semibold text-[var(--on-surface)]">4.0 kHz · 32-BIT FP</span>
+              <span className="font-semibold text-[var(--on-surface)]">4.0 kHz · Float32 App</span>
             </div>
             <div className="flex flex-col p-2.5 rounded bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
               <span className="text-[10px] text-[var(--on-surface-variant)] uppercase">FRAME SIZE</span>

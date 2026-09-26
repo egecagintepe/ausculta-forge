@@ -170,7 +170,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 onChange={(e) => onChangeDefaultFilterPreset(e.target.value as FilterPreset)}
                 className="bg-[var(--surface-muted)] text-[var(--on-surface)] font-mono-code text-xs px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] cursor-pointer outline-none focus:border-[var(--accent-oxblood)]"
               >
-                <option value="recommended">Recommended [Normal 20-200 Hz]</option>
+                <option value="recommended">Narrow 20–200 Hz (Development Preset)</option>
                 <option value="bell">Bell Acoustic Mode [20-100 Hz]</option>
                 <option value="diaphragm">Diaphragm Modality [100-500 Hz]</option>
                 <option value="extended">Extended Unfiltered Feed [10-2000 Hz]</option>
@@ -194,7 +194,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="flex items-center justify-between py-1 text-xs">
               <div>
                 <div className="font-medium text-[var(--on-surface)]">Acoustic Audition Volume</div>
-                <div className="text-[11px] text-[var(--on-surface-variant)]">Calibrated DAC headphone output level (RMS compensated)</div>
+                <div className="text-[11px] text-[var(--on-surface-variant)]">DAC headphone audition level (RMS gain scaled)</div>
               </div>
 
               <div className="flex items-center gap-3">

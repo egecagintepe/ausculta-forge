@@ -38,7 +38,7 @@ export const FooterStatus: React.FC<FooterStatusProps> = ({
         </span>
         <span className="text-[var(--border-strong)]">|</span>
         <span>
-          SAMPLE RATE: <strong className="text-[var(--on-surface)] font-semibold">{(sampleRate / 1000).toFixed(1)} kHz · 32-BIT FP</strong>
+          SAMPLE RATE: <strong className="text-[var(--on-surface)] font-semibold">{(sampleRate / 1000).toFixed(1)} kHz · Float32 App</strong>
         </span>
       </div>
 
@@ -53,7 +53,7 @@ export const FooterStatus: React.FC<FooterStatusProps> = ({
         <span>
           RECORDING:{' '}
           <strong className={isRecording ? 'text-[var(--status-danger)] font-bold animate-pulse' : 'text-[var(--on-surface-variant)]'}>
-            {isRecording ? 'ACTIVE (CAPTURNG RAW)' : 'OFF'}
+            {isRecording ? 'ACTIVE (CAPTURING RAW)' : 'OFF'}
           </strong>
         </span>
       </div>

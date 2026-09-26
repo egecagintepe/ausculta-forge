@@ -347,14 +347,14 @@ class HeartAudioEngine {
       this.filterLowPass.frequency.setTargetAtTime(2000, this.ctx.currentTime, 0.03);
       this.filterLowPass.Q.setTargetAtTime(0.707, this.ctx.currentTime, 0.03);
     } else {
-      // Recommended Normal: 20 Hz - 200 Hz (4th Order Chebyshev/Butterworth)
+      // Narrow Dev Preset: 20 Hz - 200 Hz (4th Order Chebyshev/Butterworth)
       this.filterHighPass.frequency.setTargetAtTime(20, this.ctx.currentTime, 0.03);
       this.filterLowPass.frequency.setTargetAtTime(200, this.ctx.currentTime, 0.03);
       this.filterLowPass.Q.setTargetAtTime(0.707, this.ctx.currentTime, 0.03);
     }
   }
 
-  // Export genuine 16-bit PCM WAV
+  // Export 16-bit PCM WAV
   public exportWav(track: 'filtered' | 'raw' = 'filtered'): Blob {
     const data = track === 'filtered' ? this.filteredData : this.rawData;
     const sampleRate = 4000;

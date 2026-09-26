@@ -331,7 +331,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
 
   // Preset labels map
   const presetLabels: Record<FilterPreset, { title: string; range: string }> = {
-    recommended: { title: 'Recommended [Normal]', range: '20 Hz – 200 Hz · 4th Order Chebyshev' },
+    recommended: { title: 'Narrow [20–200 Hz]', range: '20 Hz – 200 Hz · 4th Order Chebyshev (Dev Preset)' },
     bell: { title: 'Bell Acoustic Mode', range: '20 Hz – 100 Hz · Low Rumble Emphasized' },
     diaphragm: { title: 'Diaphragm Modality', range: '100 Hz – 500 Hz · Murmur / Regurgitation' },
     extended: { title: 'Extended Unfiltered Feed', range: '10 Hz – 2000 Hz · Direct Transducer' }
@@ -372,18 +372,28 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                   </span>
                 </div>
                 <span className="font-mono-code text-[10px] text-[var(--on-surface-variant)] uppercase tracking-wider">
-                  PCM WAV · 4.0 KHZ · 24-BIT MONO · L-BELL SENSOR
+                  PCM STREAM · {(sampleRate / 1000).toFixed(1)} KHZ · FLOAT32 APP · LIVE BENCH
                 </span>
               </div>
             </div>
 
             <div className="h-6 w-px bg-[var(--border-subtle)] hidden sm:block mx-1" />
 
-            {/* Verified Signal Quality Badge */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--status-success)]/10 text-[var(--status-success)] border border-[var(--status-success)]/25">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)]" />
+            {/* Signal / Stream Quality Badge */}
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded ${
+              streamQuality?.is_healthy !== false
+                ? 'bg-[var(--status-success)]/10 text-[var(--status-success)] border border-[var(--status-success)]/25'
+                : 'bg-[var(--status-warning)]/10 text-[var(--status-warning)] border border-[var(--status-warning)]/25'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                streamQuality?.is_healthy !== false ? 'bg-[var(--status-success)]' : 'bg-[var(--status-warning)]'
+              }`} />
               <span className="font-mono-code text-[11px] font-semibold tracking-wide">
-                SIGNAL QUALITY: {activeMetadata?.quality.rating.toUpperCase() || 'GOOD'} ({activeMetadata?.quality.score || 86}%)
+                {backendConnected
+                  ? `STREAM: ${streamQuality?.is_healthy !== false ? 'OPTIMAL' : 'DEGRADED'} (${streamQuality?.dropped_blocks || 0} DROPS)`
+                  : (activeMetadata?.quality.score != null
+                      ? `QUALITY: ${activeMetadata.quality.rating.toUpperCase()} (${activeMetadata.quality.score}%)`
+                      : `SOURCE: ${activeMetadata?.quality.message || 'SYNTHETIC BENCH'}`)}
               </span>
             </div>
 
@@ -391,7 +401,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--surface-muted)] text-[var(--on-surface)] border border-[var(--border-subtle)]">
               <Sliders size={13} className="text-[var(--accent-metal)]" />
               <span className="font-mono-code text-[11px] tracking-wide">
-                FILTER: {filterPreset === 'recommended' ? 'RECOMMENDED (NORMAL 20–200 Hz)' : presetLabels[filterPreset].title.toUpperCase()}
+                FILTER: {filterPreset === 'recommended' ? 'NARROW 20–200 Hz (DEV PRESET)' : presetLabels[filterPreset].title.toUpperCase()}
               </span>
             </div>
           </div>
@@ -595,7 +605,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                 <span>-1.00</span>
               </div>
 
-              {/* High-Resolution Physiological Waveform Canvas */}
+              {/* High-Resolution Waveform Canvas */}
               <canvas ref={mainCanvasRef} className="absolute inset-0 w-full h-full z-10" />
 
               {/* Frequency Scrubbing Selection Bounding Region (8.0s - 9.2s window) */}
@@ -640,10 +650,10 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                 <div className="flex items-center gap-2">
                   <Radio size={17} className="text-[var(--waveform-raw)]" />
                   <span className="font-mono-code text-[11px] text-[var(--on-surface-variant)] font-semibold tracking-wider uppercase">
-                    Track B: Synchronized Raw Audio Transducer
+                    Track B: Synchronized Raw Sensor Stream
                   </span>
                   <span className="font-mono-code text-[10px] text-[var(--border-strong)]">
-                    [UNFILTERED DIRECT BELL FEED · 24-BIT]
+                    [UNFILTERED DIRECT STREAM · FLOAT32 APP]
                   </span>
                 </div>
 

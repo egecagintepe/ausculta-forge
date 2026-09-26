@@ -140,7 +140,7 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
               <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
                 <span className="text-[var(--on-surface-variant)]">Source Type:</span>
                 <span className="font-semibold text-[var(--on-surface)] bg-[var(--surface-muted)] px-1.5 py-0.5 rounded">
-                  {diagnosticState.sourceType === 'device' ? 'Hardware Transducer' : 'File Audition'}
+                  {diagnosticState.sourceType === 'device' ? 'Live Stream Ingestion' : 'File Audition'}
                 </span>
               </div>
               <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
@@ -264,7 +264,7 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
                     ? 'bg-[var(--status-success)]/10 text-[var(--status-success)]'
                     : 'bg-[var(--status-warning)]/10 text-[var(--status-warning)]'
                 }`}>
-                  {deviceState.connected ? 'Synchronized (Piezoelectric Transducer)' : 'Unavailable (No physical probe)'}
+                  {deviceState.connected ? 'Synchronized (Simulation / Bench)' : 'Hardware Native USB (Coming Soon)'}
                 </span>
               </div>
             </div>
@@ -301,10 +301,10 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
                 </span>
               </div>
               <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
-                <span className="text-[var(--on-surface-variant)]">Signal Quality:</span>
+                <span className="text-[var(--on-surface-variant)]">Signal Stream:</span>
                 <span className="text-[var(--status-success)] font-semibold flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)]" />
-                  Good (Score: 86 / 100)
+                  Active Ingestion (DSP Core)
                 </span>
               </div>
               <div className="flex items-center justify-between py-1">

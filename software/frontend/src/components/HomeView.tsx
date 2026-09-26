@@ -282,7 +282,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </div>
 
               <p className="text-xs text-[var(--on-surface-variant)] max-w-md mb-2.5">
-                Drop an acoustic specimen or time-series auscultation capture here to decode calibrated raw &amp; filtered waveform tracks.
+                Drop an acoustic specimen or time-series auscultation capture here to decode raw &amp; filtered waveform tracks.
               </p>
 
               <span className="font-mono-code text-[11px] uppercase tracking-widest text-[var(--accent-metal)] font-semibold flex items-center gap-1 group-hover:underline">
@@ -311,12 +311,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     <h3 className="font-serif-display text-base font-semibold text-[var(--on-surface)]">
                       Auscultation Reference Archive
                     </h3>
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono-code font-bold bg-[var(--status-success)]/10 text-[var(--status-success)] border border-[var(--status-success)]/20">
-                      CLINICAL SUITE
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono-code font-bold bg-[var(--accent-metal)]/10 text-[var(--accent-metal)] border border-[var(--accent-metal)]/20">
+                      DEVELOPMENT BENCH
                     </span>
                   </div>
                   <p className="text-xs text-[var(--on-surface-variant)] mt-0.5">
-                    Explore curated heart-sound reference recordings with documented S1, S2, systolic murmurs, and gallops.
+                    Explore synthetic heart-sound models and recorded sessions with S1, S2, and simulated murmur profiles.
                   </p>
                 </div>
               </div>
@@ -328,7 +328,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 style={{ backgroundColor: 'var(--accent-oxblood)' }}
               >
                 <Disc size={15} />
-                <span>Browse 3 Starter Recordings</span>
+                <span>Browse Starter Signals &amp; Sessions</span>
               </button>
             </div>
 
@@ -351,7 +351,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     {sample.title}
                   </span>
                   <span className="font-mono-code text-[10px] text-[var(--accent-metal)] mt-2 font-medium">
-                    {idx === 0 && '72 BPM · 24-BIT'}
+                    {idx === 0 && '72 BPM · SYNTHETIC'}
                     {idx === 1 && 'MID-SYSTOLIC EJECTION'}
                     {idx === 2 && 'HOLOSYSTOLIC BLOWING'}
                   </span>

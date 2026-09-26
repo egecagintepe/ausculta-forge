@@ -78,15 +78,15 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
         >
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2 font-mono-code text-[11px] uppercase tracking-widest text-[var(--accent-metal)] font-semibold">
-              <span>Physiological Archives &amp; Provenance</span>
+              <span>Auscultation Signals &amp; Provenance</span>
               <span>•</span>
               <span>Corpus &amp; Sessions</span>
             </div>
             <h1 className="font-serif-display text-2xl font-semibold text-[var(--on-surface)] tracking-tight">
-              Auscultation Archives &amp; Recorded Sessions
+              Auscultation Signals &amp; Recorded Sessions
             </h1>
             <p className="font-serif-display italic text-xs text-[var(--on-surface-variant)] max-w-xl">
-              Inspect reference cardiac sound specimens or browse and replay locally recorded acquisition sessions.
+              Inspect starter cardiac sound models or browse and replay locally recorded acquisition sessions.
             </p>
           </div>
 
@@ -163,7 +163,7 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
                           {sample.category}
                         </span>
                         <span className="font-mono-code text-[10px] text-[var(--accent-metal)] font-medium">
-                          {sample.durationSeconds.toFixed(1)}s · {sample.sampleRateHz / 1000} kHz · 24-BIT MONO
+                          {sample.durationSeconds.toFixed(1)}s · {sample.sampleRateHz / 1000} kHz · Float32 App
                         </span>
                       </div>
 
@@ -183,10 +183,18 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
 
                   <div className="flex items-center gap-4 shrink-0 self-end sm:self-center">
                     <div className="hidden md:flex flex-col items-end text-right font-mono-code text-[10px] text-[var(--on-surface-variant)]">
-                      <span className="text-[var(--status-success)] font-semibold">
-                        Quality · {sample.quality.score}/100
-                      </span>
-                      <span>SNR: {sample.quality.snrDb} dB</span>
+                      {sample.quality.score != null ? (
+                        <>
+                          <span className="text-[var(--status-success)] font-semibold">
+                            Quality · {sample.quality.score}/100
+                          </span>
+                          {sample.quality.snrDb != null && <span>SNR: {sample.quality.snrDb} dB</span>}
+                        </>
+                      ) : (
+                        <span className="text-[var(--accent-metal)] font-semibold">
+                          {sample.quality.message || 'Synthetic Model'}
+                        </span>
+                      )}
                     </div>
 
                     <button

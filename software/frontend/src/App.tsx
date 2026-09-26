@@ -142,7 +142,7 @@ export default function App() {
       id: 'log-6',
       timestamp: '16:43:26',
       severity: 'info',
-      message: 'Filter set to Recommended (Normal 20–200 Hz)',
+      message: 'Filter set to Narrow (20–200 Hz Dev Preset)',
       component: 'DSP'
     }
   ]);
@@ -313,10 +313,9 @@ export default function App() {
         description: 'Locally imported phonocardiography auscultation recording.',
         sourceAttribution: 'Workstation Local Storage',
         quality: {
-          rating: 'Good',
-          score: 88,
-          snrDb: 21.0,
-          message: 'Decoded acoustic waveform'
+          rating: 'Unavailable',
+          score: null,
+          message: 'Local audio file decoded'
         }
       };
 
@@ -334,21 +333,21 @@ export default function App() {
   // Connect/Detect Device Simulation
   const handleDetectDevice = useCallback(() => {
     setDeviceConnecting(true);
-    addLog('Scanning USB Bus for acoustic transducer (USB-CDC/HID)...', 'info', 'Hardware');
+    addLog('Connecting to local stream simulation...', 'info', 'Hardware');
 
     setTimeout(() => {
       setDeviceConnecting(false);
       setDeviceState({
         connected: true,
         state: 'Connected',
-        deviceId: 'STETH-USB-8842',
-        port: 'COM4 (USB Serial)',
-        firmwareVersion: 'v1.0.4-PROD',
+        deviceId: 'ESP32-S3-SIM',
+        port: 'Native USB (Simulation)',
+        firmwareVersion: 'v0.1-DEV',
         sampleRateHz: 4000,
         uptimeSeconds: 120
       });
-      addLog('Stethoscope transducer synchronized on COM4 (4.0 kHz)', 'info', 'Hardware');
-      addToast('Stethoscope detected on COM4', 'success');
+      addLog('Simulation stream synchronized (4.0 kHz)', 'info', 'Hardware');
+      addToast('Simulation stream connected', 'success');
     }, 900);
   }, [addLog, addToast]);
 
@@ -356,9 +355,9 @@ export default function App() {
     setDeviceState({
       connected: false,
       state: 'Not connected',
-      deviceId: 'STETH-USB-8842',
-      port: 'COM4',
-      firmwareVersion: 'v1.0.4-PROD',
+      deviceId: 'ESP32-S3-SIM',
+      port: 'Native USB (Simulation)',
+      firmwareVersion: 'v0.1-DEV',
       sampleRateHz: 4000
     });
     if (sourceType === 'device') {
@@ -370,7 +369,7 @@ export default function App() {
 
   const handleSimulateInterruption = useCallback(() => {
     if (!deviceState.connected) return;
-    addLog('Connection lost with transducer on COM4', 'warning', 'Transport');
+    addLog('Simulation stream interrupted', 'warning', 'Transport');
     setDeviceState(prev => ({ ...prev, state: 'Connection interrupted' }));
 
     setTimeout(() => {
@@ -379,7 +378,7 @@ export default function App() {
 
     setTimeout(() => {
       setDeviceState(prev => ({ ...prev, state: 'Connected' }));
-      addLog('Connection restored with stethoscope', 'info', 'Transport');
+      addLog('Simulation stream restored', 'info', 'Transport');
       addToast('Connection restored', 'success');
     }, 2400);
   }, [addLog, addToast, deviceState.connected]);
@@ -403,13 +402,12 @@ export default function App() {
       durationSeconds: 30,
       sampleRateHz: 4000,
       channels: 1,
-      description: 'Real-time telemetry stream from connected stethoscope chestpiece.',
-      sourceAttribution: 'Piezoelectric Sensor ADC (COM4)',
+      description: 'Real-time telemetry stream from connected stethoscope chestpiece simulation.',
+      sourceAttribution: 'AuscultaForge synthetic development signal',
       quality: {
-        rating: 'Good',
-        score: 92,
-        snrDb: 24.5,
-        message: 'Direct piezoelectric acoustic transducer acquisition'
+        rating: 'Unavailable',
+        score: null,
+        message: 'Synthetic bench simulation'
       }
     });
 
@@ -640,7 +638,7 @@ export default function App() {
     decodeStatus: 'Buffer Ready',
     internalProcessingRate: '4.0 kHz',
     resamplingStatus: 'None (Native 4 kHz match)',
-    filterPreset: filterPreset === 'recommended' ? 'Recommended (Bandpass 20–200 Hz)' : filterPreset.toUpperCase(),
+    filterPreset: filterPreset === 'recommended' ? 'Narrow (20–200 Hz Dev Preset)' : filterPreset.toUpperCase(),
     filterStrength,
     packetsReceived: sourceType === 'device' ? 1420 : 0,
     droppedFrames: 0,
