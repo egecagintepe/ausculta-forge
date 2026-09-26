@@ -110,6 +110,9 @@ AuscultaForge maintains an explicit architectural distinction between two fundam
    ```
 3. **`stream_state`:** Broadcast whenever active source, filter passband, or run state changes.
 4. **`recording_state`:** Broadcast whenever a session recording is started, progressing, or stopped.
+5. **`device_state`:** Real-time hardware lifecycle and capability status (`absent`, `detected`, `opening`, `handshaking`, `ready`, `streaming`, `interrupted`, `error`, `incompatible`).
+6. **`device_event`:** Structured audit log event emission (`timestamp_utc`, `code`, `severity`, `message`).
+7. **`device_stats`:** Real-time physical stream integrity counters (packets received, sequence gaps, CRC failures, disconnect/reconnect counts).
 
 ### Client $\rightarrow$ Server Commands
 
@@ -117,13 +120,38 @@ AuscultaForge maintains an explicit architectural distinction between two fundam
 - `{"action": "set_filter", "preset": "recommended" | "bell" | "diaphragm" | "extended"}`
 - `{"action": "start_recording", "source": "..."}`
 - `{"action": "stop_recording"}`
-- `{"action": "select_source", "source_type": "mock" | "realtime_wav" | "session", "session_id": "..."}`
+- `{"action": "select_source", "source_type": "none" | "hardware" | "session" | "realtime_wav" | "synthetic_dev", "session_id": "...", "path": "..."}`
 
 ---
 
-## 5. REST Endpoints
+## 5. Device Runtime Foundation & Physical State Machine
 
-- `GET /api/status`: System state, capabilities, and active sources.
+A dedicated subsystem (`software/pcg_app/device_runtime.py`) manages physical transducer hardware readiness:
+
+1. **Truthful Startup State:**
+   The application starts in a truthful inactive state:
+   - `source_type`: `"none"`
+   - `active_source`: `"None"`
+   - `device_state`: `"absent"`
+   - `is_streaming`: `false`
+   No synthetic waveforms are emitted until an offline replay source or synthetic test signal is explicitly selected.
+2. **Explicit State Machine:**
+   Transitions follow strict rules (`ABSENT -> DETECTED -> OPENING -> HANDSHAKING -> READY -> STREAMING`). Unauthorized jumps raise `InvalidStateTransitionError`.
+3. **Disconnection Handling:**
+   - Link drop while streaming: Transitions to `INTERRUPTED` and notifies UI.
+   - Link drop while recording: Safely stops and seals recording with `termination_reason: "device_disconnected"`.
+4. **Transport & Packet Abstraction:**
+   - `DeviceTransport` Protocol decouples host communication from CDC vs Bulk choices.
+   - `DeviceSamplePacket` provides semantic logical fields without premature wire encoding assumptions.
+
+---
+
+## 6. REST Endpoints
+
+- `GET /api/status`: System state, capabilities, active sources, and device summary.
+- `GET /api/device/state`: Structured hardware state, capability parameters, and discovery status.
+- `GET /api/device/events`: Bounded circular audit trail of recent hardware events.
+- `GET /api/device/stats`: Real-time packet, sample, sequence gap, and CRC failure telemetry counters.
 - `GET /api/sessions`: List all recorded sessions in `experiments/sessions/`.
 - `GET /api/sessions/{session_id}`: Load specific `session.json` metadata.
 - `POST /api/sessions/{session_id}/replay`: Replay a saved session through the live DSP streaming pipeline.
