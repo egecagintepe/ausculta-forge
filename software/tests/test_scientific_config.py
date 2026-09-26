@@ -4,7 +4,7 @@ Verifies:
 - SignalRepresentation boundaries (Acquisition vs Analysis vs Display)
 - Unit system rules (strict prohibition of uncalibrated Pa / dB SPL without calibration)
 - SpectralAnalysisConfig validation (nperseg, noverlap, nfft, frequency bounds)
-- Frequency bin spacing calculation (Delta_f = fs / N)
+- Frequency-bin spacing calculation (Delta_f = fs / N_fft)
 - Equivalent Noise Bandwidth (ENBW) calculation for canonical windows
 - AnalysisProfile serialization, deserialization, and registry
 - Backward compatibility of AnalysisService with legacy reports lacking profile metadata
@@ -288,8 +288,15 @@ class TestScientificConsistencyRegression:
         # Strict Springer provenance: polyphase anti-aliasing without Schmidt 25-400 Hz conflation
         assert p.filter_policy == "springer_polyphase_anti_alias_1000hz"
         assert p.literature_sources == ("R006", "R007")
-        assert p.spectral_policy.nperseg == 128
-        assert p.spectral_policy.effective_noverlap() == 64
+        assert p.spectral_policy.window == "hamming"
+        assert p.spectral_policy.nperseg == 50
+        assert p.spectral_policy.effective_noverlap() == 25
+        assert p.spectral_policy.nfft is None
+        assert p.feature_policy["psd_envelope_band_hz"] == [40, 60]
+        assert p.feature_policy["psd_envelope_window_seconds"] == 0.05
+        assert p.feature_policy["psd_envelope_overlap_fraction"] == 0.5
+        assert p.feature_policy["per_recording_z_normalization"] is True
+        assert p.feature_policy["feature_sampling_rate_hz"] == 50.0
         assert p.calibration_requirement == "dimensionless_features"
 
     def test_all_standard_profiles_serialize_without_contradiction(self):

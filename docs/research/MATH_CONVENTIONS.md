@@ -15,9 +15,11 @@ This document establishes the project-wide mathematical notation, formulations, 
 | $f_s$ | Sampling frequency ($f_s = 1 / T_s$) | $\text{Hertz (Hz)}$ | Hardware Rev-A standard: $48,000\text{ Hz}$. |
 | $x[n]$ | Discrete-time digital reference signal | Dimensionless ($\text{FS}$) | Sampled sequence: $x[n] \equiv x_c(n T_s)$. |
 | $y[n]$ | Discrete-time captured audio signal | Dimensionless ($\text{FS}$) | Acquired sequence from device or file. |
-| $N$ | Number of samples in a finite window | Dimensionless integer | Length of block, window, or segment. |
-| $k$ | Discrete frequency bin index ($0 \le k < N$) | Dimensionless integer | DFT / FFT frequency bin. |
-| $\Delta f$ | Discrete frequency bin spacing ($\Delta f = f_s / N$) | $\text{Hertz (Hz)}$ | Minimum separable spectral frequency resolution. |
+| $N_{\text{samples}}$ | Total number of samples in a recording or sequence | Dimensionless integer | Total length of continuous time buffer. |
+| $n_{\text{perseg}}$ | Segment / window length in samples | Dimensionless integer | Number of samples per windowed segment ($L$). |
+| $N_{\text{FFT}}$ | Discrete Fourier Transform size | Dimensionless integer | Number of frequency evaluation points ($N_{\text{FFT}} \ge n_{\text{perseg}}$). |
+| $k$ | Discrete frequency bin index ($0 \le k < N_{\text{FFT}}$) | Dimensionless integer | DFT / FFT frequency bin index. |
+| $\Delta f$ | Discrete frequency-bin spacing ($\Delta f = f_s / N_{\text{FFT}}$) | $\text{Hertz (Hz)}$ | Discrete frequency sampling grid spacing; not automatically physical resolving power. |
 | $f$ | Continuous frequency variable | $\text{Hertz (Hz)}$ | Nyquist range: $0 \le f \le f_s / 2$. |
 
 ---
@@ -117,4 +119,5 @@ $$\text{BER}_{[f_a, f_b]} = \frac{\int_{f_a}^{f_b} \hat{P}_{xx}(f) df}{\int_{0}^
 ### 4.5. Magnitude-Squared Coherence
 $$\gamma_{xy}^2(f) = \frac{|P_{xy}(f)|^2}{P_{xx}(f) P_{yy}(f)}$$
 - Range: $[0.0, 1.0]$.
-- Measures the degree of linear causality between excitation and capture at each frequency $f$.
+- Measures frequency-dependent linear association/relationship under the estimator assumptions between excitation and capture at each frequency $f$.
+- **Causality Invariant:** Magnitude-squared coherence alone does **not** establish causality. It quantifies linear correlation under cross-spectral estimation assumptions; high coherence may arise from common unobserved sources, while low coherence can reflect additive noise, nonlinear transfer, or window leakage rather than absence of a physical causal link.

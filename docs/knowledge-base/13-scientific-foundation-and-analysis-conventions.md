@@ -65,9 +65,10 @@ Spektral terimler projemizde gelişigüzel kullanılamaz:
 1. **Spektrum vs. Güç Spektral Yoğunluğu (PSD):**
    - **Güç Spektrumu (Power Spectrum, $\text{FS}^2$):** Ayrık sinüzoidal bileşenlerin saf gücünü gösterir.
    - **Güç Spektral Yoğunluğu (PSD, $\text{FS}^2/\text{Hz}$):** Sürekli rastgele gürültü ve biyomedikal akustik dalgaların frekansa düşen güç yoğunluğunu gösterir (Heinzel et al., R003). AuscultaForge varsayılan olarak PSD kullanır.
-2. **Frekans Çözünürlüğü ($\Delta f$):**
-   $$\Delta f = \frac{f_s}{N_{\text{fft}}}$$
-   Donanımın 512 örneklik paket boyutu 48 kHz'de $48000 / 512 = 93.75\text{ Hz}$ frekans adımı verir. Bu çözünürlük 30–150 Hz arasındaki kalp seslerini ayırmak için yetersizdir. Bu nedenle spektral analiz, donanım paketlerini biriktirerek en az 2048 örneklik pencerelerle çalışır ($\Delta f \le 23.4\text{ Hz}$) ya da alt frekansa indirgenmiş sinyal kullanır.
+2. **Ayrık Frekans Adımı (Frequency-Bin Spacing, $\Delta f = f_s / N_{\text{FFT}}$) vs. Spektral Çözünürlük:**
+   $$\Delta f = \frac{f_s}{N_{\text{FFT}}}$$
+   Bu formül, ayrık Fourier dönüşümündeki frekans örnekleme ızgarasının aralığını (bin spacing) belirler; bu durum tek başına fiziksel ayrılabilir spektral çözünürlük anlamına gelmez. Fiziksel spektral çözme gücü, pencere uzunluğu ($n_{\text{perseg}}$), sinyal süresi ve pencerenin ana lob (main-lobe) genişliği ile sınırlıdır; sıfır ekleme (zero-padding), DTFT enterpolasyonuyla daha sık frekans örnekleri üretir ancak yeni bir fiziksel çözünürlük bilgisi üretmez.
+   Donanımın 512 örneklik paket boyutu 48 kHz'de $48000 / 512 = 93.75\text{ Hz}$ frekans adımı verir. Bu çözünürlük 30–150 Hz arasındaki temel kalp seslerini ayırmak için yetersizdir. Bu nedenle spektral analiz, donanım paketlerini biriktirerek en az 2048 örneklik pencerelerle çalışır ($\Delta f \le 23.4\text{ Hz}$) ya da alt frekansa indirgenmiş sinyal kullanır.
 3. **Eşdeğer Gürültü Bant Genişliği (ENBW):**
    Bir pencere fonksiyonu (Hann, Hamming) frekans sızıntısını (*leakage*) engellerken tepe noktasını genişletir. `SpectralAnalysisConfig.enbw(fs)` metodu bu genişlemeyi matematiksel olarak hesaplar (Hann penceresinde $\text{ENBW} \approx 1.50 \cdot \Delta f$).
 4. **DC Çıkarma (Detrending):**
@@ -78,7 +79,11 @@ Spektral terimler projemizde gelişigüzel kullanılamaz:
 ## 5. Filtre Anlambilimi: Nedensel (Causal) vs. Sıfır Fazlı (Zero-Phase)
 
 AuscultaForge'da tek bir "tıbbi evrensel kalp sesi bandı" yoktur:
-- **Genel Mühendislik Ön Ayarı (`GENERAL_PCG_V1`):** 20–600 Hz, 4. derece Butterworth filtre.
+- **Geçici Genel Mühendislik Ön Ayarı (`GENERAL_PCG_V1`):** 20–600 Hz, 4. derece Butterworth filtre.
+  - Bu filtre, geliştirme geçiş bandı dışındaki bileşenleri zayıflatır; 20 Hz altı ve 600 Hz üstündeki gürültüyü "yok etmez".
+  - 20 Hz altı, çok düşük frekanslı (VLF) bölgedir; temel hat kayması ve hareket artefaktları içerebileceği gibi meşru mekanik/akustik kardiyak titreşimler de içerebilir.
+  - 600 Hz üstü, geliştirme bandı dışındaki genişletilmiş yüksek frekans içeriğidir; otomatik olarak yalnızca gürültü olarak adlandırılamaz.
+  - Bu bölgelere doğrudan klinik patoloji anlamı yüklenemez.
 - **Maksimum Düzlük vs. Faz Bozulması:** Butterworth filtresi geçiş bandında dalgalanmasız (maximally flat) bir genlik cevabı verir; ancak faz cevabı doğrusal değildir.
 - **Canlı Akışta Nedensellik Kuralı:** Gerçek zamanlı akışta (`StreamingBandpass`) yalnızca nedensel IIR filtreler kullanılabilir. Sinyali zamanda ileri-geri süzen sıfır fazlı filtreler (`sosfiltfilt`) yalnızca çevrimdışı analizde kullanılabilir ve bu durum raporda açıkça belirtilir.
 

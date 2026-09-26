@@ -13,7 +13,7 @@
 R003 is the primary metrological authority for the mathematical scaling, window normalization, and bandwidth calculations implemented in `pcg_core.scientific_config.SpectralAnalysisConfig`.
 
 ### Key Technical Sections:
-- **Section 3: The Discrete Fourier Transform and Discrete Time Series:** Discrete time scaling, sampling frequency $f_s$, and bin width $\Delta f = f_s / N$.
+- **Section 3: The Discrete Fourier Transform and Discrete Time Series:** Discrete time scaling, sampling frequency $f_s$, and discrete frequency-bin spacing $\Delta f = f_s / N_{\text{FFT}}$ (noting that bin spacing is not physical spectral resolving power, which depends on window length and main-lobe characteristics).
 - **Section 4: Window Functions and Normalization:**
   - Coherent Gain (Linear Gain): $S_1 = \sum_{n=0}^{N-1} w[n]$.
   - Noise Power Gain: $S_2 = \sum_{n=0}^{N-1} w^2[n]$.

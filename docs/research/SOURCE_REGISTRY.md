@@ -30,8 +30,8 @@ This document records the foundational scientific literature governing the Auscu
   - PCG event characterization, time-domain activity measures, and amplitude envelopes.
   - Nonstationary PCG signal filtering, baseline wander removal, and muscle artifact rejection.
   - Fourier analysis, power spectral density, dominant frequency detection, and spectral power ratios.
-  - Cross-spectral analysis and coherence for acoustic transmission systems.
-- **Project Mapping:** Supports PCG filtering concepts, spectral band ratios, and envelope feature extraction methods (AuscultaForge 20–600 Hz is a provisional engineering development preset, NOT an externally validated clinical standard).
+  - Cross-spectral analysis and coherence for acoustic transmission systems (measures frequency-dependent linear association under estimator assumptions; alone does not establish causality).
+- **Project Mapping:** Supports PCG filtering concepts, spectral band ratios, and envelope feature extraction methods (AuscultaForge 20–600 Hz is a provisional engineering development preset that attenuates content outside the development passband, NOT an externally validated clinical standard).
 
 ### R002 — Oppenheim, A. V., & Schafer, R. W. (2010)
 - **Full Title:** *Discrete-Time Signal Processing* (3rd Edition).
@@ -91,7 +91,7 @@ This document records the foundational scientific literature governing the Auscu
     1. Homomorphic envelope
     2. Hilbert envelope
     3. Wavelet envelope
-    4. Power spectral density envelope
+    4. Power spectral density envelope (mean PSD 40–60 Hz, 50 ms window, 50% overlap, Hamming window)
   - Modified Viterbi decoding algorithm tracking joint state and duration transitions.
 - **Project Mapping:** Defines the roadmap for Stage A (deterministic feature extraction) and Stage B (LR-HSMM implementation).
 

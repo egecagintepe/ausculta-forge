@@ -108,4 +108,4 @@ Instead of asserting an uncalibrated $H(f)$, AuscultaForge currently implements 
 | **Linear Scale Attenuation** | $\min_g \|y_{\text{aligned}}[n] - g \cdot x_{\text{aligned}}[n]\|^2$ | $\hat{g} = \frac{\sum x[n] y[n]}{\sum x[n]^2}$ (`compute_least_squares_gain`) | Linear Regression / LS Metrology |
 | **Acoustic Residual Energy** | $e[n] = y_{\text{aligned}}[n] - x_{\text{aligned}}[n]$ | $\text{RMSE}, \text{NRMSE}, \text{SER (dB)}$ (`validate_signals`) | Rangayyan (R001), Oppenheim (R002) |
 | **Spectral Energy Profile** | $S_{xx}(f) = \frac{1}{f_s S_2} \langle \|\text{FFT}\{w \cdot x\}\|^2 \rangle$ | Welch Averaged Periodogram (`compute_spectral_frame`) | Welch (R004), Heinzel (R003) |
-| **Linear Relationship Degree** | $\gamma_{xy}^2(f) = \frac{\|S_{xy}(f)\|^2}{S_{xx}(f) S_{yy}(f)}$ | Magnitude-Squared Coherence (`scipy.signal.coherence`) | Oppenheim (R002), Rangayyan (R001) |
+| **Frequency-Dependent Linear Association** | $\gamma_{xy}^2(f) = \frac{\|S_{xy}(f)\|^2}{S_{xx}(f) S_{yy}(f)}$ | Magnitude-Squared Coherence (`scipy.signal.coherence`) (Note: alone does not establish causality) | Oppenheim (R002), Rangayyan (R001) |

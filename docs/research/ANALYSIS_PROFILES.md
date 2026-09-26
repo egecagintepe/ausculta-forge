@@ -19,8 +19,8 @@ Analysis profiles enforce reproducibility across automated tests, offline labora
 - **Sample Rate Policy:** Native hardware rate ($48,000\text{ Hz}$).
 - **Filter Policy:** None (All-pass bypass).
 - **Spectral Policy:**
-  - Window: Hann, $N_{\text{perseg}} = 2048$, $N_{\text{overlap}} = 1024$.
-  - Bin Spacing: $\Delta f = 48000 / 2048 = 23.44\text{ Hz}$.
+  - Window: Hann, $n_{\text{perseg}} = 2048$, $n_{\text{overlap}} = 1024$.
+  - Bin Spacing: $\Delta f = 48000 / 2048 = 23.44\text{ Hz}$ (discrete frequency-bin spacing, not physical resolving power).
   - Detrend: None.
   - Scaling: Power Spectral Density ($\text{FS}^2/\text{Hz}$).
 - **Feature Policy:** Digital clipping counter ($\ge 0\text{ dBFS}$), `container_bits = 32`, `transmitted_data_bits = 24`.
@@ -31,12 +31,13 @@ Analysis profiles enforce reproducibility across automated tests, offline labora
 ### 2.2. `GENERAL_PCG_V1`
 - **Identifier:** `GENERAL_PCG_V1` (Version `1.0.0`)
 - **Purpose:** Engineering live monitoring and display passband for acoustic heart sound visualization.
+- **Passband Semantics:** Provisional engineering development preset; attenuates content outside 20–600 Hz (does not eliminate noise). Content below 20 Hz is a very-low-frequency (VLF) region (drift, motion/contact artifacts, and potential legitimate mechanical content); content above 600 Hz is extended/high-frequency acoustic content (not automatically noise). Neither region is assigned pathological meaning.
 - **Sample Rate Policy:** Native ($48,000\text{ Hz}$) or specimen native rate.
 - **Filter Policy:**
   - Prototype: 4th-order Butterworth bandpass ($20\text{--}600\text{ Hz}$).
   - Structure: Cascaded Second-Order Sections (SOS), strictly causal IIR.
 - **Spectral Policy:**
-  - Window: Hann, $N_{\text{perseg}} = 512$, $N_{\text{overlap}} = 256$.
+  - Window: Hann, $n_{\text{perseg}} = 512$, $n_{\text{overlap}} = 256$.
   - Detrend: Constant (DC subtraction).
   - Scaling: Power Spectral Density ($\text{FS}^2/\text{Hz}$).
 - **Feature Policy:** RMS, Peak, Crest Factor, Band Energy Ratios ($0\text{--}20$, $20\text{--}150$, $150\text{--}600$, $>600\text{ Hz}$).
@@ -57,7 +58,7 @@ Analysis profiles enforce reproducibility across automated tests, offline labora
   - Raw cross-correlation delay estimation (ms and samples); reported NCC (centered Pearson correlation) after alignment.
   - Least-squares gain ($\hat{g}$).
   - RMSE (evaluated directly on $y_{\text{aligned}} - x_{\text{aligned}}$ without gain scaling), NRMSE (divided by $\text{RMS}(x_{\text{aligned}})$), SER (dB, capped at 100 dB).
-  - Magnitude-squared coherence ($\gamma^2(f)$) with engineering PCG passband mean ($20\text{--}600\text{ Hz}$).
+  - Magnitude-squared coherence ($\gamma^2(f)$) with engineering PCG passband mean ($20\text{--}600\text{ Hz}$); evaluates frequency-dependent linear association under estimator assumptions (alone does not establish causality).
 - **Literature Basis:** Rangayyan (R001), Oppenheim & Schafer (R002), Heinzel et al. (R003), Welch (R004).
 
 ---
@@ -78,15 +79,30 @@ Analysis profiles enforce reproducibility across automated tests, offline labora
 
 ### 2.5. `SPRINGER_SEGMENTATION_RESEARCH_V1`
 - **Identifier:** `SPRINGER_SEGMENTATION_RESEARCH_V1` (Version `1.0.0`)
-- **Purpose:** Research reproduction profile for the Springer et al. (2016) 4-feature downsampled stream for future LR-HSMM state decoding.
-- **Sample Rate Policy:** Downsample audio to $1,000\text{ Hz}$; compute envelopes; downsample feature streams to $50\text{ Hz}$.
-- **Filter Policy:** Polyphase anti-aliasing low-pass filter to $1,000\text{ Hz}$ (`springer_polyphase_anti_alias_1000hz`). Schmidt 25–400 Hz Butterworth is not mixed into this profile to preserve strict single-source traceability.
-- **Feature Policy:** Four normalized feature envelopes at $50\text{ Hz}$:
-  1. Homomorphic envelope
-  2. Hilbert envelope
-  3. Wavelet envelope (stationary wavelet transform level 3)
-  4. Power spectral density envelope
-- **Segmentation Policy:** Logistic Regression emission probabilities + Modified Viterbi duration tracking (Planned).
+- **Purpose:** Research reproduction profile for Springer et al. (2016) 4-feature downsampled stream for future LR-HSMM state decoding.
+- **Verified R006 Pipeline:**
+  - Raw PCG $\to$ polyphase anti-alias downsample to $1,000\text{ Hz}$.
+  - Feature extraction at $1,000\text{ Hz}$:
+    1. Homomorphic envelope
+    2. Hilbert transform envelope
+    3. Wavelet envelope (stationary wavelet transform level 3)
+    4. Power spectral density envelope: mean PSD from $40\text{--}60\text{ Hz}$, $50\text{ ms}$ analysis window ($n_{\text{perseg}} = 50$ samples at $1,000\text{ Hz}$), $50\%$ overlap ($n_{\text{overlap}} = 25$ samples), Hamming window. No arbitrary $N_{\text{FFT}}$ is invented.
+  - Per-recording feature normalization: subtract mean / divide standard deviation ($z$-score normalization).
+  - Downsample feature vectors to $50\text{ Hz}$ ($20\text{ ms}$ feature cadence).
+- **Filter Policy:** Polyphase anti-aliasing low-pass filter to $1,000\text{ Hz}$ (`springer_polyphase_anti_alias_1000hz`). Schmidt 25–400 Hz Butterworth is kept OUT of this strict profile to preserve verified R006 provenance.
+- **Spectral Policy:**
+  - Window: Hamming
+  - $n_{\text{perseg}} = 50$
+  - $n_{\text{overlap}} = 25$
+  - $N_{\text{FFT}} = \text{None}$
+  - Detrend: Constant
+- **Feature Policy:**
+  - `psd_envelope_band_hz`: `[40, 60]`
+  - `psd_envelope_window_seconds`: `0.05`
+  - `psd_envelope_overlap_fraction`: `0.5`
+  - `per_recording_z_normalization`: `true`
+  - `feature_sampling_rate_hz`: `50.0`
+- **Segmentation Policy:** Logistic Regression emission probabilities + Modified Viterbi duration tracking (Planned Stage B).
 - **Literature Basis:** Springer et al. (R006), Liu et al. (R007).
 
 ---

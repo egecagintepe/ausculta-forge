@@ -27,6 +27,11 @@ R001 serves as the primary scientific authority for phonocardiographic signal mo
    - $S_2$ (second heart sound): Associated with closure of aortic and pulmonary valves; higher frequency content, typically $50\text{--}250\text{ Hz}$.
    - Heart murmurs: Turbulent blood flow; high-frequency acoustic components extending up to $600\text{ Hz}$ or higher.
 2. **Bandpass Filtering Policy:**
-   - Literature supports PCG filtering and frequency-domain characterization; the AuscultaForge $20\text{--}600\text{ Hz}$ passband (`GENERAL_PCG_V1`) is a provisional/general engineering development preset designed to capture fundamental components while attenuating low-frequency drift and high-frequency noise. It is NOT a universal medical standard.
-3. **Spectral Ratios:**
-   - Motivates the 4-band engineering spectral energy partition used in the Session Analysis Workbench: $0\text{--}20\text{ Hz}$ (drift/artifact), $20\text{--}150\text{ Hz}$ (fundamental heart sounds), $150\text{--}600\text{ Hz}$ (murmurs/clicks), and $>600\text{ Hz}$ (sensor/acoustic noise). These partitions are engineering metrics, not direct pathology indicators.
+   - Literature supports PCG filtering and frequency-domain characterization; the AuscultaForge $20\text{--}600\text{ Hz}$ passband (`GENERAL_PCG_V1`) is a provisional engineering development preset that attenuates content outside the development passband (it does not "eliminate" noise). It is NOT a universal medical standard.
+3. **Spectral Ratios & Partitions:**
+   - Motivates the 4-band engineering spectral energy partition used in the Session Analysis Workbench:
+     - $0\text{--}20\text{ Hz}$: Very-low-frequency (VLF) region; may contain sensor DC drift and motion/contact artifacts, AND potentially legitimate mechanical/acoustic cardiac content.
+     - $20\text{--}150\text{ Hz}$: Fundamental cardiac acoustic energy ($S_1, S_2$).
+     - $150\text{--}600\text{ Hz}$: Extended cardiac acoustic band (higher frequency heart sounds, murmurs, clicks).
+     - $>600\text{ Hz}$: Extended/high-frequency acoustic content (not automatically noise).
+   - These partitions are purely descriptive engineering metrics, not direct pathology or diagnostic indicators.

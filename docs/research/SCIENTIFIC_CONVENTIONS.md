@@ -95,15 +95,26 @@ Exact metrological terms must be maintained without colloquial interchangeabilit
 | **Linear Spectral Density (LSD)** | $\sqrt{S_{xx}(f)}$ | $\text{FS} / \sqrt{\text{Hz}}$ | Amplitude spectral density per $\sqrt{\text{Hz}}$. |
 | **Spectrogram / STFT** | Time-localized windowed Fourier transform | Matrix over $(t, f)$ | Time-frequency visualization. |
 
-### 3.1. Frequency Bin Spacing Invariant
-The discrete frequency bin spacing is governed solely by the FFT length:
+### 3.1. Frequency-Bin Spacing Invariant
+The discrete frequency-bin spacing is governed by the sampling rate and FFT transform length:
 
-$$\Delta f = \frac{f_s}{N_{\text{fft}}}$$
+$$\Delta f = \frac{f_s}{N_{\text{FFT}}}$$
+
+**Distinction Between Frequency-Bin Spacing and Spectral Resolving Power:**
+Frequency-bin spacing $\Delta f = f_s / N_{\text{FFT}}$ defines the discrete frequency grid interval. It must **not** be automatically called or equated to the "minimum separable frequency resolution" or physical spectral resolving power.
+
+Effective spectral resolution is fundamentally governed by the finite time-domain observation length ($N_{\text{samples}}$), segment/window length ($n_{\text{perseg}}$), and the window function's main-lobe width (e.g. Equivalent Noise Bandwidth and main-lobe characteristics documented in Heinzel et al., R003). Applying zero-padding ($N_{\text{FFT}} > n_{\text{perseg}}$) interpolates the underlying Discrete-Time Fourier Transform (DTFT) on a denser grid, producing closely spaced frequency samples without creating new physical resolving information.
+
+Notation standards:
+- $N_{\text{samples}}$: Total sample count in the recording or time sequence.
+- $n_{\text{perseg}}$: Length of each windowed segment / analysis block (samples).
+- $N_{\text{FFT}}$: FFT transform size in samples ($N_{\text{FFT}} \ge n_{\text{perseg}}$).
+- $\Delta f$: Discrete frequency-bin spacing ($f_s / N_{\text{FFT}}$).
 
 ### 3.2. Block Size vs. Spectral Window Length
-- **Acquisition Packet Size:** 512 samples at $48\text{ kHz}$ represents $10.67\text{ ms}$ of time, which yields $\Delta f = 48000 / 512 = 93.75\text{ Hz}$.
-- **Metrological Consequence:** A single 512-sample hardware packet is completely inadequate for PCG spectral analysis, where resolution of $5\text{--}10\text{ Hz}$ is required to separate fundamental cardiac frequencies.
-- **Invariant:** Spectral analysis aggregates multiple hardware blocks into an appropriate rolling window ($N \ge 2048$ or downsampled $N=512$ at 4 kHz) to achieve adequate frequency resolution ($\Delta f \le 8\text{ Hz}$).
+- **Acquisition Packet Size:** 512 samples at $48\text{ kHz}$ represents $10.67\text{ ms}$ of time, which yields a frequency-bin spacing of $\Delta f = 48000 / 512 = 93.75\text{ Hz}$.
+- **Metrological Consequence:** A single 512-sample hardware packet is completely inadequate for PCG spectral analysis, where bin spacing and resolving capability of $5\text{--}10\text{ Hz}$ are required to separate fundamental cardiac frequencies.
+- **Invariant:** Spectral analysis aggregates multiple hardware blocks into an appropriate rolling window ($n_{\text{perseg}} \ge 2048$ or downsampled $n_{\text{perseg}}=512$ at 4 kHz) to achieve adequate frequency-bin spacing ($\Delta f \le 8\text{ Hz}$ at 4 kHz).
 
 ---
 
@@ -112,7 +123,12 @@ $$\Delta f = \frac{f_s}{N_{\text{fft}}}$$
 1. **No Universal Clinical Band:** There is no single universally recognized "clinical PCG band" in medical literature. Different clinical guidelines and historical analog stethoscopes emphasize different ranges:
    - Bell Mode: $20\text{--}200\text{ Hz}$ (low-frequency gallops, third/fourth heart sounds).
    - Diaphragm Mode: $100\text{--}500\text{ Hz}$ (high-frequency murmurs, valve clicks).
-   - AuscultaForge Engineering Preset: $20\text{--}600\text{ Hz}$ (provisional engineering development passband; literature supports filtering and frequency characterization (R001, R002), but this specific band is an engineering development choice, NOT a clinical standard).
+   - AuscultaForge Provisional Engineering Preset: $20\text{--}600\text{ Hz}$ (`GENERAL_PCG_V1`):
+     - This is a provisional engineering development preset, NOT an externally validated clinical standard or diagnostic band.
+     - The 4th-order Butterworth filter attenuates content outside the development passband; it does NOT eliminate noise below 20 Hz or above 600 Hz.
+     - The region below 20 Hz is a very-low-frequency (VLF) band that may contain sensor DC drift and motion/contact artifacts, AND potentially legitimate mechanical/acoustic content.
+     - The region above 600 Hz is extended/high-frequency acoustic content, not automatically noise.
+     - Neither region may be assigned pathological or clinical diagnostic meaning.
 2. **Causal vs. Zero-Phase Filtering:**
    - **Live Streaming (`pcg_core.dsp.StreamingBandpass`):** Strictly causal IIR filtering ($y[n] = \sum b_k x[n-k] - \sum a_k y[n-k]$ via `process()`). Introduces frequency-dependent group delay.
    - **Offline Post-Processing:** If zero-phase forward-backward filtering (`sosfiltfilt`) is ever used, metadata must explicitly record `"phase_policy": "zero_phase_noncausal"`.

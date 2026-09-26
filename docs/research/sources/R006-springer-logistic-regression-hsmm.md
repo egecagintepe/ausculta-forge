@@ -13,13 +13,16 @@
 R006 is the authoritative modern reference for automated PCG cycle segmentation, extending Schmidt et al. (R005) with multi-feature fusion and discriminative logistic regression emission modeling.
 
 ### Key Architectural Components:
-1. **Multi-Rate Downsampling Pipeline:**
-   - Audio input downsampled to $1,000\text{ Hz}$ using polyphase anti-aliasing filtering.
-   - Note: The 25–400 Hz 4th-order Butterworth filter is the baseline filter from Schmidt et al. (R005). Springer et al. focuses on the 1000 Hz polyphase downsampled signal and extracts four normalized envelope features decimated to **$50\text{ Hz}$** ($20\text{ ms}$ feature cadence):
+1. **Verified R006 Feature Extraction Pipeline:**
+   - Raw PCG $\to$ polyphase anti-alias downsample to $1,000\text{ Hz}$ (`springer_polyphase_anti_alias_1000hz`).
+   - Note on Filter Provenance: Schmidt's 25–400 Hz 4th-order Butterworth filter (R005) is kept OUT of the strict Springer profile to maintain single-source provenance.
+   - Four feature envelopes extracted at $1,000\text{ Hz}$:
      - **Feature 1: Homomorphic Envelope:** Captures low-frequency pulse shape.
      - **Feature 2: Hilbert Transform Envelope:** Captures instantaneous energy peaks.
      - **Feature 3: Stationary Wavelet Transform (SWT):** Decomposes energy in the 40–128 Hz band (Level 3).
-     - **Feature 4: Power Spectral Density Envelope:** Short-time Fourier energy in the 40–50 Hz subband.
+     - **Feature 4: Power Spectral Density Envelope:** Mean PSD across the **40–60 Hz** band using a $50\text{ ms}$ analysis window ($n_{\text{perseg}} = 50$ samples at $1,000\text{ Hz}$), $50\%$ overlap ($n_{\text{overlap}} = 25$ samples), and a Hamming window (`window="hamming"`). No arbitrary $N_{\text{FFT}}$ is invented.
+   - Per-recording feature normalization: subtract mean / divide standard deviation ($z$-score normalization).
+   - Feature vectors downsampled to **$50\text{ Hz}$** ($20\text{ ms}$ feature cadence).
 2. **Logistic Regression Emission Probabilities:**
    - Replaces traditional generative Gaussian Mixture Models (GMMs) with multinomial logistic regression, directly estimating state posterior probabilities:
      $$P(q_t = j \mid \mathbf{o}_t) = \frac{\exp(\mathbf{w}_j^T \mathbf{o}_t)}{\sum_{k=1}^4 \exp(\mathbf{w}_k^T \mathbf{o}_t)}$$
