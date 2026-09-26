@@ -22,6 +22,22 @@ from .recording import (
     get_session,
     create_session_source,
 )
+from .scientific_config import (
+    SignalRepresentation,
+    SignalUnit,
+    validate_unit_usage,
+    DetrendMode,
+    SpectralScaling,
+    SpectralAnalysisConfig,
+    AnalysisProfile,
+    get_analysis_profile,
+    list_analysis_profiles,
+    RAW_INTEGRITY_V1,
+    GENERAL_PCG_V1,
+    PHANTOM_VALIDATION_V1,
+    PCG_EVENT_FEATURES_V1,
+    SPRINGER_SEGMENTATION_RESEARCH_V1,
+)
 
 def __getattr__(name: str):
     if name in ("ExperimentConfig", "run_experiment", "run_single_experiment"):

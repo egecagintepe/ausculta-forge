@@ -579,6 +579,8 @@ class AnalysisService:
                 "python_version": platform.python_version(),
                 "numpy_version": np.__version__,
                 "scipy_version": scipy.__version__,
+                "analysis_profile_id": "PHANTOM_VALIDATION_V1",
+                "analysis_profile_version": "1.0.0",
             },
         }
 
