@@ -104,8 +104,8 @@ Instead of asserting an uncalibrated $H(f)$, AuscultaForge currently implements 
 
 | Physical Effect | Mathematical Model | Implementation | Source Trace |
 |---|---|---|---|
-| **Bulk Propagation Delay** | $y[n] \approx g \cdot x[n - D] + v[n]$ | $\arg\max_k R_{xy}[k]$ | Oppenheim (R002), Rangayyan (R001) |
-| **Linear Scale Attenuation** | $\min_g \|y[n] - g \cdot x[n - D]\|^2$ | $\hat{g} = \frac{\sum x[n] y[n]}{\sum x[n]^2}$ | Linear Regression / LS Metrology |
-| **Acoustic Residual Energy** | $e[n] = y[n] - \hat{g} \cdot x[n - D]$ | $\text{RMSE}, \text{NRMSE}, \text{SER (dB)}$ | Rangayyan (R001) |
-| **Spectral Energy Profile** | $P_{xx}(f) = \frac{1}{\text{ENBW}} \langle \|\text{FFT}\{w \cdot x\}\|^2 \rangle$ | Welch Averaged Periodogram | Welch (R004), Heinzel (R003) |
-| **Linear Relationship Degree** | $\gamma_{xy}^2(f) = \frac{\|P_{xy}(f)\|^2}{P_{xx}(f) P_{yy}(f)}$ | Magnitude-Squared Coherence | Oppenheim (R002), Rangayyan (R001) |
+| **Bulk Propagation Delay** | $y[n] \approx g \cdot x[n - D] + v[n]$ | $\arg\max_m R_{yx}[m]$ (`estimate_delay_and_align`) | Oppenheim (R002), Rangayyan (R001) |
+| **Linear Scale Attenuation** | $\min_g \|y_{\text{aligned}}[n] - g \cdot x_{\text{aligned}}[n]\|^2$ | $\hat{g} = \frac{\sum x[n] y[n]}{\sum x[n]^2}$ (`compute_least_squares_gain`) | Linear Regression / LS Metrology |
+| **Acoustic Residual Energy** | $e[n] = y_{\text{aligned}}[n] - x_{\text{aligned}}[n]$ | $\text{RMSE}, \text{NRMSE}, \text{SER (dB)}$ (`validate_signals`) | Rangayyan (R001), Oppenheim (R002) |
+| **Spectral Energy Profile** | $S_{xx}(f) = \frac{1}{f_s S_2} \langle \|\text{FFT}\{w \cdot x\}\|^2 \rangle$ | Welch Averaged Periodogram (`compute_spectral_frame`) | Welch (R004), Heinzel (R003) |
+| **Linear Relationship Degree** | $\gamma_{xy}^2(f) = \frac{\|S_{xy}(f)\|^2}{S_{xx}(f) S_{yy}(f)}$ | Magnitude-Squared Coherence (`scipy.signal.coherence`) | Oppenheim (R002), Rangayyan (R001) |

@@ -56,20 +56,27 @@ class TestSignalRepresentationsAndUnits:
             SignalUnit.VOLTS_UNSPECIFIED,
         ]
         for u in permitted:
-            validate_unit_usage(u, has_calibration_certificate=False)
+            validate_unit_usage(u, has_acoustic_calibration=False)
 
     def test_restricted_acoustic_units_rejected_without_calibration(self):
-        with pytest.raises(ValueError, match="certified physical acoustic calibration"):
+        with pytest.raises(ValueError, match="calibrated acoustic measurement chain"):
+            validate_unit_usage(SignalUnit.PASCAL, has_acoustic_calibration=False)
+
+        with pytest.raises(ValueError, match="calibrated acoustic measurement chain"):
+            validate_unit_usage(SignalUnit.DB_SPL, has_acoustic_calibration=False)
+
+        with pytest.raises(ValueError, match="calibrated acoustic measurement chain"):
+            validate_unit_usage("pascal", has_acoustic_calibration=False)
+
+        # Legacy alias has_calibration_certificate also works
+        with pytest.raises(ValueError, match="calibrated acoustic measurement chain"):
             validate_unit_usage(SignalUnit.PASCAL, has_calibration_certificate=False)
 
-        with pytest.raises(ValueError, match="certified physical acoustic calibration"):
-            validate_unit_usage(SignalUnit.DB_SPL, has_calibration_certificate=False)
-
-        with pytest.raises(ValueError, match="certified physical acoustic calibration"):
-            validate_unit_usage("pascal", has_calibration_certificate=False)
-
-    def test_restricted_acoustic_units_accepted_with_explicit_certificate(self):
-        # When calibration certificate is true, validation passes
+    def test_restricted_acoustic_units_accepted_with_explicit_calibration(self):
+        # When acoustic calibration is present, validation passes
+        validate_unit_usage(SignalUnit.PASCAL, has_acoustic_calibration=True)
+        validate_unit_usage(SignalUnit.DB_SPL, has_acoustic_calibration=True)
+        # Legacy parameter alias supported
         validate_unit_usage(SignalUnit.PASCAL, has_calibration_certificate=True)
         validate_unit_usage(SignalUnit.DB_SPL, has_calibration_certificate=True)
 
@@ -227,3 +234,73 @@ class TestAnalysisProfiles:
         assert loaded["analysis_id"] == legacy_analysis_id
         assert "provenance" in loaded
         assert "analysis_profile_id" not in loaded["provenance"]  # Not retroactively falsified
+
+
+class TestScientificConsistencyRegression:
+    """Verifies that standard analysis profiles do not contradict their typed configurations."""
+
+    def test_raw_integrity_profile_consistency(self):
+        p = RAW_INTEGRITY_V1
+        assert p.profile_id == "RAW_INTEGRITY_V1"
+        assert p.sample_rate_policy == "native_48000_hz"
+        assert p.filter_policy == "none"
+        assert p.calibration_requirement == "uncalibrated_raw_code"
+        assert p.spectral_policy.nperseg == 2048
+        assert p.spectral_policy.effective_noverlap() == 1024
+        assert p.spectral_policy.effective_nfft() == 2048
+        assert p.spectral_policy.detrend == DetrendMode.NONE
+        assert p.spectral_policy.scaling == SpectralScaling.DENSITY
+        assert p.feature_policy["container_bits"] == 32
+        assert p.feature_policy["transmitted_data_bits"] == 24
+
+    def test_general_pcg_profile_consistency(self):
+        p = GENERAL_PCG_V1
+        assert p.profile_id == "GENERAL_PCG_V1"
+        assert "20_600_hz" in p.filter_policy
+        assert p.spectral_policy.nperseg == 512
+        assert p.spectral_policy.effective_noverlap() == 256
+        assert p.spectral_policy.effective_nfft() == 512
+        assert p.spectral_policy.detrend == DetrendMode.CONSTANT
+
+    def test_phantom_validation_profile_consistency(self):
+        p = PHANTOM_VALIDATION_V1
+        assert p.profile_id == "PHANTOM_VALIDATION_V1"
+        assert p.sample_rate_policy == "resample_capture_to_reference"
+        assert p.spectral_policy.nperseg == 512
+        assert p.spectral_policy.effective_noverlap() == 256
+        assert p.spectral_policy.effective_nfft() == 512
+        assert p.spectral_policy.frequency_max_hz == 1000.0
+        assert p.spectral_policy.detrend == DetrendMode.CONSTANT
+        assert p.calibration_requirement == "relative_comparison_only"
+
+    def test_pcg_event_features_profile_consistency(self):
+        p = PCG_EVENT_FEATURES_V1
+        assert p.profile_id == "PCG_EVENT_FEATURES_V1"
+        assert p.sample_rate_policy == "decimate_to_1000_hz"
+        assert p.spectral_policy.nperseg == 256
+        assert p.spectral_policy.effective_noverlap() == 128
+        assert p.feature_policy["candidate_peaks_only"] is True
+
+    def test_springer_segmentation_profile_consistency(self):
+        p = SPRINGER_SEGMENTATION_RESEARCH_V1
+        assert p.profile_id == "SPRINGER_SEGMENTATION_RESEARCH_V1"
+        assert p.sample_rate_policy == "downsample_to_1000_hz_then_features_to_50_hz"
+        # Strict Springer provenance: polyphase anti-aliasing without Schmidt 25-400 Hz conflation
+        assert p.filter_policy == "springer_polyphase_anti_alias_1000hz"
+        assert p.literature_sources == ("R006", "R007")
+        assert p.spectral_policy.nperseg == 128
+        assert p.spectral_policy.effective_noverlap() == 64
+        assert p.calibration_requirement == "dimensionless_features"
+
+    def test_all_standard_profiles_serialize_without_contradiction(self):
+        for profile in list_analysis_profiles():
+            d = profile.to_dict()
+            assert d["profile_id"] == profile.profile_id
+            assert d["profile_version"] == profile.profile_version
+            restored = AnalysisProfile.from_dict(d)
+            assert restored == profile
+
+            # Uncalibrated profiles must not allow Pascal or dB SPL
+            if profile.calibration_requirement != "calibrated_acoustic":
+                with pytest.raises(ValueError, match="calibrated acoustic measurement chain"):
+                    validate_unit_usage(SignalUnit.PASCAL, has_acoustic_calibration=False)

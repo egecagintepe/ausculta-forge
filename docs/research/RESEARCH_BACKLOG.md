@@ -16,8 +16,10 @@ The following topics represent active research gaps. In accordance with the Ausc
 | **GAP-06** | Metrology Uncertainty Budget | Complete Type A (statistical) and Type B (systematic) uncertainty budget for phantom validation. | JCGM 100:2008 (GUM Guide to the Expression of Uncertainty in Measurement). | `RESEARCH_LATER` |
 | **GAP-07** | Sensor Re-positioning Repeatability (Gauge R&R) | Statistical protocol for evaluating sensor placement, contact force variation, and coupling repeatability. | Montgomery, *Design and Analysis of Experiments*; AIAG Measurement Systems Analysis. | `RESEARCH_LATER` |
 | **GAP-08** | Digital MEMS Calibration Methodology | Electrical-to-acoustic calibration methodology without analog test points on the I2S MEMS PCB. | PUI Audio Application Notes; IEEE 269 Standard for Acoustic Measurements. | `RESEARCH_LATER` |
+| **GAP-09** | Bit-Exact Integer Raw Archival | Storage pipeline to record and archive unadulterated integer PCM words (24-bit in 32-bit slot) directly from I2S hardware without host float32 normalization. | Audio engineering data preservation standards (AES31-3 / EBU BWF). | `RESEARCH_LATER` |
 
 ---
+
 
 ## 2. Topic Details & Research Directions
 

@@ -50,7 +50,7 @@ The AuscultaForge desktop software architecture is structured into strictly isol
     Waveform frames arrive in chunks of 128 samples ($\approx 32\text{ ms}$ at $4\text{ kHz}$, yielding $\approx 31\text{ fps}$). The HTML5 Canvas batches min/max bins across its pixel width, rendering smooth physiological waveforms without overloading the browser's main thread.
  4. **Three Signal Representations Invariant:**
     AuscultaForge maintains strict separation across:
-    - **Acquisition Signal:** Full-rate, bit-exact master stream from hardware (Hardware Rev-A: 48 kHz, mono, 24 meaningful bits in 32-bit container).
+    - **Acquisition Signal:** Full-rate master stream from hardware (Hardware Rev-A: 48 kHz, mono, 24 transmitted bits in 32-bit container), ingested as normalized full-rate float32 on the host.
     - **Analysis Signal:** Explicitly processed/resampled signal with declared filter parameters for quantitative evaluation.
     - **Display Signal:** Bounded, decimated representation ($\le 600$ points) computed via peak-preserving shared-time decimation strictly for UI rendering. Display data is never fed into quantitative metric calculations.
  5. **Versioned Analysis Profiles:**

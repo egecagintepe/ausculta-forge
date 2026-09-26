@@ -7,10 +7,11 @@ To prevent confusion between hardware reality, mathematical analysis, and user-i
 ```text
 ┌────────────────────────────────────────────────────────┐
 │ 1. ACQUISITION SIGNAL                                  │
-│ - Bit-exact digital master stream from ADC / I2S       │
-│ - Hardware Rev-A: 48 kHz, mono, 24 meaningful bits     │
-│ - Direct input to SessionRecorder (raw.wav)            │
+│ - Hardware boundary: 24 transmitted bits in 32-bit slot│
+│ - Host ingestion: normalized to full-rate float32      │
+│ - SessionRecorder: full-rate float32 WAV master        │
 │ - Truthful: zero decimation, zero artificial smoothing │
+│ - Note: Bit-exact integer archival tracked in backlog  │
 └───────────────────────────┬────────────────────────────┘
                             │
                             ▼
@@ -36,6 +37,7 @@ To prevent confusion between hardware reality, mathematical analysis, and user-i
 1. **No Metric Contamination:** Metrics (NCC, LS gain, RMSE, SER dB, PSD, coherence) are **never** calculated on display series. They are strictly evaluated on full-rate analysis arrays.
 2. **Truthful Decimation Labeling:** Display decimation must never be described as acquisition decimation or sensor downsampling.
 3. **Decoupled Recording:** A client dropping display frames under backpressure never causes samples to be dropped from the acquisition recording.
+4. **Recording Format Precision:** The current `SessionRecorder` persists full-rate normalized `float32` WAV files. It must **NOT** be described as bit-exact integer 24-bit PCM archival until integer raw disk streaming is implemented.
 
 ---
 
@@ -45,10 +47,13 @@ To prevent confusion between hardware reality, mathematical analysis, and user-i
 Hardware Rev-A operates at:
 - **Sample Rate:** $48,000\text{ samples/s}$
 - **Channels:** 1 (Mono)
-- **Container:** 32-bit signed integer slot
-- **Meaningful Data:** 24 bits (PUI DMM-4026-B-I2S-R MEMS microphone)
+- **Container Word:** 32-bit signed integer slot (`container_bits = 32`)
+- **Transmitted Data Bits:** 24 bits (`transmitted_data_bits = 24`, PUI DMM-4026-B-I2S-R MEMS candidate)
+- **Effective Sensor Precision:** Unknown/profile-specific until backed by physical measurement and datasheet review (`effective_sensor_precision_bits` is uncharacterized).
 
-> **Scientific Clarification:** It is **NOT** claimed that phonocardiographic heart sounds require a 24 kHz Nyquist bandwidth. Clinical PCG diagnostic information concentrates below 1000 Hz. The 48 kHz rate is a hardware standard providing generous oversampling, eliminating analog anti-aliasing filter phase distortion, and enabling wideband phantom acoustic characterization.
+> **Scientific Clarification on Bandwidth & Aliasing:**
+> - It is **NOT** claimed that phonocardiographic heart sounds require a 24 kHz Nyquist bandwidth. Clinical PCG diagnostic information concentrates below 1000 Hz. The 48 kHz rate is a hardware standard providing generous digital oversampling.
+> - High sample rate does **NOT** by itself guarantee anti-aliasing. Digital anti-aliasing is implemented for rate conversion (`scipy.signal.resample_poly`), but analog front-end anti-aliasing depends on the physical MEMS microphone internal sigma-delta ASIC filter response. Overall aliasing protection is therefore classified as `PARTIAL` until hardware bench validation occurs.
 
 ### 2.2. Task-Specific Analysis Downsampling
 Downsampling for specific PCG algorithms is explicitly supported through a declared processing branch:
@@ -56,9 +61,12 @@ Downsampling for specific PCG algorithms is explicitly supported through a decla
 ```text
 48 kHz Raw Acquisition Master
         │
-        ├── Full-Rate Raw Session Recording (raw.wav)
-        ├── Packet Ingestion & Stream Integrity Audit
-        ├── Wideband Acoustic Phantom Validation (20–1000 Hz)
+        ├── Full-Rate Normalized Host Stream (float32 SampleBlock)
+        │       │
+        │       ├── Full-Rate Session Recording (float32 WAV)
+        │       ├── Packet Ingestion & Stream Integrity Audit
+        │       └── Wideband Acoustic Phantom Validation (20–1000 Hz)
+        │
         └── PCG Segmentation Research Branch
                 │
                 ▼ (Scipy resample_poly: rational polyphase anti-aliasing)
@@ -104,9 +112,9 @@ $$\Delta f = \frac{f_s}{N_{\text{fft}}}$$
 1. **No Universal Clinical Band:** There is no single universally recognized "clinical PCG band" in medical literature. Different clinical guidelines and historical analog stethoscopes emphasize different ranges:
    - Bell Mode: $20\text{--}200\text{ Hz}$ (low-frequency gallops, third/fourth heart sounds).
    - Diaphragm Mode: $100\text{--}500\text{ Hz}$ (high-frequency murmurs, valve clicks).
-   - AuscultaForge Engineering Preset: $20\text{--}600\text{ Hz}$ (broad development passband).
+   - AuscultaForge Engineering Preset: $20\text{--}600\text{ Hz}$ (provisional engineering development passband; literature supports filtering and frequency characterization (R001, R002), but this specific band is an engineering development choice, NOT a clinical standard).
 2. **Causal vs. Zero-Phase Filtering:**
-   - **Live Streaming (`pcg_core.dsp.StreamingBandpass`):** Strictly causal IIR filtering ($y[n] = \sum b_k x[n-k] - \sum a_k y[n-k]$). Introduces frequency-dependent group delay.
+   - **Live Streaming (`pcg_core.dsp.StreamingBandpass`):** Strictly causal IIR filtering ($y[n] = \sum b_k x[n-k] - \sum a_k y[n-k]$ via `process()`). Introduces frequency-dependent group delay.
    - **Offline Post-Processing:** If zero-phase forward-backward filtering (`sosfiltfilt`) is ever used, metadata must explicitly record `"phase_policy": "zero_phase_noncausal"`.
 3. **Maximally Flat $\ne$ Zero Phase Distortion:** The Butterworth magnitude response is maximally flat in the passband with no equiripple ripple; however, its phase response is non-linear, especially near the 20 Hz and 600 Hz cutoff edges.
 

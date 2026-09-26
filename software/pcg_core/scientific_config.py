@@ -73,13 +73,30 @@ class SignalUnit(str, Enum):
     """Sound Pressure Level in dB re 20 uPa. Requires end-to-end calibrated measurement chain."""
 
 
-def validate_unit_usage(unit: SignalUnit | str, has_calibration_certificate: bool = False) -> None:
-    """Validate that uncalibrated physical units are not asserted without calibration metadata."""
+def validate_unit_usage(
+    unit: SignalUnit | str,
+    has_acoustic_calibration: bool = False,
+    has_calibration_certificate: Optional[bool] = None,
+) -> None:
+    """Validate that uncalibrated physical units are not asserted without calibration metadata.
+
+    Parameters
+    ----------
+    unit : SignalUnit | str
+        Target engineering or physical unit.
+    has_acoustic_calibration : bool
+        True if supported by a documented, calibrated acoustic measurement chain.
+    has_calibration_certificate : Optional[bool]
+        Legacy parameter alias for has_acoustic_calibration.
+    """
+    if has_calibration_certificate is not None:
+        has_acoustic_calibration = has_acoustic_calibration or has_calibration_certificate
+
     u_str = unit.value if isinstance(unit, SignalUnit) else str(unit).lower()
     if u_str in (SignalUnit.PASCAL.value, SignalUnit.DB_SPL.value, "pascal", "db_spl"):
-        if not has_calibration_certificate:
+        if not has_acoustic_calibration:
             raise ValueError(
-                f"Unit {u_str!r} requires certified physical acoustic calibration. "
+                f"Unit {u_str!r} requires a documented calibrated acoustic measurement chain. "
                 "AuscultaForge operates in uncalibrated digital full scale (normalized_fs / dBFS) "
                 "until hardware sensor sensitivity (mV/Pa or dBFS/Pa) is calibrated."
             )
@@ -168,7 +185,7 @@ class SpectralAnalysisConfig:
     def enbw(self, sample_rate_hz: float) -> float:
         """Compute Equivalent Noise Bandwidth (ENBW) in Hertz.
 
-        Equation (Heinzel et al., 2002, Eq. 17):
+        Formulation (Heinzel et al., 2002, Section 4 / Window metrics):
             ENBW = f_s * (sum(w[n]^2) / (sum(w[n]))^2)
         """
         if sample_rate_hz <= 0:
@@ -187,8 +204,10 @@ class SpectralAnalysisConfig:
         return {
             "window": self.window,
             "nperseg": self.nperseg,
-            "noverlap": self.effective_noverlap(),
-            "nfft": self.effective_nfft(),
+            "noverlap": self.noverlap,
+            "nfft": self.nfft,
+            "effective_noverlap": self.effective_noverlap(),
+            "effective_nfft": self.effective_nfft(),
             "detrend": self.detrend.value,
             "scaling": self.scaling.value,
             "frequency_min_hz": self.frequency_min_hz,
@@ -267,7 +286,7 @@ class AnalysisProfile:
 RAW_INTEGRITY_V1 = AnalysisProfile(
     profile_id="RAW_INTEGRITY_V1",
     profile_version="1.0.0",
-    purpose="Hardware packet ingestion integrity, drop counting, and bit-exact raw capture.",
+    purpose="Hardware packet ingestion integrity, drop counting, and raw capture integrity.",
     sample_rate_policy="native_48000_hz",
     filter_policy="none",
     spectral_policy=SpectralAnalysisConfig(
@@ -277,7 +296,7 @@ RAW_INTEGRITY_V1 = AnalysisProfile(
         scaling=SpectralScaling.DENSITY,
         detrend=DetrendMode.NONE,
     ),
-    feature_policy={"compute_clipping": True, "bit_depth": 24},
+    feature_policy={"compute_clipping": True, "container_bits": 32, "transmitted_data_bits": 24},
     calibration_requirement="uncalibrated_raw_code",
     literature_sources=("R002", "R003"),
 )
@@ -354,7 +373,7 @@ SPRINGER_SEGMENTATION_RESEARCH_V1 = AnalysisProfile(
     profile_version="1.0.0",
     purpose="Research reproduction profile for Springer et al. (2016) 4-feature downsampled stream.",
     sample_rate_policy="downsample_to_1000_hz_then_features_to_50_hz",
-    filter_policy="butterworth_bandpass_25_400_hz_order4",
+    filter_policy="springer_polyphase_anti_alias_1000hz",
     spectral_policy=SpectralAnalysisConfig(
         window="hann",
         nperseg=128,
@@ -370,7 +389,7 @@ SPRINGER_SEGMENTATION_RESEARCH_V1 = AnalysisProfile(
     },
     segmentation_policy="lr_hsmm_modified_viterbi_planned",
     calibration_requirement="dimensionless_features",
-    literature_sources=("R005", "R006", "R007"),
+    literature_sources=("R006", "R007"),
 )
 
 STANDARD_PROFILES: dict[str, AnalysisProfile] = {

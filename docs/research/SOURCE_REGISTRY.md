@@ -31,7 +31,7 @@ This document records the foundational scientific literature governing the Auscu
   - Nonstationary PCG signal filtering, baseline wander removal, and muscle artifact rejection.
   - Fourier analysis, power spectral density, dominant frequency detection, and spectral power ratios.
   - Cross-spectral analysis and coherence for acoustic transmission systems.
-- **Project Mapping:** Justifies the 20–600 Hz general PCG passband, spectral band ratios, and envelope feature extraction methods.
+- **Project Mapping:** Supports PCG filtering concepts, spectral band ratios, and envelope feature extraction methods (AuscultaForge 20–600 Hz is a provisional engineering development preset, NOT an externally validated clinical standard).
 
 ### R002 — Oppenheim, A. V., & Schafer, R. W. (2010)
 - **Full Title:** *Discrete-Time Signal Processing* (3rd Edition).

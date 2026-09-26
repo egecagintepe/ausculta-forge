@@ -27,6 +27,6 @@ R001 serves as the primary scientific authority for phonocardiographic signal mo
    - $S_2$ (second heart sound): Associated with closure of aortic and pulmonary valves; higher frequency content, typically $50\text{--}250\text{ Hz}$.
    - Heart murmurs: Turbulent blood flow; high-frequency acoustic components extending up to $600\text{ Hz}$ or higher.
 2. **Bandpass Filtering Policy:**
-   - Justifies the AuscultaForge $20\text{--}600\text{ Hz}$ general engineering bandpass filter (`GENERAL_PCG_V1`), which preserves $S_1$, $S_2$, and clinically relevant murmurs while attenuating motion artifacts (<20 Hz) and high-frequency noise (>600 Hz).
+   - Literature supports PCG filtering and frequency-domain characterization; the AuscultaForge $20\text{--}600\text{ Hz}$ passband (`GENERAL_PCG_V1`) is a provisional/general engineering development preset designed to capture fundamental components while attenuating low-frequency drift and high-frequency noise. It is NOT a universal medical standard.
 3. **Spectral Ratios:**
-   - Motivates the 4-band spectral energy partition used in the Session Analysis Workbench: $0\text{--}20\text{ Hz}$ (drift/artifact), $20\text{--}150\text{ Hz}$ (fundamental heart sounds), $150\text{--}600\text{ Hz}$ (murmurs/clicks), and $>600\text{ Hz}$ (sensor/acoustic noise).
+   - Motivates the 4-band engineering spectral energy partition used in the Session Analysis Workbench: $0\text{--}20\text{ Hz}$ (drift/artifact), $20\text{--}150\text{ Hz}$ (fundamental heart sounds), $150\text{--}600\text{ Hz}$ (murmurs/clicks), and $>600\text{ Hz}$ (sensor/acoustic noise). These partitions are engineering metrics, not direct pathology indicators.

@@ -15,7 +15,7 @@ Analysis profiles enforce reproducibility across automated tests, offline labora
 
 ### 2.1. `RAW_INTEGRITY_V1`
 - **Identifier:** `RAW_INTEGRITY_V1` (Version `1.0.0`)
-- **Purpose:** Hardware ingestion integrity audit, packet loss detection, clipping analysis, and unadulterated archival.
+- **Purpose:** Hardware ingestion integrity audit, packet loss detection, clipping analysis, and raw capture integrity.
 - **Sample Rate Policy:** Native hardware rate ($48,000\text{ Hz}$).
 - **Filter Policy:** None (All-pass bypass).
 - **Spectral Policy:**
@@ -23,7 +23,7 @@ Analysis profiles enforce reproducibility across automated tests, offline labora
   - Bin Spacing: $\Delta f = 48000 / 2048 = 23.44\text{ Hz}$.
   - Detrend: None.
   - Scaling: Power Spectral Density ($\text{FS}^2/\text{Hz}$).
-- **Feature Policy:** Digital clipping counter ($\ge 0\text{ dBFS}$), ADC word alignment audit.
+- **Feature Policy:** Digital clipping counter ($\ge 0\text{ dBFS}$), `container_bits = 32`, `transmitted_data_bits = 24`.
 - **Literature Basis:** Oppenheim & Schafer (R002), Heinzel et al. (R003).
 
 ---
@@ -54,10 +54,10 @@ Analysis profiles enforce reproducibility across automated tests, offline labora
   - Evaluation Range: $0\text{--}1000\text{ Hz}$.
   - Detrend: Constant.
 - **Feature Policy:**
-  - Normalized cross-correlation delay ($ms$ and samples).
+  - Raw cross-correlation delay estimation (ms and samples); reported NCC (centered Pearson correlation) after alignment.
   - Least-squares gain ($\hat{g}$).
-  - RMSE, NRMSE, SER (dB).
-  - Magnitude-squared coherence ($\gamma^2(f)$) with clinical band mean ($20\text{--}600\text{ Hz}$).
+  - RMSE (evaluated directly on $y_{\text{aligned}} - x_{\text{aligned}}$ without gain scaling), NRMSE (divided by $\text{RMS}(x_{\text{aligned}})$), SER (dB, capped at 100 dB).
+  - Magnitude-squared coherence ($\gamma^2(f)$) with engineering PCG passband mean ($20\text{--}600\text{ Hz}$).
 - **Literature Basis:** Rangayyan (R001), Oppenheim & Schafer (R002), Heinzel et al. (R003), Welch (R004).
 
 ---
@@ -80,14 +80,14 @@ Analysis profiles enforce reproducibility across automated tests, offline labora
 - **Identifier:** `SPRINGER_SEGMENTATION_RESEARCH_V1` (Version `1.0.0`)
 - **Purpose:** Research reproduction profile for the Springer et al. (2016) 4-feature downsampled stream for future LR-HSMM state decoding.
 - **Sample Rate Policy:** Downsample audio to $1,000\text{ Hz}$; compute envelopes; downsample feature streams to $50\text{ Hz}$.
-- **Filter Policy:** 4th-order Butterworth bandpass ($25\text{--}400\text{ Hz}$).
+- **Filter Policy:** Polyphase anti-aliasing low-pass filter to $1,000\text{ Hz}$ (`springer_polyphase_anti_alias_1000hz`). Schmidt 25–400 Hz Butterworth is not mixed into this profile to preserve strict single-source traceability.
 - **Feature Policy:** Four normalized feature envelopes at $50\text{ Hz}$:
   1. Homomorphic envelope
   2. Hilbert envelope
   3. Wavelet envelope (stationary wavelet transform level 3)
   4. Power spectral density envelope
 - **Segmentation Policy:** Logistic Regression emission probabilities + Modified Viterbi duration tracking (Planned).
-- **Literature Basis:** Schmidt et al. (R005), Springer et al. (R006), Liu et al. (R007).
+- **Literature Basis:** Springer et al. (R006), Liu et al. (R007).
 
 ---
 

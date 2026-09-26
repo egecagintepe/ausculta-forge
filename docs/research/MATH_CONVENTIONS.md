@@ -44,39 +44,55 @@ $$\text{CF}(x) = \frac{\text{Peak}(x)}{\text{RMS}(x)}$$
 
 ## 3. Signal Alignment & Engineering Comparison Metrics
 
-### 3.1. Discrete Cross-Correlation
-For two sequences $x[n]$ and $y[n]$:
-$$R_{xy}[m] = \sum_{n} x[n] y[n + m]$$
+All signal alignment and comparison metrics are implemented in `software/pcg_core/validation.py`.
 
-### 3.2. Delay Estimation & Sign Convention
-The estimated delay in samples is the peak index of the cross-correlation sequence:
-$$D^* = \arg\max_{m} R_{xy}[m]$$
+### 3.1. Discrete Cross-Correlation for Delay Search
+Delay estimation in `estimate_delay_and_align()` evaluates the raw cross-correlation between the captured sequence $y[n]$ and reference sequence $x[n]$ using `scipy.signal.correlate(cap, ref)`:
+$$R_{yx}[m] = \sum_{n} y[n] x[n - m]$$
+The lag index maximizing raw cross-correlation determines the estimated delay in samples:
+$$D^* = \arg\max_{m} R_{yx}[m]$$
 $$\text{delay\_ms} = \frac{D^*}{f_s} \times 1000.0$$
 
 > **Sign Convention Invariant:**
-> - $\text{delay} > 0$ means the capture lags behind the reference ($y[n]$ arrived after $x[n]$).
+> - $\text{delay} > 0$ means the capture lags behind the reference ($y[n + D^*]$ corresponds to $x[n]$).
 > - $\text{delay} < 0$ means the capture leads the reference.
+> - The lag search operates on raw cross-correlation; it is **NOT** a normalized cross-correlation peak search.
 
-### 3.3. Normalized Cross-Correlation (NCC)
-Over the aligned overlap window of length $M$:
-$$\text{NCC} = \frac{\sum_{n=0}^{M-1} x_{\text{aligned}}[n] y_{\text{aligned}}[n]}{\sqrt{\left(\sum_{n=0}^{M-1} x_{\text{aligned}}^2[n]\right) \left(\sum_{n=0}^{M-1} y_{\text{aligned}}^2[n]\right)}}$$
-- Range: $[-1.0, +1.0]$.
-- $\text{NCC} = 1.0$ indicates identical waveform shape up to a positive linear scalar multiplier.
+### 3.2. Reported Normalized Cross-Correlation (NCC)
+After alignment over the overlapping window of length $M$, `validate_signals()` computes the reported NCC using **mean-centered signals and sample standard deviations** (the sample Pearson correlation coefficient):
+$$\bar{x} = \frac{1}{M}\sum_{n=0}^{M-1} x_{\text{aligned}}[n], \quad \bar{y} = \frac{1}{M}\sum_{n=0}^{M-1} y_{\text{aligned}}[n]$$
+$$s_x = \sqrt{\frac{1}{M}\sum_{n=0}^{M-1} (x_{\text{aligned}}[n] - \bar{x})^2}, \quad s_y = \sqrt{\frac{1}{M}\sum_{n=0}^{M-1} (y_{\text{aligned}}[n] - \bar{y})^2}$$
+$$\text{NCC} = \frac{\frac{1}{M} \sum_{n=0}^{M-1} (x_{\text{aligned}}[n] - \bar{x}) (y_{\text{aligned}}[n] - \bar{y})}{s_x \cdot s_y} = \frac{\text{mean}\left((x_{\text{aligned}} - \bar{x})(y_{\text{aligned}} - \bar{y})\right)}{\text{std}(x_{\text{aligned}}) \cdot \text{std}(y_{\text{aligned}})}$$
+- Range: $[-1.0, +1.0]$ (clipped to $[-1.0, 1.0]$ in code; evaluates to $1.0$ on exact match, $0.0$ if zero variance).
+- Quantifies waveform shape similarity independent of DC bias and scalar amplitude scaling.
+- Note: This is a centered Pearson correlation, **NOT** an uncentered cosine similarity.
 
-### 3.4. Least-Squares Gain ($\hat{g}$)
-Given aligned sequences under the linear model $y[n] = g \cdot x[n] + v[n]$, the optimal scalar gain $\hat{g}$ minimizing the sum of squared errors $\sum (y[n] - g x[n])^2$ is:
+### 3.3. Least-Squares Gain ($\hat{g}$)
+Given aligned sequences, `compute_least_squares_gain()` determines the optimal scalar linear amplitude scaling factor $\hat{g}$ minimizing $\sum (y_{\text{aligned}}[n] - g \cdot x_{\text{aligned}}[n])^2$:
 $$\hat{g} = \frac{\mathbf{x}^T \mathbf{y}}{\mathbf{x}^T \mathbf{x}} = \frac{\sum_{n=0}^{M-1} x_{\text{aligned}}[n] y_{\text{aligned}}[n]}{\sum_{n=0}^{M-1} x_{\text{aligned}}^2[n]}$$
-*Resilient against zero-mean additive Gaussian noise; does not artificially inflate with noise like RMS gain.*
+- Reported as a separate amplitude-scaling metric.
+- Unbiased under zero-mean additive noise uncorrelated with the reference signal, unlike the RMS gain ratio $\text{RMS}(y) / \text{RMS}(x)$ which is inflated by additive noise power.
 
-### 3.5. Root Mean Square Error (RMSE)
-$$\text{RMSE} = \sqrt{\frac{1}{M} \sum_{n=0}^{M-1} \left(y_{\text{aligned}}[n] - \hat{g} \cdot x_{\text{aligned}}[n]\right)^2}$$
+### 3.4. Root Mean Square Error (RMSE)
+Computed directly in `validate_signals()` on the difference between aligned signals:
+$$e[n] = y_{\text{aligned}}[n] - x_{\text{aligned}}[n]$$
+$$\text{RMSE} = \sqrt{\frac{1}{M} \sum_{n=0}^{M-1} \left(y_{\text{aligned}}[n] - x_{\text{aligned}}[n]\right)^2}$$
+- **Current Implementation Note:** Current code evaluates RMSE directly on $y_{\text{aligned}} - x_{\text{aligned}}$. It does **NOT** subtract or remove the least-squares gain $\hat{g}$ before computing RMSE.
 
-### 3.6. Normalized Root Mean Square Error (NRMSE)
+### 3.5. Normalized Root Mean Square Error (NRMSE)
+Computed in `validate_signals()` by normalizing RMSE by the RMS of the aligned reference signal:
 $$\text{NRMSE} = \frac{\text{RMSE}}{\text{RMS}(x_{\text{aligned}})}$$
+- Dimensionless relative error.
+- Range-normalized formulations (such as $\text{RMSE} / (\max y - \min y)$) are **NOT** used in AuscultaForge.
 
-### 3.7. Signal-to-Error Ratio (SER, dB)
-$$\text{SER (dB)} = 10 \log_{10} \left( \frac{\sum_{n=0}^{M-1} x_{\text{aligned}}^2[n]}{\sum_{n=0}^{M-1} \left(y_{\text{aligned}}[n] - \hat{g} \cdot x_{\text{aligned}}[n]\right)^2} \right)$$
-*Quantifies preserved reference energy relative to unexplained residual noise/distortion energy.*
+### 3.6. Signal-to-Error Ratio (SER, dB)
+Computed in `validate_signals()` from reference energy and residual error energy:
+$$\text{SER (dB)} = 10 \log_{10} \left( \frac{\sum_{n=0}^{M-1} x_{\text{aligned}}^2[n]}{\sum_{n=0}^{M-1} \left(y_{\text{aligned}}[n] - x_{\text{aligned}}[n]\right)^2} \right)$$
+- **Finite Bounds:**
+  - If error energy $\sum e^2[n] \le 10^{-15}$, SER is capped at $+100.0\text{ dB}$ (finite perfect match).
+  - If reference energy $\sum x^2[n] \le 10^{-15}$, SER evaluates to $0.0\text{ dB}$.
+- **Current Implementation Note:** Like RMSE, the residual in the denominator is $y_{\text{aligned}} - x_{\text{aligned}}$ without applying least-squares gain $\hat{g}$.
+
 
 ---
 
@@ -91,6 +107,7 @@ $$\hat{P}_{xx}(f) = \frac{1}{K \cdot f_s \cdot S_2} \sum_{i=1}^K |X_i(f)|^2$$
 where $S_2 = \sum_{n=0}^{L-1} w^2[n]$ is the window noise power normalization factor (Heinzel et al., R003).
 
 ### 4.3. Equivalent Noise Bandwidth (ENBW)
+Formulation (Heinzel et al., R003, Section 4 / Window functions and metrics):
 $$\text{ENBW} = f_s \cdot \frac{\sum_{n=0}^{L-1} w^2[n]}{\left(\sum_{n=0}^{L-1} w[n]\right)^2}$$
 
 ### 4.4. Band Energy Fraction

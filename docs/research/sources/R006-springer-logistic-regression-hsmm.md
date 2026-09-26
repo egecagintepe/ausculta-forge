@@ -14,9 +14,8 @@ R006 is the authoritative modern reference for automated PCG cycle segmentation,
 
 ### Key Architectural Components:
 1. **Multi-Rate Downsampling Pipeline:**
-   - Audio input downsampled to $1,000\text{ Hz}$ with anti-aliasing.
-   - Filtered with a 4th-order Butterworth bandpass ($25\text{--}400\text{ Hz}$).
-   - Four complementary envelope features extracted and decimated to **$50\text{ Hz}$** ($20\text{ ms}$ feature cadence):
+   - Audio input downsampled to $1,000\text{ Hz}$ using polyphase anti-aliasing filtering.
+   - Note: The 25–400 Hz 4th-order Butterworth filter is the baseline filter from Schmidt et al. (R005). Springer et al. focuses on the 1000 Hz polyphase downsampled signal and extracts four normalized envelope features decimated to **$50\text{ Hz}$** ($20\text{ ms}$ feature cadence):
      - **Feature 1: Homomorphic Envelope:** Captures low-frequency pulse shape.
      - **Feature 2: Hilbert Transform Envelope:** Captures instantaneous energy peaks.
      - **Feature 3: Stationary Wavelet Transform (SWT):** Decomposes energy in the 40–128 Hz band (Level 3).

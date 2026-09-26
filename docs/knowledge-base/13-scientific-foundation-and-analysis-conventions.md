@@ -15,10 +15,11 @@ AuscultaForge yazılım mimarisinde sinyaller birbirine asla karıştırılmayan
 ```text
 ┌────────────────────────────────────────────────────────┐
 │ 1. EDİNİM SİNYALİ (Acquisition Signal)                 │
-│ - Donanım ADC / I2S veriyolundan gelen ham ana akış    │
-│ - Hardware Rev-A: 48 kHz, mono, 24 anlamlı bit         │
-│ - SessionRecorder ile diske yazılan değişmez temel     │
+│ - Donanım sınırı: 48 kHz, mono, 32-bit slotta 24 bit   │
+│ - Sunucu edinim: tam hızda normalize float32           │
+│ - SessionRecorder: tam hızda float32 WAV kayıt         │
 │ - Sıfır yapay filtre, sıfır seyreltme, tam doğruluk    │
+│ - Not: Bit-exact tamsayı arşivleme araştırma açığıdır │
 └───────────────────────────┬────────────────────────────┘
                             │
                             ▼

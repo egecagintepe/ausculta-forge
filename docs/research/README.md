@@ -74,7 +74,7 @@ No mathematical formulation or parameter is introduced simply because "a paper u
 | **`NEXT_DSP`** | Scientifically approved for immediate development in subsequent milestones; source citations established. | Hilbert envelope, homomorphic envelope, RMS envelope, candidate acoustic event detection, duration features. |
 | **`RESEARCH_LATER`** | Under active literature review; requires formal mathematical modeling before implementation. | Logistic-Regression Hidden Semi-Markov Model (LR-HSMM), modified Viterbi decoding, frequency response function estimators ($H_1, H_2$). |
 | **`THESIS_ONLY`** | Background theory, comparative analysis, or thesis narrative; not part of real-time application code. | Continuous-time acoustic wave propagation in chest tissue, physiological origin of S3/S4 sounds, historical analog stethoscopes. |
-| **`REJECTED`** | Formally considered and rejected due to methodological, physical, or academic invalidity. | Automated AI clinical diagnosis without ground truth, black-box quality scores ("85/100 healthy"), uncalibrated $\text{Pa} / \text{dB SPL}$ reporting, naive downsampling without anti-aliasing. |
+| **`REJECTED`** | Formally considered and rejected due to methodological, physical, or academic invalidity. | Automated AI clinical diagnosis without physiological reference labels, black-box quality scores ("85/100 healthy"), uncalibrated $\text{Pa} / \text{dB SPL}$ reporting, naive downsampling without anti-aliasing. |
 
 ---
 
@@ -83,7 +83,7 @@ No mathematical formulation or parameter is introduced simply because "a paper u
 AuscultaForge enforces an absolute architectural separation across three distinct representations of audio signals:
 
 1. **ACQUISITION SIGNAL:**
-   The bit-exact master digital stream directly ingested from the ADC/I2S bus (Hardware Rev-A: 48 kHz, mono, signed 24 meaningful bits in 32-bit container). Truthful, unadulterated, and preserved by `SessionRecorder`.
+   The master digital stream at the hardware boundary (Hardware Rev-A: 48 kHz, mono, signed 24 transmitted bits in 32-bit container), ingested as normalized full-rate float32 `SampleBlock` sequences on the host and preserved in full-rate float32 WAV session recordings.
 2. **ANALYSIS SIGNAL:**
    An explicitly processed, filtered, or resampled representation used for a declared engineering task (e.g. 20–600 Hz bandpass, or 1000 Hz downsampled feature stream). Parameterized strictly via versioned `AnalysisProfile` declarations.
 3. **DISPLAY SIGNAL:**
