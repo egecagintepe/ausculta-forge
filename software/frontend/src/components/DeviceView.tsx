@@ -78,7 +78,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
             }`}
           >
             <span className={`w-2 h-2 rounded-full ${backendConnected ? 'bg-[var(--status-success)] animate-pulse' : 'bg-[var(--status-warning)]'}`} />
-            <span>{backendConnected ? 'Bridge Connected (4 kHz)' : 'Bridge Disconnected'}</span>
+            <span>{backendConnected ? 'Bridge Connected' : 'Bridge Disconnected'}</span>
           </div>
         </div>
 
@@ -154,11 +154,11 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                   </div>
                   <div>
                     <span className="text-[var(--on-surface-variant)] block">USB CLASS</span>
-                    <strong className="text-[var(--on-surface)]">CDC / Bulk (Pending)</strong>
+                    <strong className="text-[var(--on-surface)]">Rev-A CDC-ACM (Under Review)</strong>
                   </div>
                   <div>
-                    <span className="text-[var(--on-surface-variant)] block">TARGET RATE</span>
-                    <strong className="text-[var(--on-surface)]">4000 Hz Mono</strong>
+                    <span className="text-[var(--on-surface-variant)] block">PHYSICAL PROFILE</span>
+                    <strong className="text-[var(--on-surface)]">Rev-A: 48 kHz Mono (24/32-bit)</strong>
                   </div>
                   <div>
                     <span className="text-[var(--on-surface-variant)] block">PACKET PROTOCOL</span>

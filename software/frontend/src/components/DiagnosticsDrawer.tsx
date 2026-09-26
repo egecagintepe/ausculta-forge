@@ -278,15 +278,27 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
               {deviceStats && (
                 <>
                   <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
-                    <span className="text-[var(--on-surface-variant)]">Packets / Gaps:</span>
+                    <span className="text-[var(--on-surface-variant)]">Packets / Samples:</span>
                     <span className="text-[var(--on-surface)] font-mono-code">
-                      {deviceStats.packets_received} pkts · {deviceStats.sequence_gaps} gaps
+                      {deviceStats.packets_received} pkts · {deviceStats.samples_received} smp
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
-                    <span className="text-[var(--on-surface-variant)]">CRC Failures:</span>
+                    <span className="text-[var(--on-surface-variant)]">Sequence Integrity:</span>
                     <span className="text-[var(--on-surface)] font-mono-code">
-                      {deviceStats.crc_failures}
+                      {deviceStats.sequence_gaps} gaps · {deviceStats.repeated_packets} dup · {deviceStats.out_of_order_packets} ooo
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
+                    <span className="text-[var(--on-surface-variant)]">Frame / CRC:</span>
+                    <span className="text-[var(--on-surface)] font-mono-code">
+                      {deviceStats.crc_failures} crc · {deviceStats.malformed_frames} malformed
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
+                    <span className="text-[var(--on-surface-variant)]">Timing Regression:</span>
+                    <span className="text-[var(--on-surface)] font-mono-code">
+                      {deviceStats.timestamp_regressions} regressions
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">

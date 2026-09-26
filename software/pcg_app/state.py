@@ -103,7 +103,8 @@ class StreamManager:
             "max_buffer_seconds": 15,
             "device_runtime": {
                 "transport": "native_usb_pending",
-                "supported_rates": [2000, 4000, 8000],
+                "rev_a_proposal": "cdc_acm_under_review",
+                "active_profile": self.device_runtime.profile.to_dict(),
             },
         }
 
@@ -264,6 +265,8 @@ class StreamManager:
             self.source_type = "hardware"
             dev_id = self.device_runtime.get_state_dict().get("device_id") or "ESP32-S3"
             self.active_source_name = f"Hardware: {dev_id}"
+            if self.device_runtime.capabilities:
+                self.sample_rate_hz = self.device_runtime.capabilities.sample_rate_hz
             self.device_runtime.start_streaming()
             self._source_generator = None
             self.is_streaming = True

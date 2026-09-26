@@ -1,13 +1,16 @@
 """AuscultaForge — Device Runtime Foundation.
 
 Provides the authoritative physical device lifecycle state machine, transport
-and discovery abstractions, semantic packet framing, capability negotiation,
-runtime integrity telemetry, and structured event logging.
+and discovery abstractions, semantic packet framing, centralized acquisition profile
+configuration, capability negotiation, runtime integrity telemetry, and structured event logging.
 
 Phase-1 Architecture Rules:
-- Physical transport is ESP32-S3 Native USB, but USB class (CDC-ACM vs Vendor Bulk)
-  and USB descriptors (VID/PID) are NOT finalized.
-- NO fake USB drivers or fake hardware simulation in production.
+- Physical transport is ESP32-S3 Native USB (final decision).
+- USB class: CDC-ACM is the current Hardware Rev-A proposal under team review;
+  USB descriptors (VID/PID) and endpoints are pending firmware declaration.
+- Physical acquisition profile (Rev-A: 48 kHz mono 24-bit data in 32-bit container signed PCM)
+  is decoupled from UI rendering rates and offline development sources.
+- NO fake USB drivers, fake COM ports, or fake hardware simulation in production.
 - Python runtime state is authoritative; the UI strictly reflects backend state.
 """
 
@@ -38,7 +41,7 @@ class DeviceState(str, Enum):
     STREAMING = "streaming"            # Actively streaming acoustic sample frames
     INTERRUPTED = "interrupted"        # Physical transport lost mid-stream or mid-session
     ERROR = "error"                    # Hardware, protocol, or transport failure
-    INCOMPATIBLE = "incompatible"      # Rejected during handshake (unsupported protocol/rates)
+    INCOMPATIBLE = "incompatible"      # Rejected during handshake (unsupported protocol/rates/format)
 
 
 # Strict state transition matrix
@@ -61,12 +64,63 @@ class InvalidStateTransitionError(RuntimeError):
 
 
 # ==============================================================================
-# 2. Capabilities & Handshake Model
+# 2. Centralized Acquisition Profile & Configuration Model
+# ==============================================================================
+
+@dataclass(slots=True)
+class AcquisitionProfile:
+    """Centralized hardware acquisition configuration profile.
+
+    Expresses physical acquisition parameters (e.g. Rev-A 48 kHz mono signed PCM
+    with 24-bit meaningful sensor data carried in a 32-bit I2S/USB container)
+    distinct from host display/rendering rates and distinct from sensor acoustic precision.
+
+    CRITICAL DISTINCTIONS:
+    - sample_container_bits (e.g. 32): The slot/transport width over I2S / USB framing.
+    - meaningful_data_bits (e.g. 24): The sensor data word width within the container.
+    - Sensor Precision: A 24-bit digital word does NOT imply 24-bit acoustic precision.
+      Effective acoustic precision and SNR are determined by the microphone transducer
+      physics (e.g. PUI DMM-4026-B-I2S-R acoustic dynamic range / noise floor).
+    """
+    profile_id: str = "rev_a_pui_dmm4026"
+    preferred_sample_rate_hz: int = 48000
+    channels: int = 1
+    sample_container_bits: int = 32
+    meaningful_data_bits: int = 24
+    sample_encoding: str = "signed_pcm"
+    preferred_block_size: int = 512
+    negotiated_block_size: int = 512
+    description: str = (
+        "Hardware Rev-A baseline (PUI DMM-4026-B-I2S-R: 48 kHz mono 24-in-32 signed PCM)"
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+# Authoritative Hardware Rev-A proposal baseline profile
+REV_A_BASELINE_PROFILE = AcquisitionProfile()
+
+# Engineering/development test profile (for legacy 4 kHz test doubles and offline sources)
+DEV_LEGACY_PROFILE = AcquisitionProfile(
+    profile_id="dev_4khz_legacy",
+    preferred_sample_rate_hz=4000,
+    channels=1,
+    sample_container_bits=16,
+    meaningful_data_bits=16,
+    sample_encoding="signed_pcm",
+    preferred_block_size=128,
+    negotiated_block_size=128,
+    description="Development test profile: 4000 Hz mono 16-bit",
+)
+
+
+# ==============================================================================
+# 3. Capabilities & Handshake Model
 # ==============================================================================
 
 SUPPORTED_PROTOCOL_VERSIONS = {"1.0"}
-SUPPORTED_SAMPLE_RATES = {2000, 4000, 8000}
-SUPPORTED_SAMPLE_FORMATS = {"float32", "int16"}
+SUPPORTED_SAMPLE_ENCODINGS = {"signed_pcm", "float32", "int16", "int32"}
 
 
 @dataclass(slots=True)
@@ -75,16 +129,19 @@ class DeviceCapabilities:
     protocol_version: str
     firmware_version: str
     device_id: str
-    sample_rate_hz: int = 4000
-    sample_format: str = "float32"
+    sample_rate_hz: int = 48000
+    sample_format: str = "signed_pcm"
     channels: int = 1
-    max_block_size: int = 128
+    max_block_size: int = 512
+    sample_container_bits: int = 32
+    meaningful_data_bits: int = 24
 
-    def validate(self) -> None:
-        """Validate capabilities against AuscultaForge Phase-1 constraints.
+    def validate_compatibility(self, profile: AcquisitionProfile) -> None:
+        """Validate reported capabilities against an active acquisition profile.
 
         Raises:
-            ValueError: If protocol version, sample rate, format, or channels are incompatible.
+            ValueError: If protocol version, channel count, sample encoding, or sample rate
+                        fail to satisfy the active acquisition profile.
         """
         if self.protocol_version not in SUPPORTED_PROTOCOL_VERSIONS:
             raise ValueError(
@@ -92,64 +149,121 @@ class DeviceCapabilities:
                 f"Supported: {sorted(SUPPORTED_PROTOCOL_VERSIONS)}"
             )
 
-        if self.sample_rate_hz not in SUPPORTED_SAMPLE_RATES:
+        if self.channels != profile.channels:
             raise ValueError(
-                f"Unsupported sample rate: {self.sample_rate_hz} Hz. "
-                f"Supported: {sorted(SUPPORTED_SAMPLE_RATES)}"
+                f"Channel count mismatch: profile expects {profile.channels} channel(s), "
+                f"got {self.channels}"
             )
 
-        if self.sample_format not in SUPPORTED_SAMPLE_FORMATS:
+        if self.sample_rate_hz != profile.preferred_sample_rate_hz:
+            raise ValueError(
+                f"Sample rate mismatch: profile expects {profile.preferred_sample_rate_hz} Hz, "
+                f"got {self.sample_rate_hz} Hz"
+            )
+
+        if self.sample_format != profile.sample_encoding and self.sample_format not in SUPPORTED_SAMPLE_ENCODINGS:
             raise ValueError(
                 f"Unsupported sample format: {self.sample_format!r}. "
-                f"Supported: {sorted(SUPPORTED_SAMPLE_FORMATS)}"
+                f"Expected {profile.sample_encoding} or supported: {sorted(SUPPORTED_SAMPLE_ENCODINGS)}"
             )
 
-        if self.channels != 1:
+        if self.meaningful_data_bits > self.sample_container_bits:
             raise ValueError(
-                f"Phase-1 requires mono (channels=1), got channels={self.channels}"
+                f"Invalid bit representation: meaningful_data_bits ({self.meaningful_data_bits}) "
+                f"cannot exceed sample_container_bits ({self.sample_container_bits})"
             )
 
-        if self.max_block_size <= 0 or self.max_block_size > 4096:
+        if self.max_block_size <= 0 or self.max_block_size > 16384:
             raise ValueError(f"Invalid max_block_size: {self.max_block_size}")
+
+    def validate(self, profile: Optional[AcquisitionProfile] = None) -> None:
+        """Validate capabilities against a profile (defaults to REV_A_BASELINE_PROFILE)."""
+        active_profile = profile or REV_A_BASELINE_PROFILE
+        self.validate_compatibility(active_profile)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
 # ==============================================================================
-# 3. Semantic Packet Framing & Adapter to SampleBlock
+# 4. Semantic Packet Framing & Adapter to SampleBlock
 # ==============================================================================
 
-@dataclass(slots=True)
 class DeviceSamplePacket:
     """Semantic decoded physical sample packet.
 
-    Carries logical fields agreed for MCU transport without prematurely fixing
-    the wire-level binary layout, endianness, or CRC polynomial.
+    Carries raw integer sensor samples in their container format without premature
+    float conversion, preserving raw acquisition meaning until the DSP adapter boundary.
     """
     sequence: int
     timestamp_s: float
-    samples: np.ndarray
-    flags: int = 0
-    crc_ok: bool = True
+    raw_samples: np.ndarray
+    flags: int
+    crc_ok: bool
+    meaningful_bits: int
+    sample_rate_hz: int
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.samples, np.ndarray):
-            self.samples = np.asarray(self.samples, dtype=np.float32)
-        elif self.samples.dtype != np.float32:
-            self.samples = self.samples.astype(np.float32)
+    def __init__(
+        self,
+        sequence: int,
+        timestamp_s: float,
+        raw_samples: Any = None,
+        flags: int = 0,
+        crc_ok: bool = True,
+        meaningful_bits: int = 24,
+        sample_rate_hz: int = 48000,
+        samples: Any = None,
+    ) -> None:
+        self.sequence = sequence
+        self.timestamp_s = timestamp_s
+        actual = raw_samples if raw_samples is not None else samples
+        if actual is None:
+            actual = np.zeros(0, dtype=np.int32)
+        if not isinstance(actual, np.ndarray):
+            actual = np.asarray(actual)
+        self.raw_samples = actual
+        self.flags = flags
+        self.crc_ok = crc_ok
+        self.meaningful_bits = meaningful_bits
+        self.sample_rate_hz = sample_rate_hz
+
+    @property
+    def samples(self) -> np.ndarray:
+        return self.raw_samples
 
 
-def packet_to_sample_block(packet: DeviceSamplePacket, sample_rate_hz: int) -> SampleBlock:
-    """Adapter converting semantic DeviceSamplePacket into existing pcg_core SampleBlock."""
+def packet_to_sample_block(
+    packet: DeviceSamplePacket,
+    sample_rate_hz: Optional[int] = None,
+    profile: Optional[AcquisitionProfile] = None,
+) -> SampleBlock:
+    """Adapter converting semantic DeviceSamplePacket into pcg_core SampleBlock.
+
+    Normalizes signed integer container samples (e.g. 24-bit signed PCM carried in
+    32-bit container) to [-1.0, +1.0] float32 for DSP pipeline consumption,
+    preserving full acquisition sample rate (e.g. 48000 Hz) and timestamp metadata.
+    """
     if not packet.crc_ok:
         raise ValueError(f"Cannot convert packet with CRC failure at sequence {packet.sequence}")
+
+    rate = sample_rate_hz or (profile.preferred_sample_rate_hz if profile else packet.sample_rate_hz)
+    raw = packet.raw_samples
+    meaningful_bits = profile.meaningful_data_bits if profile else packet.meaningful_bits
+
+    if np.issubdtype(raw.dtype, np.floating):
+        normalized = raw.astype(np.float32)
+    elif np.issubdtype(raw.dtype, np.integer):
+        scale = float(1 << (meaningful_bits - 1))
+        normalized = (raw.astype(np.float32) / scale).astype(np.float32)
+        normalized = np.clip(normalized, -1.0, 1.0)
+    else:
+        normalized = np.asarray(raw, dtype=np.float32)
 
     return SampleBlock(
         sequence=packet.sequence,
         timestamp_s=packet.timestamp_s,
-        sample_rate_hz=sample_rate_hz,
-        samples=packet.samples,
+        sample_rate_hz=rate,
+        samples=normalized,
     )
 
 
@@ -168,7 +282,7 @@ class DevicePacketDecoder(ABC):
 
 
 # ==============================================================================
-# 4. Physical Transport Abstraction
+# 5. Physical Transport Abstraction
 # ==============================================================================
 
 @runtime_checkable
@@ -197,7 +311,7 @@ class DeviceTransport(Protocol):
 
 
 # ==============================================================================
-# 5. Device Discovery Abstraction
+# 6. Device Discovery Abstraction
 # ==============================================================================
 
 @dataclass(slots=True)
@@ -224,23 +338,44 @@ class DeviceDiscoveryProvider(ABC):
 
 
 class PendingDescriptorDiscoveryProvider(DeviceDiscoveryProvider):
-    """Truthful production provider reflecting that USB descriptors are not yet finalized."""
+    """Truthful production provider reflecting that USB descriptors are not yet finalized.
+
+    ESP32-S3 Native USB is finalized as physical transport technology.
+    CDC-ACM is the current Hardware Rev-A proposal under team review.
+    Host transport driver implementation remains pending firmware descriptor/endpoint availability.
+    """
 
     def poll_candidates(self) -> list[DeviceCandidate]:
-        # Truthful behavior: No hardware driver claimed until ESP32-S3 USB class & VID/PID decided
+        # Truthful behavior: No hardware driver claimed until ESP32-S3 descriptors are finalized
         return []
 
     def get_status_description(self) -> str:
-        return "Hardware discovery configuration pending Phase-1 USB descriptor decision"
+        return (
+            "Hardware discovery pending Phase-1 ESP32-S3 Native USB descriptors "
+            "(Hardware Rev-A proposal: CDC-ACM under review)"
+        )
 
 
 # ==============================================================================
-# 6. Runtime Integrity Telemetry Counters
+# 7. Runtime Integrity Telemetry Counters
 # ==============================================================================
 
 @dataclass(slots=True)
 class DeviceIntegrityStats:
-    """Runtime integrity counters for streaming hardware telemetry."""
+    """Runtime integrity counters for streaming hardware telemetry.
+
+    Strictly exposes counters maintained by runtime code with zero decorative fields:
+    - packets_received
+    - samples_received
+    - sequence_gaps
+    - repeated_packets
+    - out_of_order_packets
+    - crc_failures
+    - malformed_frames
+    - timestamp_regressions
+    - disconnect_count
+    - reconnect_count
+    """
     packets_received: int = 0
     samples_received: int = 0
     sequence_gaps: int = 0
@@ -261,7 +396,7 @@ class DeviceIntegrityStats:
             return
 
         self.packets_received += 1
-        self.samples_received += len(packet.samples)
+        self.samples_received += len(packet.raw_samples)
 
         if self.last_valid_sequence is not None:
             expected = self.last_valid_sequence + 1
@@ -278,12 +413,27 @@ class DeviceIntegrityStats:
         self.last_valid_sequence = packet.sequence
         self.last_valid_timestamp_s = packet.timestamp_s
 
+    def record_malformed_frame(self) -> None:
+        """Increment count of malformed frames received from decoder/wire."""
+        self.malformed_frames += 1
+
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "packets_received": self.packets_received,
+            "samples_received": self.samples_received,
+            "sequence_gaps": self.sequence_gaps,
+            "repeated_packets": self.repeated_packets,
+            "out_of_order_packets": self.out_of_order_packets,
+            "crc_failures": self.crc_failures,
+            "malformed_frames": self.malformed_frames,
+            "timestamp_regressions": self.timestamp_regressions,
+            "disconnect_count": self.disconnect_count,
+            "reconnect_count": self.reconnect_count,
+        }
 
 
 # ==============================================================================
-# 7. Structured Device Event Log
+# 8. Structured Device Event Log
 # ==============================================================================
 
 @dataclass(slots=True)
@@ -336,7 +486,7 @@ class DeviceEventLog:
 
 
 # ==============================================================================
-# 8. Device Runtime Manager
+# 9. Device Runtime Manager
 # ==============================================================================
 
 class DeviceRuntime:
@@ -345,11 +495,13 @@ class DeviceRuntime:
     def __init__(
         self,
         discovery_provider: Optional[DeviceDiscoveryProvider] = None,
+        acquisition_profile: Optional[AcquisitionProfile] = None,
         event_log_size: int = 200,
     ) -> None:
         self.discovery_provider: DeviceDiscoveryProvider = (
             discovery_provider or PendingDescriptorDiscoveryProvider()
         )
+        self.profile: AcquisitionProfile = acquisition_profile or REV_A_BASELINE_PROFILE
         self.event_log = DeviceEventLog(max_entries=event_log_size)
         self.stats = DeviceIntegrityStats()
 
@@ -440,14 +592,14 @@ class DeviceRuntime:
             raise
 
     def complete_handshake(self, capabilities: DeviceCapabilities) -> None:
-        """Validate reported capabilities and transition to READY, or reject to INCOMPATIBLE."""
+        """Validate reported capabilities against active profile and transition to READY."""
         if self._state != DeviceState.HANDSHAKING:
             raise InvalidStateTransitionError(
                 f"Cannot complete handshake while in state {self._state.value}"
             )
 
         try:
-            capabilities.validate()
+            capabilities.validate_compatibility(self.profile)
             self._capabilities = capabilities
             self.transition_to(DeviceState.READY)
             self.event_log.log(
@@ -508,9 +660,21 @@ class DeviceRuntime:
             "firmware_version": self._capabilities.firmware_version if self._capabilities else None,
             "sample_rate_hz": self._capabilities.sample_rate_hz if self._capabilities else None,
             "sample_format": self._capabilities.sample_format if self._capabilities else None,
+            "channels": self._capabilities.channels if self._capabilities else None,
+            "sample_container_bits": (
+                self._capabilities.sample_container_bits
+                if self._capabilities
+                else self.profile.sample_container_bits
+            ),
+            "meaningful_data_bits": (
+                self._capabilities.meaningful_data_bits
+                if self._capabilities
+                else self.profile.meaningful_data_bits
+            ),
             "transport_type": self._active_candidate.transport_hint if self._active_candidate else None,
             "connected_at_utc": self._connected_at_utc,
             "disconnected_at_utc": self._disconnected_at_utc,
             "last_error": self._last_error,
             "discovery_status": self.discovery_provider.get_status_description(),
+            "acquisition_profile": self.profile.to_dict(),
         }

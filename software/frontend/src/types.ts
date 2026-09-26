@@ -22,11 +22,15 @@ export interface DeviceRuntimeState {
   firmware_version: string | null;
   sample_rate_hz: number | null;
   sample_format: string | null;
+  channels?: number | null;
+  sample_container_bits?: number | null;
+  meaningful_data_bits?: number | null;
   transport_type: string | null;
   connected_at_utc: string | null;
   disconnected_at_utc: string | null;
   last_error: string | null;
   discovery_status: string;
+  acquisition_profile?: Record<string, unknown> | null;
 }
 
 export interface DeviceEventItem {
@@ -48,7 +52,6 @@ export interface DeviceIntegrityStats {
   timestamp_regressions: number;
   disconnect_count: number;
   reconnect_count: number;
-  last_packet_timestamp_s: number | null;
 }
 
 export type FilterPreset = 'recommended' | 'bell' | 'diaphragm' | 'extended';
@@ -68,7 +71,7 @@ export interface SignalQuality {
 
 export interface StethoscopeDevice {
   connected: boolean;
-  state: 'Not connected' | 'Detected' | 'Connecting' | 'Connected' | 'Streaming' | 'Connection interrupted' | 'Reconnecting' | 'Connection failed';
+  state: 'Not connected' | 'Detected' | 'Connecting' | 'Ready' | 'Connected' | 'Streaming' | 'Connection interrupted' | 'Incompatible' | 'Connection failed';
   deviceId: string;
   port: string;
   firmwareVersion: string;

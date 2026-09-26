@@ -124,9 +124,9 @@ AuscultaForge maintains an explicit architectural distinction between two fundam
 
 ---
 
-## 5. Device Runtime Foundation & Physical State Machine
+## 5. Device Runtime Foundation & Configurable Acquisition Profiles
 
-A dedicated subsystem (`software/pcg_app/device_runtime.py`) manages physical transducer hardware readiness:
+A dedicated subsystem (`software/pcg_app/device_runtime.py`) manages physical transducer hardware readiness without hardcoded sample-rate assumptions:
 
 1. **Truthful Startup State:**
    The application starts in a truthful inactive state:
@@ -134,15 +134,35 @@ A dedicated subsystem (`software/pcg_app/device_runtime.py`) manages physical tr
    - `active_source`: `"None"`
    - `device_state`: `"absent"`
    - `is_streaming`: `false`
-   No synthetic waveforms are emitted until an offline replay source or synthetic test signal is explicitly selected.
-2. **Explicit State Machine:**
-   Transitions follow strict rules (`ABSENT -> DETECTED -> OPENING -> HANDSHAKING -> READY -> STREAMING`). Unauthorized jumps raise `InvalidStateTransitionError`.
-3. **Disconnection Handling:**
+   No synthetic waveforms are emitted until an offline replay source or explicitly labeled synthetic test signal is selected.
+2. **Centralized Acquisition Profile (`AcquisitionProfile`):**
+   - **Rev-A Baseline Profile:** 48,000 Hz, mono, 32-bit I2S container, 24-bit meaningful sensor data, signed PCM.
+   - **Hardware Distinctions:** Distinguishes container width (32-bit DMA slot), meaningful data bits (24-bit sensor word), and sensor acoustic precision (microphone transducer SNR / noise floor).
+   - **Decoupled Architecture:** Core DSP pipeline and file recording operate on sample-rate-aware `SampleBlock` instances, preventing lock-in to fixed sample rates.
+3. **Explicit 9-State Lifecycle Machine:**
+   Deterministic state transitions: `ABSENT -> DETECTED -> OPENING -> HANDSHAKING -> READY -> STREAMING`.
+   When disconnected while streaming: `STREAMING -> INTERRUPTED`.
+   Reconnect path: `INTERRUPTED -> DETECTED -> OPENING -> HANDSHAKING -> READY`. (No separate phantom reconnecting state).
+4. **Disconnection Handling:**
    - Link drop while streaming: Transitions to `INTERRUPTED` and notifies UI.
    - Link drop while recording: Safely stops and seals recording with `termination_reason: "device_disconnected"`.
-4. **Transport & Packet Abstraction:**
-   - `DeviceTransport` Protocol decouples host communication from CDC vs Bulk choices.
-   - `DeviceSamplePacket` provides semantic logical fields without premature wire encoding assumptions.
+5. **Decoupled High-Rate Stream Ingestion:**
+   ```text
+   48 kHz Hardware USB Acquisition
+              │
+              ▼
+   Full-Rate Storage & Analysis (SampleBlock, 48 kHz WAV, session.json)
+              │
+              ▼
+   Rolling Buffers & Decimated UI Display Frames (~30-60 fps)
+   ```
+   Recording preserves the full uncompressed acquisition stream with zero downsampling.
+6. **Dürüst Bütünlük Telemetrisi (10 Sayaç):**
+   Exposes strictly real counters: `packets_received`, `samples_received`, `sequence_gaps`, `repeated_packets`, `out_of_order_packets`, `crc_failures`, `malformed_frames`, `timestamp_regressions`, `disconnect_count`, `reconnect_count`.
+7. **Transport & Packet Abstraction:**
+   - Physical transport technology is ESP32-S3 Native USB (final decision).
+   - CDC-ACM is the current Rev-A proposal under team review; no fake COM ports or fake VID/PID are injected until descriptors are finalized.
+   - `DeviceSamplePacket` carries raw container integer samples until the `packet_to_sample_block` normalization adapter.
 
 ---
 

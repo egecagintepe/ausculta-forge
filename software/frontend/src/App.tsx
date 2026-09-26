@@ -715,12 +715,13 @@ export default function App() {
 
   // Copy diagnostic summary
   const handleCopyDiagnostics = () => {
-    const summary = `--- STETHOSCOPE DIAGNOSTIC TELEMETRY ---
-Source: ${activeMetadata?.filename || 'normal_sample_01.wav'} (WAV PCM, 4000 Hz, 1-Ch, 15.000s)
-Audio: Peak -2.4 dBFS | RMS -18.6 dB | Volume ${Math.round(volume * 100)}%
-Hardware: ${deviceState.connected ? `Connected (${deviceState.port})` : 'Disconnected (COM Port Inactive)'}
-DSP: Bandpass 20-200 Hz (Butterworth 4th) | Score 86/100
-State: DISCIPLINED ACQUISITION (Host Buffer: 4096 samples)`;
+    const summary = `--- AUSCULTAFORGE DIAGNOSTIC TELEMETRY ---
+Source: ${activeSourceName} (${sourceType})
+Sample Rate: ${sampleRate} Hz
+Device Lifecycle: ${deviceRuntimeState?.state ?? 'absent'}
+Transport: ESP32-S3 Native USB (Hardware Rev-A proposal: CDC-ACM under review)
+Telemetry: ${deviceStats ? `${deviceStats.packets_received} pkts, ${deviceStats.samples_received} smp, ${deviceStats.sequence_gaps} gaps, ${deviceStats.crc_failures} crc` : 'No hardware telemetry'}
+DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
 
     navigator.clipboard.writeText(summary);
     setCopySuccess(true);
