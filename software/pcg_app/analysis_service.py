@@ -66,6 +66,80 @@ def validate_identifier(identifier: str, entity_name: str = "id", base_dir: Opti
     return clean_id
 
 
+def decimate_aligned_traces_shared_time(
+    reference: np.ndarray,
+    capture: np.ndarray,
+    sample_rate_hz: float,
+    max_display_points: int = 600,
+) -> tuple[list[float], list[float], list[float], list[float]]:
+    """Produce a shared-time, peak-preserving decimated trace representation.
+
+    Every array element in time_ms, reference, capture, and error refers to the
+    EXACT SAME original aligned sample index/time, ensuring truthful pointwise temporal
+    alignment without independent bucket offsets.
+
+    Algorithm:
+    1. Divide aligned samples into bounded buckets (n_buckets <= (max_display_points - 2) // 4).
+    2. In each bucket, find candidate extrema indices (argmin and argmax) from BOTH reference and capture.
+    3. Take the union of candidate indices plus boundary points (0 and N-1).
+    4. Sort chronologically.
+    5. Sample reference, capture, and error = (capture - reference) at those exact common indices.
+    6. Compute exact time_ms from sample indices.
+
+    Returns:
+        (time_ms, reference_pts, capture_pts, error_pts) where all arrays share
+        the same length and timestamps, and error[i] == capture[i] - reference[i].
+    """
+    n_samples = min(len(reference), len(capture))
+    if n_samples == 0:
+        return [], [], [], []
+
+    ref_arr = np.asarray(reference[:n_samples], dtype=np.float32)
+    cap_arr = np.asarray(capture[:n_samples], dtype=np.float32)
+
+    if n_samples <= max_display_points:
+        chosen_indices = np.arange(n_samples, dtype=int)
+    else:
+        # Each bucket produces up to 4 candidate indices: argmin/argmax of ref and cap.
+        # Allocate buckets so candidate count <= max_display_points.
+        n_buckets = max(1, (max_display_points - 2) // 4)
+        bucket_edges = np.linspace(0, n_samples, n_buckets + 1, dtype=int)
+
+        candidate_set: set[int] = {0, n_samples - 1}
+
+        for b in range(n_buckets):
+            start_idx = int(bucket_edges[b])
+            end_idx = int(bucket_edges[b + 1])
+            if start_idx >= end_idx:
+                continue
+
+            ref_slice = ref_arr[start_idx:end_idx]
+            cap_slice = cap_arr[start_idx:end_idx]
+
+            candidate_set.add(start_idx + int(np.argmin(ref_slice)))
+            candidate_set.add(start_idx + int(np.argmax(ref_slice)))
+            candidate_set.add(start_idx + int(np.argmin(cap_slice)))
+            candidate_set.add(start_idx + int(np.argmax(cap_slice)))
+
+        chosen_indices = np.array(sorted(candidate_set), dtype=int)
+
+        if len(chosen_indices) > max_display_points:
+            step = (len(chosen_indices) - 1) / (max_display_points - 1)
+            sub_idx = [int(round(i * step)) for i in range(max_display_points)]
+            chosen_indices = np.unique(chosen_indices[sub_idx])
+
+    t_ms = (chosen_indices / float(sample_rate_hz)) * 1000.0
+    ref_sampled = ref_arr[chosen_indices]
+    cap_sampled = cap_arr[chosen_indices]
+
+    time_ms_list = [round(float(t), 3) for t in t_ms]
+    ref_list = [round(float(v), 5) for v in ref_sampled]
+    cap_list = [round(float(v), 5) for v in cap_sampled]
+    err_list = [round(float(c - r), 5) for c, r in zip(cap_list, ref_list)]
+
+    return time_ms_list, ref_list, cap_list, err_list
+
+
 class AnalysisService:
     """Application-layer service orchestrating PCG analysis and reference-vs-capture workbench."""
 
@@ -383,24 +457,11 @@ class AnalysisService:
         aligned_ref, aligned_cap, delay_samples, delay_ms = estimate_delay_and_align(
             ref_samples, cap_matched, val_result.effective_fs
         )
-        error_signal = aligned_cap - aligned_ref
-
-        # 3. Decimated waveform series for visual comparison (bounded points)
+        # 3. Decimated waveform series for visual comparison (shared-time common indices)
         target_pts = max(32, min(max_waveform_points, 1200))
-        dec_ref = decimate_min_max(aligned_ref, target_pts)
-        dec_cap = decimate_min_max(aligned_cap, target_pts)
-        dec_err = decimate_min_max(error_signal, target_pts)
-
-        # Align length if rounding varied by 1 point
-        min_pts = min(len(dec_ref), len(dec_cap), len(dec_err))
-        dec_ref = dec_ref[:min_pts]
-        dec_cap = dec_cap[:min_pts]
-        dec_err = dec_err[:min_pts]
-
-        time_axis_ms = [
-            round(float(t), 3)
-            for t in np.linspace(0, val_result.overlap_duration_s * 1000.0, min_pts)
-        ]
+        time_axis_ms, dec_ref, dec_cap, dec_err = decimate_aligned_traces_shared_time(
+            aligned_ref, aligned_cap, val_result.effective_fs, target_pts
+        )
 
         # 4. Decimated Spectral comparison curves (Welch PSD, 0–1000 Hz)
         n_samples = len(aligned_ref)

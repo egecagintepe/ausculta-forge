@@ -4,7 +4,7 @@
 
 Bu doküman, AuscultaForge sistemine eklenen **Oturum Analizi ve Referans-Kayıt Doğrulama Laboratuvarı**'nın (*Session Analysis & Reference-vs-Capture Workbench*) çalışma prensiplerini, arka plandaki mühendislik matematiğini, arayüz mimarisini ve gelecekteki fiziksel fantom deneylerindeki rolünü açıklar.
 
-Bu laboratuvar; kaydedilmiş stetoskop edinim oturumlarını incelemek, bilinen zemin gerçek (*ground truth*) PCG referans sinyalleri yüklemek, donanım edinimini referansla nicel olarak karşılaştırmak ve makine tarafından okunabilir (JSON) mühendislik raporları üretmek için geliştirilmiştir.
+Bu laboratuvar; kaydedilmiş stetoskop edinim oturumlarını incelemek, bilinen dijital referans uyaranını (*known reference input / reference PCG stimulus*) yüklemek, donanım edinimini referansla nicel olarak karşılaştırmak ve makine tarafından okunabilir (JSON) mühendislik raporları üretmek için geliştirilmiştir.
 
 ---
 
@@ -123,14 +123,17 @@ $\gamma^2(f) \in [0, 1]$ aralığındadır. Değerin 1'e yakın olması, o freka
 
 AuscultaForge'un temel mimari ilkelerinden biri **Hesaplama Doğruluğu ile Görsel İşleme Yükünün Ayrıştırılmasıdır**:
 
-1. **Görsel Seyreltme (Bounded Display Arrays):**
+1. **Ortak Zaman Eksenli Görsel Seyreltme (`decimate_aligned_traces_shared_time`):**
    - 48 kHz örnekleme frekansında 15 saniyelik bir kayıt 720.000 adet 32-bit kayan noktalı sayı içerir.
    - Bu verinin ham haliyle React DOM'a veya SVG motoruna gönderilmesi, tarayıcının kilitlenmesine, saniyede 1–2 kareye düşmesine ve arayüzün yanıt vermemesine neden olur.
-   - Python servis katmanı (`decimate_min_max`), dalga biçimini tepe değerlerini (peak preserving) koruyarak maksimum 600 noktaya, spektrum ve tutarlılık eğrilerini ise maksimum 128 noktaya seyreltir.
+   - Referans, yakalanan ve hata sinyalleri bağımsız kutularda seyreltilip yapay bir ortak zaman eksenine oturtulmaz. Bunun yerine ortak kova sınırları belirlenir; her kovada hem referansın hem de yakalanan sinyalin uç noktaları (ekstrema: argmin/argmax) tespit edilir, bu indekslerin birleşimi kronolojik olarak sıralanır ve her üç sinyal de **birebir aynı zaman anlarında (`time_ms[i]`)** örneklenir. Böylece $e[i] = y_{\text{cap}}[i] - x_{\text{ref}}[i]$ eşitliği görsel seride de tam olarak korunur.
 2. **Tam Hızlı Metrik Hesaplaması (Full-Rate DSP):**
    - Seyreltilmiş veri yalnızca ekran piksellerini beslemek içindir; **asla metrik hesabında kullanılmaz**.
    - Çapraz korelasyon, gecikme, kazanç, RMSE, SER ve tutarlılık metrikleri; 48 kHz / 4 kHz tam çözünürlüklü NumPy dizileri üzerinde $N$ elemanlı vektörel işlemlerle hesaplanır.
    - Bu sayede tarayıcı akıcı kalırken, rapordaki mühendislik metrikleri milimetrik/mikrosaniyelik matematiksel kesinliğe sahip olur.
+3. **Akustik Uyaran vs. Zemin Gerçek Ayrımı:**
+   - İçe aktarılan referans WAV, hoparlör/aktüatöre gönderilen **bilinen bir dijital uyarandır (reference stimulus / excitation)**.
+   - Göğüs parçası ve mikrofona ulaşan ses; hoparlör transfer fonksiyonu, fantom dokusu akustik yayılımı ve mekanik kuplajdan geçer. Bu nedenle referans WAV, göğüs parçası noktasındaki kalibre edilmiş bir akustik "zemin gerçek" (ground truth) değil, tüm bu kanalın yanıtını ölçmek için kullanılan standart bir referans girdidir.
 
 ---
 

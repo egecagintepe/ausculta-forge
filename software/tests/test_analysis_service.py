@@ -27,7 +27,11 @@ import scipy.signal
 from scipy.io import wavfile
 
 from pcg_core.recording import SessionMetadata
-from pcg_app.analysis_service import AnalysisService, validate_identifier
+from pcg_app.analysis_service import (
+    AnalysisService,
+    validate_identifier,
+    decimate_aligned_traces_shared_time,
+)
 from pcg_app.app import create_app
 
 
@@ -522,6 +526,65 @@ class TestReferenceVsCaptureComparison:
         assert str(tmp_path) not in raw_text
         assert "C:\\" not in raw_text
         assert "c:\\" not in raw_text
+
+    def test_decimate_aligned_traces_shared_time_narrow_extrema(self):
+        """Verifies shared-time decimation preserves narrow extrema from both reference and capture
+
+        at their exact common timestamps, satisfies error[i] == capture[i] - reference[i],
+        and remains strictly bounded in point count.
+        """
+        fs = 4000
+        n_samples = 2000
+        max_display_points = 200
+
+        # Base signals
+        t = np.linspace(0, n_samples / fs, n_samples, endpoint=False, dtype=np.float32)
+        ref = 0.1 * np.sin(2 * np.pi * 30 * t)
+        cap = 0.1 * np.cos(2 * np.pi * 30 * t)
+
+        # Place distinct narrow extrema inside the SAME bucket (e.g. around sample 500)
+        peak_ref_idx = 505
+        peak_cap_idx = 525
+
+        ref[peak_ref_idx] = 0.98765   # Distinct positive peak in reference
+        cap[peak_cap_idx] = -0.87654  # Distinct negative peak in capture
+
+        t_ms, ref_pts, cap_pts, err_pts = decimate_aligned_traces_shared_time(
+            reference=ref,
+            capture=cap,
+            sample_rate_hz=fs,
+            max_display_points=max_display_points,
+        )
+
+        # 1. Output size is strictly bounded
+        assert len(t_ms) <= max_display_points
+        assert len(t_ms) == len(ref_pts) == len(cap_pts) == len(err_pts)
+        assert len(t_ms) >= 32
+
+        # 2. Both extrema remain visible in their respective decimated series
+        assert max(ref_pts) == pytest.approx(0.98765, abs=1e-4)
+        assert min(cap_pts) == pytest.approx(-0.87654, abs=1e-4)
+
+        # 3. Output arrays share exactly the same timestamps
+        expected_ref_peak_time_ms = round((peak_ref_idx / fs) * 1000.0, 3)
+        expected_cap_peak_time_ms = round((peak_cap_idx / fs) * 1000.0, 3)
+
+        assert expected_ref_peak_time_ms in t_ms
+        assert expected_cap_peak_time_ms in t_ms
+
+        ref_peak_i = t_ms.index(expected_ref_peak_time_ms)
+        cap_peak_i = t_ms.index(expected_cap_peak_time_ms)
+
+        assert ref_pts[ref_peak_i] == pytest.approx(0.98765, abs=1e-4)
+        assert cap_pts[cap_peak_i] == pytest.approx(-0.87654, abs=1e-4)
+
+        # 4. Pointwise error equality: error[i] == capture[i] - reference[i]
+        for i in range(len(t_ms)):
+            assert err_pts[i] == pytest.approx(cap_pts[i] - ref_pts[i], abs=1e-5)
+
+        # 5. Timestamps are strictly monotonic
+        for i in range(len(t_ms) - 1):
+            assert t_ms[i] < t_ms[i + 1]
 
 
 # =============================================================================

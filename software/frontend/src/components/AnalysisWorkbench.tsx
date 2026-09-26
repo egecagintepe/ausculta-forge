@@ -601,7 +601,7 @@ export const AnalysisWorkbench: React.FC<AnalysisWorkbenchProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="font-mono-code text-[11px] uppercase tracking-wider text-[var(--status-info)] font-bold flex items-center gap-1.5">
                     <FileAudio size={14} />
-                    <span>Reference PCG Signal (Ground Truth)</span>
+                    <span>Known Reference Input (Reference Stimulus)</span>
                   </label>
                   <button
                     onClick={() => setActiveTab('references')}

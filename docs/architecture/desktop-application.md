@@ -250,11 +250,14 @@ FULL-RATE DSP (48 kHz Bandpass)           FULL-RATE SessionRecorder (48 kHz WAV)
 ```
 
 ### Architectural Principles:
-1. **Mathematical Isolation:**
-   All engineering mathematics (cross-correlation, delay estimation, least-squares gain, RMSE, SER dB, Welch PSD, magnitude-squared coherence) reside exclusively in `pcg_core.validation`. `AnalysisService` acts solely as an orchestrator and serializer.
+1. **Mathematical Isolation & Full-Rate Evaluation:**
+   All quantitative validation metrics (cross-correlation, delay estimation, least-squares gain, RMSE, NRMSE, SER dB, Welch PSD, magnitude-squared coherence) reside exclusively in pcg_core.validation and are computed on full-rate aligned signals (48 kHz or 4 kHz). AnalysisService acts solely as an orchestrator and serializer.
 2. **Display Decimation vs Full-Rate Evaluation:**
-   Metrics are evaluated strictly against full-rate NumPy arrays (e.g. 48 kHz or 4 kHz). Display waveforms are decimated to $\le 600$ points and spectral curves to $\le 128$ points using peak-preserving min/max aggregation, protecting browser rendering responsiveness.
-3. **Traversal and Security Hardening:**
-   All file operations validate identifiers against `^[a-zA-Z0-9_-]+$` and enforce directory containment checks (`relative_to`), preventing directory traversal.
-4. **Machine Portability:**
+   Waveform arrays are visualization-only bounded representations (<= 600 points) computed via decimate_aligned_traces_shared_time. This helper uses common bucket boundaries and evaluates reference, capture, and residual error (e[i] = y[i] - x[i]) at the exact same physical sample timestamps (time_ms[i]), preserving narrow extrema without independent bucket temporal misalignment.
+3. **Reference Stimulus vs Calibrated Acoustic Ground Truth:**
+   The imported reference WAV is a known digital excitation / stimulus fed into the loudspeaker/phantom. It is not calibrated acoustic ground truth at the chestpiece, which is subject to transducer, phantom acoustic impedance, and mechanical coupling transfer functions.
+4. **Traversal and Security Hardening:**
+   All file operations validate identifiers against ^[a-zA-Z0-9_-]+$ and enforce directory containment checks (
+elative_to), preventing directory traversal.
+5. **Machine Portability:**
    Persisted analysis reports contain relative identifiers and SHA-256 digests with zero absolute machine filesystem paths.
