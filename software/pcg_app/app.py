@@ -13,7 +13,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from pcg_core.recording import list_sessions, get_session
+from pcg_core.recording import list_sessions, get_session, validate_session_id
 from .state import StreamManager
 from .protocol import (
     make_hello_message,
@@ -23,8 +23,22 @@ from .protocol import (
 )
 
 
-def create_app(sessions_dir: str | Path = "experiments/sessions") -> FastAPI:
+DEFAULT_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
+
+def create_app(
+    sessions_dir: str | Path = "experiments/sessions",
+    allowed_origins: Optional[list[str]] = None,
+) -> FastAPI:
     manager = StreamManager(sessions_dir=sessions_dir)
+    origins = list(allowed_origins) if allowed_origins is not None else list(DEFAULT_ALLOWED_ORIGINS)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -40,12 +54,12 @@ def create_app(sessions_dir: str | Path = "experiments/sessions") -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Permit local frontend origins
+    # Permit strictly local frontend origins (loopback only)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
     )
 
@@ -80,20 +94,31 @@ def create_app(sessions_dir: str | Path = "experiments/sessions") -> FastAPI:
 
     @app.get("/api/sessions/{session_id}")
     def api_get_session(session_id: str) -> dict[str, Any]:
-        sess = get_session(session_id, manager.sessions_dir)
+        try:
+            valid_id = validate_session_id(session_id, manager.sessions_dir)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid session ID")
+        sess = get_session(valid_id, manager.sessions_dir)
         if not sess:
             raise HTTPException(status_code=404, detail="Session not found")
         return sess
 
     @app.post("/api/sessions/{session_id}/replay")
     async def api_replay_session(session_id: str) -> dict[str, Any]:
-        sess = get_session(session_id, manager.sessions_dir)
+        try:
+            valid_id = validate_session_id(session_id, manager.sessions_dir)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid session ID")
+        sess = get_session(valid_id, manager.sessions_dir)
         if not sess:
             raise HTTPException(status_code=404, detail="Session not found")
-        new_state = manager.select_source("session", session_id=session_id)
+        try:
+            new_state = manager.select_source("session", session_id=valid_id)
+        except (ValueError, FileNotFoundError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
         manager.start_stream()
         await manager.broadcast(make_stream_state_message(new_state))
-        return {"status": "replaying", "session_id": session_id, "state": new_state}
+        return {"status": "replaying", "session_id": valid_id, "state": new_state}
 
     @app.post("/api/stream/start")
     async def api_start_stream() -> dict[str, Any]:
@@ -161,6 +186,12 @@ def create_app(sessions_dir: str | Path = "experiments/sessions") -> FastAPI:
     # WebSocket Real-Time Ingestion & Command Endpoint
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket) -> None:
+        origin = websocket.headers.get("origin")
+        # Validate WebSocket Origin if present (allows test clients/headless tools while guarding browsers)
+        if origin and origin not in origins:
+            await websocket.close(code=1008)  # 1008: Policy Violation
+            return
+
         await websocket.accept()
         manager.register_client(websocket)
 

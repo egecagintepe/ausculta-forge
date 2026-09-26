@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import platform
+import re
 import sys
 from typing import Any, Optional
 import uuid
@@ -32,6 +33,31 @@ class RecordingSampleRateError(ValueError):
 class RecordingStateError(RuntimeError):
     """Raised when invalid state transitions occur on a SessionRecorder."""
     pass
+
+
+SAFE_SESSION_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def validate_session_id(session_id: str, sessions_dir: str | Path = "experiments/sessions") -> str:
+    """Validate that session_id is a safe identifier contained strictly within sessions_dir.
+
+    Rejects path traversal characters ('..', '/', '\\') and verifies resolved path containment.
+    """
+    if not session_id or not isinstance(session_id, str):
+        raise ValueError("session_id must be a non-empty string")
+
+    clean_id = session_id.strip()
+    if not clean_id or not SAFE_SESSION_ID_PATTERN.match(clean_id):
+        raise ValueError(f"Invalid session_id format: {session_id!r}. Only alphanumeric, '_', and '-' characters allowed.")
+
+    root = Path(sessions_dir).resolve()
+    target = (root / clean_id).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        raise ValueError(f"Path traversal detected: {session_id!r} resolves outside {sessions_dir}")
+
+    return clean_id
 
 
 @dataclass(slots=True)
@@ -127,7 +153,8 @@ class SessionRecorder:
             raise RecordingStateError("A recording session is already active.")
 
         if session_id:
-            self._session_id = str(session_id)
+            valid_id = validate_session_id(session_id, self.output_root)
+            self._session_id = valid_id
         else:
             ts_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             short_id = uuid.uuid4().hex[:8]
@@ -274,7 +301,10 @@ class SessionRecorder:
 
 
 def list_sessions(sessions_dir: str | Path = "experiments/sessions") -> list[dict[str, Any]]:
-    """Scan sessions directory and return list of session metadata summaries sorted newest first."""
+    """Scan sessions directory and return list of session metadata summaries sorted newest first.
+
+    Returns portable metadata dictionaries without exposing machine-specific absolute directories.
+    """
     root = Path(sessions_dir)
     if not root.exists():
         return []
@@ -287,7 +317,6 @@ def list_sessions(sessions_dir: str | Path = "experiments/sessions") -> list[dic
                 try:
                     with open(meta_file, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                        data["session_dir"] = str(item.resolve())
                         sessions.append(data)
                 except Exception:
                     pass
@@ -298,15 +327,19 @@ def list_sessions(sessions_dir: str | Path = "experiments/sessions") -> list[dic
 
 
 def get_session(session_id: str, sessions_dir: str | Path = "experiments/sessions") -> Optional[dict[str, Any]]:
-    """Load session metadata dictionary for a given session ID."""
-    root = Path(sessions_dir)
-    target = root / session_id / "session.json"
+    """Load session metadata dictionary for a given session ID safely without escaping sessions_dir."""
+    try:
+        valid_id = validate_session_id(session_id, sessions_dir)
+    except ValueError:
+        return None
+
+    root = Path(sessions_dir).resolve()
+    target = root / valid_id / "session.json"
     if not target.exists():
         return None
 
     with open(target, "r", encoding="utf-8") as f:
         data = json.load(f)
-        data["session_dir"] = str(target.parent.resolve())
         return data
 
 
@@ -317,9 +350,10 @@ def create_session_source(
     realtime: bool = False,
     speed_factor: float = 1.0,
 ) -> WavSource | RealtimeWavSource:
-    """Create a WavSource or RealtimeWavSource directly from a recorded session."""
-    root = Path(sessions_dir)
-    wav_path = root / session_id / "raw.wav"
+    """Create a WavSource or RealtimeWavSource directly from a recorded session safely."""
+    valid_id = validate_session_id(session_id, sessions_dir)
+    root = Path(sessions_dir).resolve()
+    wav_path = root / valid_id / "raw.wav"
     if not wav_path.exists():
         raise FileNotFoundError(f"Session raw audio not found: {wav_path}")
 

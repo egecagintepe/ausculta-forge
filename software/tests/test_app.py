@@ -152,3 +152,45 @@ def test_streaming_from_realtime_wav_source(test_app_and_dir, tmp_path: Path):
             assert frame["type"] == "signal_frame"
             assert len(frame["raw_samples"]) > 0
             assert frame["sample_rate_hz"] == fs
+
+
+def test_session_id_path_traversal_rejected(test_app_and_dir):
+    app, _ = test_app_and_dir
+    with TestClient(app) as client:
+        # Invalid / traversal session ID in GET /api/sessions/{session_id}
+        resp = client.get("/api/sessions/..%2Fbad_escape")
+        assert resp.status_code in (400, 404)
+
+        resp2 = client.get("/api/sessions/invalid_session@chars!")
+        assert resp2.status_code == 400
+
+        # Traversal in replay endpoint
+        resp3 = client.post("/api/sessions/..%2Fbad_escape/replay")
+        assert resp3.status_code in (400, 404)
+
+
+def test_cors_and_websocket_origin_security(test_app_and_dir):
+    from starlette.websockets import WebSocketDisconnect
+
+    app, _ = test_app_and_dir
+    with TestClient(app) as client:
+        # 1. Allowed origin receives CORS allow header
+        resp_allowed = client.get("/api/status", headers={"Origin": "http://localhost:3000"})
+        assert resp_allowed.status_code == 200
+        assert resp_allowed.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+        # 2. Unauthorized origin does not receive CORS allow header
+        resp_blocked = client.get("/api/status", headers={"Origin": "http://malicious-site.com"})
+        assert resp_blocked.status_code == 200
+        assert resp_blocked.headers.get("access-control-allow-origin") != "http://malicious-site.com"
+
+        # 3. Allowed origin WebSocket succeeds
+        with client.websocket_connect("/ws", headers={"Origin": "http://localhost:3000"}) as ws:
+            hello = ws.receive_json()
+            assert hello["type"] == "hello"
+
+        # 4. Unauthorized origin WebSocket is rejected with code 1008
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            with client.websocket_connect("/ws", headers={"Origin": "http://malicious-site.com"}):
+                pass
+        assert excinfo.value.code == 1008

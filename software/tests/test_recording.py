@@ -26,6 +26,7 @@ from pcg_core.recording import (
     list_sessions,
     get_session,
     create_session_source,
+    validate_session_id,
 )
 from pcg_core.sources import MockPCGSource, WavSource, RealtimeWavSource
 from pcg_core.experiment import compute_file_sha256
@@ -162,3 +163,37 @@ class TestSessionRecording:
         assert retrieved["total_samples"] == 10
 
         assert get_session("non_existent", tmp_path) is None
+
+    def test_session_id_validation_and_path_containment(self, tmp_path: Path):
+        # Valid session IDs
+        assert validate_session_id("session_123_abc", tmp_path) == "session_123_abc"
+        assert validate_session_id("sess-test-456", tmp_path) == "sess-test-456"
+
+        # Invalid characters or traversal
+        invalid_ids = [
+            "../escaped",
+            "..\\escaped",
+            "../../etc/passwd",
+            "folder/sub",
+            "folder\\sub",
+            "",
+            "   ",
+            "sess with space",
+            "sess@bad!",
+        ]
+        for bad_id in invalid_ids:
+            with pytest.raises(ValueError):
+                validate_session_id(bad_id, tmp_path)
+
+        # get_session returns None safely on traversal attempt
+        assert get_session("../escaped", tmp_path) is None
+        assert get_session("bad/id", tmp_path) is None
+
+        # create_session_source rejects traversal attempt with ValueError
+        with pytest.raises(ValueError):
+            create_session_source("../escaped", sessions_dir=tmp_path)
+
+        # SessionRecorder.start rejects traversal session_id
+        rec = SessionRecorder(output_dir=tmp_path)
+        with pytest.raises(ValueError):
+            rec.start(session_id="../escaped")

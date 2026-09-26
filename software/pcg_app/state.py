@@ -21,6 +21,7 @@ from pcg_core.recording import (
     create_session_source,
     list_sessions,
     get_session,
+    validate_session_id,
 )
 from .protocol import (
     FILTER_PRESETS,
@@ -192,7 +193,10 @@ class StreamManager:
             self.active_source_name = "Synthetic PCG (S1/S2 Normal)"
         elif source_type == "realtime_wav" and path:
             self.active_source_name = f"Replay: {Path(path).name}"
-        elif source_type == "session" and session_id:
+        elif source_type == "session":
+            if not session_id:
+                raise ValueError("session_id must be provided when source_type is 'session'")
+            validate_session_id(session_id, self.sessions_dir)
             self.active_source_name = f"Session Replay: {session_id}"
         else:
             self.active_source_name = f"Source ({source_type})"
