@@ -110,6 +110,9 @@ AuscultaForge maintains an explicit architectural distinction between two fundam
    ```
 3. **`stream_state`:** Broadcast whenever active source, filter passband, or run state changes.
 4. **`recording_state`:** Broadcast whenever a session recording is started, progressing, or stopped.
+5. **`device_state`:** Real-time hardware lifecycle and capability status (`absent`, `detected`, `opening`, `handshaking`, `ready`, `streaming`, `interrupted`, `error`, `incompatible`).
+6. **`device_event`:** Structured audit log event emission (`timestamp_utc`, `code`, `severity`, `message`).
+7. **`device_stats`:** Real-time physical stream integrity counters (packets received, sequence gaps, CRC failures, disconnect/reconnect counts).
 
 ### Client $\rightarrow$ Server Commands
 
@@ -117,13 +120,58 @@ AuscultaForge maintains an explicit architectural distinction between two fundam
 - `{"action": "set_filter", "preset": "recommended" | "bell" | "diaphragm" | "extended"}`
 - `{"action": "start_recording", "source": "..."}`
 - `{"action": "stop_recording"}`
-- `{"action": "select_source", "source_type": "mock" | "realtime_wav" | "session", "session_id": "..."}`
+- `{"action": "select_source", "source_type": "none" | "hardware" | "session" | "realtime_wav" | "synthetic_dev", "session_id": "...", "path": "..."}`
 
 ---
 
-## 5. REST Endpoints
+## 5. Device Runtime Foundation & Configurable Acquisition Profiles
 
-- `GET /api/status`: System state, capabilities, and active sources.
+A dedicated subsystem (`software/pcg_app/device_runtime.py`) manages physical transducer hardware readiness without hardcoded sample-rate assumptions:
+
+1. **Truthful Startup State:**
+   The application starts in a truthful inactive state:
+   - `source_type`: `"none"`
+   - `active_source`: `"None"`
+   - `device_state`: `"absent"`
+   - `is_streaming`: `false`
+   No synthetic waveforms are emitted until an offline replay source or explicitly labeled synthetic test signal is selected.
+2. **Centralized Acquisition Profile (`AcquisitionProfile`):**
+   - **Rev-A Baseline Profile:** 48,000 Hz, mono, 32-bit I2S container, 24-bit meaningful sensor data, signed PCM.
+   - **Hardware Distinctions:** Distinguishes container width (32-bit DMA slot), meaningful data bits (24-bit sensor word), and sensor acoustic precision (microphone transducer SNR / noise floor).
+   - **Decoupled Architecture:** Core DSP pipeline and file recording operate on sample-rate-aware `SampleBlock` instances, preventing lock-in to fixed sample rates.
+3. **Explicit 9-State Lifecycle Machine:**
+   Deterministic state transitions: `ABSENT -> DETECTED -> OPENING -> HANDSHAKING -> READY -> STREAMING`.
+   When disconnected while streaming: `STREAMING -> INTERRUPTED`.
+   Reconnect path: `INTERRUPTED -> DETECTED -> OPENING -> HANDSHAKING -> READY`. (No separate phantom reconnecting state).
+4. **Disconnection Handling:**
+   - Link drop while streaming: Transitions to `INTERRUPTED` and notifies UI.
+   - Link drop while recording: Safely stops and seals recording with `termination_reason: "device_disconnected"`.
+5. **Decoupled High-Rate Stream Ingestion:**
+   ```text
+   48 kHz Hardware USB Acquisition
+              │
+              ▼
+   Full-Rate Storage & Analysis (SampleBlock, 48 kHz WAV, session.json)
+              │
+              ▼
+   Rolling Buffers & Decimated UI Display Frames (~30-60 fps)
+   ```
+   Recording preserves the full uncompressed acquisition stream with zero downsampling.
+6. **Dürüst Bütünlük Telemetrisi (10 Sayaç):**
+   Exposes strictly real counters: `packets_received`, `samples_received`, `sequence_gaps`, `repeated_packets`, `out_of_order_packets`, `crc_failures`, `malformed_frames`, `timestamp_regressions`, `disconnect_count`, `reconnect_count`.
+7. **Transport & Packet Abstraction:**
+   - Physical transport technology is ESP32-S3 Native USB (final decision).
+   - CDC-ACM is the current Rev-A proposal under team review; no fake COM ports or fake VID/PID are injected until descriptors are finalized.
+   - `DeviceSamplePacket` carries raw container integer samples until the `packet_to_sample_block` normalization adapter.
+
+---
+
+## 6. REST Endpoints
+
+- `GET /api/status`: System state, capabilities, active sources, and device summary.
+- `GET /api/device/state`: Structured hardware state, capability parameters, and discovery status.
+- `GET /api/device/events`: Bounded circular audit trail of recent hardware events.
+- `GET /api/device/stats`: Real-time packet, sample, sequence gap, and CRC failure telemetry counters.
 - `GET /api/sessions`: List all recorded sessions in `experiments/sessions/`.
 - `GET /api/sessions/{session_id}`: Load specific `session.json` metadata.
 - `POST /api/sessions/{session_id}/replay`: Replay a saved session through the live DSP streaming pipeline.

@@ -80,6 +80,10 @@ class SessionMetadata:
     stream_quality: dict[str, Any]
     git_commit_sha: Optional[str]
     environment: dict[str, str]
+    acquisition_mode: str = "offline"
+    termination_reason: str = "completed"
+    device_info: Optional[dict[str, Any]] = None
+    app_version: str = "1.0.0"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -89,7 +93,29 @@ class SessionMetadata:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SessionMetadata":
-        return cls(**data)
+        return cls(
+            session_id=data["session_id"],
+            started_at_utc=data["started_at_utc"],
+            ended_at_utc=data["ended_at_utc"],
+            source=data["source"],
+            sample_rate_hz=data["sample_rate_hz"],
+            total_blocks=data["total_blocks"],
+            total_samples=data["total_samples"],
+            duration_s=data["duration_s"],
+            first_sequence=data.get("first_sequence"),
+            last_sequence=data.get("last_sequence"),
+            first_timestamp_s=data.get("first_timestamp_s"),
+            last_timestamp_s=data.get("last_timestamp_s"),
+            raw_wav_relpath=data.get("raw_wav_relpath", "raw.wav"),
+            raw_wav_sha256=data.get("raw_wav_sha256", ""),
+            stream_quality=data.get("stream_quality", {}),
+            git_commit_sha=data.get("git_commit_sha"),
+            environment=data.get("environment", {}),
+            acquisition_mode=data.get("acquisition_mode", "offline"),
+            termination_reason=data.get("termination_reason", "completed"),
+            device_info=data.get("device_info"),
+            app_version=data.get("app_version", "1.0.0"),
+        )
 
     @classmethod
     def from_json(cls, text: str) -> "SessionMetadata":
@@ -130,6 +156,8 @@ class SessionRecorder:
         self._first_timestamp_s: Optional[float] = None
         self._last_timestamp_s: Optional[float] = None
         self._quality_monitor = StreamQualityMonitor()
+        self._acquisition_mode: str = "offline"
+        self._device_info: Optional[dict[str, Any]] = None
 
     @property
     def is_recording(self) -> bool:
@@ -147,7 +175,13 @@ class SessionRecorder:
     def total_samples(self) -> int:
         return self._total_samples
 
-    def start(self, session_id: Optional[str] = None, source: Optional[str] = None) -> str:
+    def start(
+        self,
+        session_id: Optional[str] = None,
+        source: Optional[str] = None,
+        acquisition_mode: str = "offline",
+        device_info: Optional[dict[str, Any]] = None,
+    ) -> str:
         """Start a new recording session."""
         if self._active:
             raise RecordingStateError("A recording session is already active.")
@@ -163,6 +197,8 @@ class SessionRecorder:
         if source:
             self._source = str(source)
 
+        self._acquisition_mode = str(acquisition_mode)
+        self._device_info = device_info
         self._started_at = datetime.now(timezone.utc)
         self._chunks = []
         self._total_samples = 0
@@ -212,7 +248,7 @@ class SessionRecorder:
         self._total_samples += len(chunk)
         self._total_blocks += 1
 
-    def stop(self) -> SessionMetadata:
+    def stop(self, termination_reason: str = "completed") -> SessionMetadata:
         """Finalize the recording, write WAV and session.json sidecar, and return metadata."""
         if not self._active:
             raise RecordingStateError("Cannot stop session: no session is currently active.")
@@ -284,6 +320,10 @@ class SessionRecorder:
             stream_quality=quality_data,
             git_commit_sha=get_git_commit_sha(),
             environment=env_data,
+            acquisition_mode=self._acquisition_mode,
+            termination_reason=termination_reason,
+            device_info=self._device_info,
+            app_version="1.0.0",
         )
 
         json_path = session_dir / "session.json"

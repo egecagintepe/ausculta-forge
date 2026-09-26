@@ -1,7 +1,7 @@
 """AuscultaForge — Local Desktop Application FastAPI & WebSocket Server.
 
-Provides the local bridge between Python's pcg_core signal processing pipeline
-and the React frontend desktop client.
+Provides the local bridge between Python's pcg_core signal processing pipeline,
+device runtime foundation, and the React frontend desktop client.
 """
 
 from contextlib import asynccontextmanager
@@ -15,13 +15,16 @@ from pydantic import BaseModel, Field
 
 from pcg_core.recording import list_sessions, get_session, validate_session_id
 from .state import StreamManager
+from .device_runtime import DeviceRuntime
 from .protocol import (
     make_hello_message,
     make_stream_state_message,
     make_recording_state_message,
+    make_device_state_message,
+    make_device_event_message,
+    make_device_stats_message,
     make_error_message,
 )
-
 
 DEFAULT_ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -36,8 +39,9 @@ DEFAULT_ALLOWED_ORIGINS = [
 def create_app(
     sessions_dir: str | Path = "experiments/sessions",
     allowed_origins: Optional[list[str]] = None,
+    device_runtime: Optional[DeviceRuntime] = None,
 ) -> FastAPI:
-    manager = StreamManager(sessions_dir=sessions_dir)
+    manager = StreamManager(sessions_dir=sessions_dir, device_runtime=device_runtime)
     origins = list(allowed_origins) if allowed_origins is not None else list(DEFAULT_ALLOWED_ORIGINS)
 
     @asynccontextmanager
@@ -86,7 +90,20 @@ def create_app(
         return {
             "capabilities": manager.get_capabilities(),
             "state": manager.get_state_dict(),
+            "device": manager.device_runtime.get_state_dict(),
         }
+
+    @app.get("/api/device/state")
+    def get_device_state() -> dict[str, Any]:
+        return manager.device_runtime.get_state_dict()
+
+    @app.get("/api/device/events")
+    def get_device_events(limit: int = 50) -> list[dict[str, Any]]:
+        return manager.device_runtime.event_log.get_recent(limit=limit)
+
+    @app.get("/api/device/stats")
+    def get_device_stats() -> dict[str, Any]:
+        return manager.device_runtime.stats.to_dict()
 
     @app.get("/api/sessions")
     def api_list_sessions() -> list[dict[str, Any]]:
@@ -149,13 +166,20 @@ def create_app(
 
     @app.post("/api/stream/source")
     async def api_set_source(req: SourceRequest) -> dict[str, Any]:
-        st = manager.select_source(req.source_type, path=req.path, session_id=req.session_id)
+        try:
+            st = manager.select_source(req.source_type, path=req.path, session_id=req.session_id)
+        except (ValueError, FileNotFoundError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
         await manager.broadcast(make_stream_state_message(st))
         return st
 
     @app.post("/api/recording/start")
     async def api_start_recording(req: RecordingStartRequest) -> dict[str, Any]:
-        sid = manager.start_recording(source_label=req.source)
+        try:
+            sid = manager.start_recording(source_label=req.source)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
         rec_msg = make_recording_state_message(
             is_recording=True,
             session_id=sid,
@@ -200,8 +224,10 @@ def create_app(
             hello = make_hello_message(
                 capabilities=manager.get_capabilities(),
                 state=manager.get_state_dict(),
+                device_state=manager.device_runtime.get_state_dict(),
             )
             await websocket.send_json(hello)
+            await websocket.send_json(make_device_state_message(manager.device_runtime.get_state_dict()))
 
             while True:
                 data = await websocket.receive_json()
@@ -227,26 +253,32 @@ def create_app(
                     await manager.broadcast(make_stream_state_message(st))
 
                 elif action == "select_source":
-                    st = manager.select_source(
-                        source_type=data.get("source_type", "mock"),
-                        path=data.get("path"),
-                        session_id=data.get("session_id"),
-                    )
-                    await manager.broadcast(make_stream_state_message(st))
+                    try:
+                        st = manager.select_source(
+                            source_type=data.get("source_type", "none"),
+                            path=data.get("path"),
+                            session_id=data.get("session_id"),
+                        )
+                        await manager.broadcast(make_stream_state_message(st))
+                    except Exception as e:
+                        await websocket.send_json(make_error_message(str(e), "SOURCE_SELECTION_FAILED"))
 
                 elif action == "start_recording":
-                    source_label = data.get("source")
-                    sid = manager.start_recording(source_label=source_label)
-                    rec_msg = make_recording_state_message(
-                        is_recording=True,
-                        session_id=sid,
-                        elapsed_seconds=0.0,
-                        samples_recorded=0,
-                        blocks_recorded=0,
-                        source=manager.active_source_name,
-                        sample_rate_hz=manager.sample_rate_hz,
-                    )
-                    await manager.broadcast(rec_msg)
+                    try:
+                        source_label = data.get("source")
+                        sid = manager.start_recording(source_label=source_label)
+                        rec_msg = make_recording_state_message(
+                            is_recording=True,
+                            session_id=sid,
+                            elapsed_seconds=0.0,
+                            samples_recorded=0,
+                            blocks_recorded=0,
+                            source=manager.active_source_name,
+                            sample_rate_hz=manager.sample_rate_hz,
+                        )
+                        await manager.broadcast(rec_msg)
+                    except Exception as e:
+                        await websocket.send_json(make_error_message(str(e), "RECORDING_START_FAILED"))
 
                 elif action == "stop_recording":
                     try:
@@ -263,6 +295,17 @@ def create_app(
                         await manager.broadcast(rec_msg)
                     except Exception as e:
                         await websocket.send_json(make_error_message(str(e), "RECORDING_STOP_FAILED"))
+
+                elif action == "get_device_state":
+                    await websocket.send_json(make_device_state_message(manager.device_runtime.get_state_dict()))
+
+                elif action == "get_device_stats":
+                    await websocket.send_json(make_device_stats_message(manager.device_runtime.stats.to_dict()))
+
+                elif action == "get_device_events":
+                    limit = data.get("limit", 50)
+                    events = manager.device_runtime.event_log.get_recent(limit=limit)
+                    await websocket.send_json({"type": "device_events", "events": events})
 
                 elif action == "ping":
                     await websocket.send_json({"type": "pong", "time": time.time()})

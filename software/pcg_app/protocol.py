@@ -26,13 +26,18 @@ FILTER_PRESETS: dict[str, tuple[float, float]] = {
 }
 
 
-def make_hello_message(capabilities: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+def make_hello_message(
+    capabilities: dict[str, Any],
+    state: dict[str, Any],
+    device_state: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
     return {
         "type": "hello",
         "version": PROTOCOL_VERSION,
         "app": "AuscultaForge Bridge",
         "capabilities": capabilities,
         "state": state,
+        "device_state": device_state,
     }
 
 
@@ -41,6 +46,31 @@ def make_stream_state_message(state: dict[str, Any]) -> dict[str, Any]:
         "type": "stream_state",
         "version": PROTOCOL_VERSION,
         **state,
+    }
+
+
+def make_device_state_message(device_state: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "device_state",
+        "version": PROTOCOL_VERSION,
+        "state": device_state,
+        **device_state,
+    }
+
+
+def make_device_event_message(event: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "device_event",
+        "version": PROTOCOL_VERSION,
+        **event,
+    }
+
+
+def make_device_stats_message(stats: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "device_stats",
+        "version": PROTOCOL_VERSION,
+        **stats,
     }
 
 

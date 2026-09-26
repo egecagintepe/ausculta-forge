@@ -1,7 +1,11 @@
 """AuscultaForge — Application State & Live Stream Orchestration Manager.
 
-Coordinates real-time PCG signal generation, streaming DSP filtering,
+Coordinates real-time PCG signal processing, device lifecycle, streaming DSP filtering,
 quality monitoring, and session recording in a clean, UI-independent layer.
+
+CORE PRODUCT RULE:
+The application starts with NO device connected and NO active stream.
+Synthetic sources never activate automatically and never masquerade as physical hardware.
 """
 
 import asyncio
@@ -23,12 +27,22 @@ from pcg_core.recording import (
     get_session,
     validate_session_id,
 )
+from .device_runtime import (
+    DeviceRuntime,
+    DeviceState,
+    DeviceCapabilities,
+    DeviceSamplePacket,
+    packet_to_sample_block,
+)
 from .protocol import (
     FILTER_PRESETS,
     make_hello_message,
     make_stream_state_message,
     make_signal_frame_message,
     make_recording_state_message,
+    make_device_state_message,
+    make_device_event_message,
+    make_device_stats_message,
     make_error_message,
 )
 
@@ -36,9 +50,16 @@ from .protocol import (
 class StreamManager:
     """Central state and streaming task manager for the local desktop application."""
 
-    def __init__(self, sessions_dir: str | Path = "experiments/sessions"):
+    def __init__(
+        self,
+        sessions_dir: str | Path = "experiments/sessions",
+        device_runtime: Optional[DeviceRuntime] = None,
+    ) -> None:
         self.sessions_dir = Path(sessions_dir)
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
+
+        # Device runtime foundation
+        self.device_runtime: DeviceRuntime = device_runtime or DeviceRuntime()
 
         # Filter configuration
         self.filter_preset: str = "recommended"
@@ -56,15 +77,15 @@ class StreamManager:
             filter_order=4,
         )
 
-        # Source management
-        self.source_type: str = "mock"
+        # Source management — Core Rule: starts with NO active source and NO streaming
+        self.source_type: str = "none"
         self.source_path: Optional[str] = None
         self.source_session_id: Optional[str] = None
-        self.active_source_name: str = "Synthetic PCG (S1/S2 Normal)"
+        self.active_source_name: str = "None"
         self._source_generator = None
 
-        # Streaming loop state
-        self.is_streaming: bool = True
+        # Streaming loop state — Starts idle
+        self.is_streaming: bool = False
         self.is_paused: bool = False
         self._loop_task: Optional[asyncio.Task] = None
         self._active_connections: Set[Any] = set()
@@ -77,9 +98,14 @@ class StreamManager:
         return {
             "sample_rate_hz": self.sample_rate_hz,
             "block_size": self.block_size,
-            "sources": ["mock", "realtime_wav", "session"],
+            "sources": ["none", "hardware", "session", "realtime_wav", "synthetic_dev"],
             "filter_presets": list(FILTER_PRESETS.keys()),
             "max_buffer_seconds": 15,
+            "device_runtime": {
+                "transport": "native_usb_pending",
+                "rev_a_proposal": "cdc_acm_under_review",
+                "active_profile": self.device_runtime.profile.to_dict(),
+            },
         }
 
     def get_state_dict(self) -> dict[str, Any]:
@@ -94,6 +120,8 @@ class StreamManager:
             "filter_preset": self.filter_preset,
             "filter_low_hz": self.filter_low_hz,
             "filter_high_hz": self.filter_high_hz,
+            "device_state": self.device_runtime.state.value,
+            "device_info": self.device_runtime.get_state_dict(),
             "connected_clients": len(self._active_connections),
         }
 
@@ -120,20 +148,8 @@ class StreamManager:
 
     def _create_source_generator(self):
         """Construct the generator for the active source."""
-        if self.source_type == "mock":
-            src = MockPCGSource(
-                sample_rate_hz=self.sample_rate_hz,
-                heart_rate_bpm=72.0,
-                block_size=self.block_size,
-                duration_s=30.0,
-            )
-            return src.blocks()
-        elif self.source_type == "realtime_wav" and self.source_path:
-            p = Path(self.source_path)
-            if not p.exists():
-                raise FileNotFoundError(f"Source WAV not found: {p}")
-            src = WavSource(p, block_size=self.block_size)
-            return src.blocks()
+        if self.source_type == "none":
+            return None
         elif self.source_type == "session" and self.source_session_id:
             src = create_session_source(
                 self.source_session_id,
@@ -142,8 +158,14 @@ class StreamManager:
                 realtime=False,
             )
             return src.blocks()
-        else:
-            # Fallback to mock
+        elif self.source_type == "realtime_wav" and self.source_path:
+            p = Path(self.source_path)
+            if not p.exists():
+                raise FileNotFoundError(f"Source WAV not found: {p}")
+            src = WavSource(p, block_size=self.block_size)
+            return src.blocks()
+        elif self.source_type == "synthetic_dev":
+            # Explicit engineering development mode ONLY
             src = MockPCGSource(
                 sample_rate_hz=self.sample_rate_hz,
                 heart_rate_bpm=72.0,
@@ -151,6 +173,8 @@ class StreamManager:
                 duration_s=30.0,
             )
             return src.blocks()
+        else:
+            return None
 
     def set_filter(
         self,
@@ -184,51 +208,150 @@ class StreamManager:
         path: Optional[str] = None,
         session_id: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Switch active stream source."""
-        self.source_type = source_type
-        self.source_path = path
-        self.source_session_id = session_id
+        """Switch active stream source with strict validation.
 
-        if source_type == "mock":
-            self.active_source_name = "Synthetic PCG (S1/S2 Normal)"
-        elif source_type == "realtime_wav" and path:
-            self.active_source_name = f"Replay: {Path(path).name}"
+        Does NOT silently fall back to mock on invalid requests.
+        """
+        # If switching away from hardware, stop device streaming cleanly
+        if self.source_type == "hardware" and source_type != "hardware":
+            self.device_runtime.stop_streaming()
+
+        if source_type == "none":
+            self.source_type = "none"
+            self.source_path = None
+            self.source_session_id = None
+            self.active_source_name = "None"
+            self.is_streaming = False
+            self.is_paused = False
+            self._source_generator = None
+
         elif source_type == "session":
             if not session_id:
                 raise ValueError("session_id must be provided when source_type is 'session'")
             validate_session_id(session_id, self.sessions_dir)
+            self.source_type = "session"
+            self.source_path = None
+            self.source_session_id = session_id
             self.active_source_name = f"Session Replay: {session_id}"
-        else:
-            self.active_source_name = f"Source ({source_type})"
+            self._source_generator = None
+            self.is_streaming = True
+            self.is_paused = False
 
-        # Reset generator
-        self._source_generator = None
+        elif source_type == "realtime_wav":
+            if not path:
+                raise ValueError("path must be provided when source_type is 'realtime_wav'")
+            p = Path(path)
+            if not p.exists():
+                raise FileNotFoundError(f"Source WAV not found: {p}")
+            self.source_type = "realtime_wav"
+            self.source_path = str(p)
+            self.source_session_id = None
+            self.active_source_name = f"Replay: {p.name}"
+            self._source_generator = None
+            self.is_streaming = True
+            self.is_paused = False
+
+        elif source_type in ("synthetic_dev", "mock"):
+            # Explicit engineering test signal
+            self.source_type = "synthetic_dev"
+            self.source_path = None
+            self.source_session_id = None
+            self.active_source_name = "Synthetic Development Signal — Not Hardware"
+            self._source_generator = None
+            self.is_streaming = True
+            self.is_paused = False
+
+        elif source_type == "hardware":
+            if self.device_runtime.state not in (DeviceState.READY, DeviceState.STREAMING):
+                raise ValueError(
+                    f"Hardware device not ready (current state: {self.device_runtime.state.value})"
+                )
+            self.source_type = "hardware"
+            dev_id = self.device_runtime.get_state_dict().get("device_id") or "ESP32-S3"
+            self.active_source_name = f"Hardware: {dev_id}"
+            if self.device_runtime.capabilities:
+                self.sample_rate_hz = self.device_runtime.capabilities.sample_rate_hz
+                self.block_size = self.device_runtime.profile.negotiated_block_size
+            self.device_runtime.start_streaming()
+            self._source_generator = None
+            self.is_streaming = True
+            self.is_paused = False
+
+        else:
+            raise ValueError(f"Invalid or unsupported source type: {source_type!r}")
+
         return self.get_state_dict()
 
     def start_recording(self, source_label: Optional[str] = None) -> str:
-        """Start recording incoming blocks into a new session."""
+        """Start recording incoming blocks into a new session.
+
+        Requires an active stream and source.
+        """
+        if not self.is_streaming or self.source_type == "none":
+            raise ValueError("Cannot record: no active stream or source is selected.")
+
         source = source_label or self.active_source_name
-        sid = self.recorder.start(source=source)
+        dev_info = self.device_runtime.get_state_dict() if self.source_type == "hardware" else None
+
+        sid = self.recorder.start(
+            source=source,
+            acquisition_mode=self.source_type,
+            device_info=dev_info,
+        )
         self._recording_started_wall = time.time()
         return sid
 
-    def stop_recording(self) -> SessionMetadata:
+    def stop_recording(self, termination_reason: str = "completed") -> SessionMetadata:
         """Finalize and save the active recording session."""
-        meta = self.recorder.stop()
+        meta = self.recorder.stop(termination_reason=termination_reason)
         return meta
 
+    def handle_device_disconnect(self, error_msg: Optional[str] = None) -> None:
+        """Handle hardware device disconnect cleanly."""
+        was_hardware = (self.source_type == "hardware")
+
+        if was_hardware:
+            # If recording was active from hardware, safely finalize with termination_reason
+            if self.recorder.is_recording:
+                try:
+                    meta = self.recorder.stop(termination_reason="device_disconnected")
+                    self.device_runtime.event_log.log(
+                        "RECORDING_ABORTED",
+                        f"Session recording {meta.session_id} finalized due to device disconnect",
+                        severity="warning",
+                        metadata={"session_id": meta.session_id},
+                    )
+                except Exception as e:
+                    self.device_runtime.event_log.log(
+                        "RECORDING_ABORT_ERROR",
+                        f"Error while finalizing interrupted recording: {e}",
+                        severity="error",
+                    )
+
+            self.is_streaming = False
+            self.is_paused = False
+            self.source_type = "none"
+            self.active_source_name = "None"
+            self._source_generator = None
+
+        self.device_runtime.handle_disconnect(error_msg)
+
     def start_stream(self) -> None:
-        self.is_streaming = True
-        self.is_paused = False
+        if self.source_type != "none":
+            self.is_streaming = True
+            self.is_paused = False
 
     def pause_stream(self) -> None:
         self.is_paused = True
 
     def resume_stream(self) -> None:
-        self.is_paused = False
+        if self.source_type != "none":
+            self.is_paused = False
 
     def stop_stream(self) -> None:
         self.is_streaming = False
+        if self.source_type == "hardware":
+            self.device_runtime.stop_streaming()
 
     async def start_streaming_task(self) -> None:
         """Start the background stream generator task."""
@@ -245,65 +368,123 @@ class StreamManager:
                 pass
             self._loop_task = None
 
+    async def ingest_device_packet(self, packet: DeviceSamplePacket) -> None:
+        """Entry point for push-driven physical hardware sample packets.
+
+        Called by the transport decoder when new physical packets arrive from USB.
+        Flow:
+        1. Only accept packets when hardware is actively STREAMING and stream manager is active
+        2. Update DeviceIntegrityStats
+        3. Drop CRC-failed packets without feeding DSP or recording
+        4. Convert valid packet to SampleBlock (checks integer range, normalizes to float32)
+        5. Process through DSP pipeline, record if active, and broadcast signal_frame
+        """
+        if (
+            self.device_runtime.state != DeviceState.STREAMING
+            or self.source_type != "hardware"
+            or not self.is_streaming
+            or self.is_paused
+        ):
+            return
+
+        # Update integrity telemetry
+        self.device_runtime.stats.record_packet(packet)
+
+        # Drop CRC-failed packets without feeding DSP or recording
+        if not packet.crc_ok:
+            return
+
+        # Adapt to SampleBlock (checks legal integer range and normalizes to float32)
+        block = packet_to_sample_block(
+            packet,
+            sample_rate_hz=self.sample_rate_hz,
+            profile=self.device_runtime.profile,
+        )
+
+        # Dispatch to shared processing, recording, and WebSocket broadcast
+        await self._dispatch_sample_block(block)
+
+    async def _dispatch_sample_block(self, block: SampleBlock) -> None:
+        """Shared pipeline processing, session recording, and WebSocket broadcast.
+
+        Invoked by both pull-driven offline sources and push-driven hardware packets.
+        """
+        # Process through DSP pipeline
+        frame = self.pipeline.process_block(block)
+
+        # Record if session active
+        if self.recorder.is_recording:
+            try:
+                self.recorder.record_block(block)
+            except Exception as e:
+                await self.broadcast(make_error_message(f"Recording error: {e}", "RECORDING_ERROR"))
+
+        # Broadcast signal frame to clients
+        quality_rep = self.pipeline.quality_monitor.report
+        quality_summary = {
+            "total_blocks": quality_rep.total_blocks,
+            "dropped_blocks": quality_rep.dropped_blocks,
+            "repeated_sequences": quality_rep.repeated_sequences,
+            "sequence_discontinuities": quality_rep.sequence_discontinuities,
+            "is_healthy": quality_rep.is_healthy,
+        }
+
+        raw_list = [round(float(v), 5) for v in block.samples]
+        filt_list = [round(float(v), 5) for v in frame.filtered_block.samples]
+
+        msg = make_signal_frame_message(
+            sequence=block.sequence,
+            timestamp_s=block.timestamp_s,
+            sample_rate_hz=block.sample_rate_hz,
+            raw_samples=raw_list,
+            filtered_samples=filt_list,
+            rms_val=frame.metrics.rms,
+            peak_val=frame.metrics.peak_abs,
+            crest_factor_val=frame.metrics.crest_factor,
+            quality_summary=quality_summary,
+            recording_active=self.recorder.is_recording,
+        )
+
+        await self.broadcast(msg)
+
     async def _stream_loop(self) -> None:
         """Continuous background loop consuming blocks, filtering, and broadcasting."""
         while True:
             try:
-                if not self.is_streaming or self.is_paused:
+                # Do not emit signal frames when idle, paused, or no source selected
+                if not self.is_streaming or self.is_paused or self.source_type == "none":
+                    await asyncio.sleep(0.05)
+                    continue
+
+                if self.source_type == "hardware":
+                    # Hardware acquisition is push-driven via ingest_device_packet().
+                    # The background generator loop idles while physical hardware is active.
                     await asyncio.sleep(0.05)
                     continue
 
                 if self._source_generator is None:
                     self._source_generator = self._create_source_generator()
+                    if self._source_generator is None:
+                        self.is_streaming = False
+                        await asyncio.sleep(0.05)
+                        continue
 
                 # Fetch next block
                 try:
                     block: SampleBlock = next(self._source_generator)
                 except StopIteration:
-                    # Loop source indefinitely for continuous display
+                    # Loop offline source for continuous playback
                     self._source_generator = self._create_source_generator()
+                    if self._source_generator is None:
+                        self.is_streaming = False
+                        continue
                     block = next(self._source_generator)
-
-                # Process through pipeline
-                frame = self.pipeline.process_block(block)
-
-                # Record if session active
-                if self.recorder.is_recording:
-                    try:
-                        self.recorder.record_block(block)
-                    except Exception as e:
-                        await self.broadcast(make_error_message(f"Recording error: {e}", "RECORDING_ERROR"))
 
                 # Duration of current block in seconds
                 block_duration = len(block.samples) / block.sample_rate_hz
 
-                # Broadcast signal frame to clients
-                quality_rep = self.pipeline.quality_monitor.report
-                quality_summary = {
-                    "total_blocks": quality_rep.total_blocks,
-                    "dropped_blocks": quality_rep.dropped_blocks,
-                    "repeated_sequences": quality_rep.repeated_sequences,
-                    "sequence_discontinuities": quality_rep.sequence_discontinuities,
-                    "is_healthy": quality_rep.is_healthy,
-                }
-
-                raw_list = [round(float(v), 5) for v in block.samples]
-                filt_list = [round(float(v), 5) for v in frame.filtered_block.samples]
-
-                msg = make_signal_frame_message(
-                    sequence=block.sequence,
-                    timestamp_s=block.timestamp_s,
-                    sample_rate_hz=block.sample_rate_hz,
-                    raw_samples=raw_list,
-                    filtered_samples=filt_list,
-                    rms_val=frame.metrics.rms,
-                    peak_val=frame.metrics.peak_abs,
-                    crest_factor_val=frame.metrics.crest_factor,
-                    quality_summary=quality_summary,
-                    recording_active=self.recorder.is_recording,
-                )
-
-                await self.broadcast(msg)
+                # Dispatch block through shared processing
+                await self._dispatch_sample_block(block)
 
                 # Wall-clock pacing
                 await asyncio.sleep(block_duration)

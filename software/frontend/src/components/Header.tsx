@@ -19,6 +19,7 @@ interface HeaderProps {
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
   backendConnected?: boolean;
+  deviceState?: string;
   isRecording?: boolean;
   recordingElapsedSeconds?: number;
   recordingSessionId?: string | null;
@@ -32,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   isFullscreen,
   onToggleFullscreen,
   backendConnected = false,
+  deviceState = 'absent',
   isRecording = false,
   recordingElapsedSeconds = 0,
   recordingSessionId,
@@ -94,6 +96,26 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="hidden sm:flex items-center gap-1.5 font-mono-code text-[11px] text-[var(--on-surface-variant)]">
           <span className={`w-2 h-2 rounded-full ${backendConnected ? 'bg-[var(--status-success)] animate-pulse' : 'bg-[var(--status-warning)]'}`} />
           <span className="tracking-wide">{backendConnected ? 'PYTHON BRIDGE · 4.0 kHz' : 'BRIDGE STANDBY'}</span>
+        </div>
+
+        {/* Hardware Device Indicator */}
+        <div className="flex items-center font-mono-code text-[11px]">
+          {deviceState === 'streaming' || deviceState === 'ready' ? (
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[var(--status-success)]/15 border border-[var(--status-success)]/40 text-[var(--status-success)] font-semibold shadow-xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] animate-pulse" />
+              <span>{deviceState === 'streaming' ? 'STREAMING' : 'DEVICE READY'}</span>
+            </span>
+          ) : deviceState === 'interrupted' ? (
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[var(--status-warning)]/15 border border-[var(--status-warning)]/40 text-[var(--status-warning)] font-semibold shadow-xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)]" />
+              <span>INTERRUPTED</span>
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[var(--surface-muted)] border border-[var(--border-subtle)] text-[var(--on-surface-variant)] shadow-xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--on-surface-variant)]/40" />
+              <span>NO DEVICE</span>
+            </span>
+          )}
         </div>
 
         {/* Theme Quick Toggle */}
