@@ -9,7 +9,8 @@ import {
   ShieldCheck,
   RefreshCw,
   Clock,
-  HardDrive
+  HardDrive,
+  Zap
 } from 'lucide-react';
 import { HeartSoundMetadata } from '../types';
 import { STARTER_SAMPLES } from '../audio/samplesData';
@@ -18,6 +19,7 @@ import { bridgeClient, SessionItem } from '../api/bridgeClient';
 interface SamplesViewProps {
   onSelectSample: (sample: HeartSoundMetadata) => void;
   onReplaySession?: (sessionId: string) => void;
+  onAnalyzeSession?: (sessionId: string) => void;
   activeSampleId?: string;
   isDark: boolean;
 }
@@ -25,6 +27,7 @@ interface SamplesViewProps {
 export const SamplesView: React.FC<SamplesViewProps> = ({
   onSelectSample,
   onReplaySession,
+  onAnalyzeSession,
   activeSampleId,
 }) => {
   const [activeTab, setActiveTab] = useState<'specimens' | 'sessions'>('specimens');
@@ -307,14 +310,23 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => handleReplayClick(sess.session_id)}
-                    disabled={replayingId === sess.session_id}
-                    className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-[var(--accent-oxblood)] hover:opacity-90 flex items-center gap-2 shadow-xs cursor-pointer active:scale-95 shrink-0"
-                  >
-                    <Play size={14} className={replayingId === sess.session_id ? 'animate-spin' : ''} />
-                    <span>Replay in Pipeline</span>
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => onAnalyzeSession && onAnalyzeSession(sess.session_id)}
+                      className="px-3.5 py-2 rounded-lg text-xs font-semibold text-[var(--accent-oxblood)] border border-[var(--border-strong)] hover:border-[var(--accent-oxblood)] hover:bg-[var(--surface-muted)] flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                    >
+                      <Zap size={14} />
+                      <span>Analyze</span>
+                    </button>
+                    <button
+                      onClick={() => handleReplayClick(sess.session_id)}
+                      disabled={replayingId === sess.session_id}
+                      className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-[var(--accent-oxblood)] hover:opacity-90 flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
+                    >
+                      <Play size={14} className={replayingId === sess.session_id ? 'animate-spin' : ''} />
+                      <span>Replay in Pipeline</span>
+                    </button>
+                  </div>
                 </div>
               ))
             )}

@@ -7,6 +7,7 @@ import { LiveWorkspace } from './components/LiveWorkspace';
 import { SamplesView } from './components/SamplesView';
 import { DeviceView } from './components/DeviceView';
 import { SettingsView } from './components/SettingsView';
+import { AnalysisWorkbench } from './components/AnalysisWorkbench';
 import { DiagnosticsDrawer } from './components/DiagnosticsDrawer';
 import { ConfirmDiscardDialog, SaveAsDialog, ToastNotification, ToastInfo } from './components/Dialogs';
 import { audioEngine } from './audio/audioEngine';
@@ -36,6 +37,7 @@ export default function App() {
 
   // Navigation & Acquisition Source
   const [currentDestination, setCurrentDestination] = useState<NavigationDestination>('live');
+  const [analysisTargetSessionId, setAnalysisTargetSessionId] = useState<string | null>(null);
   const [sourceType, setSourceType] = useState<AudioSourceType>('none');
   const [activeMetadata, setActiveMetadata] = useState<HeartSoundMetadata | null>(null);
 
@@ -533,6 +535,12 @@ export default function App() {
     addToast(`Replaying session ${sessionId}`, 'info');
   }, [addLog, addToast]);
 
+  const handleAnalyzeSession = useCallback((sessionId: string) => {
+    setAnalysisTargetSessionId(sessionId);
+    setCurrentDestination('analysis');
+    addLog(`Opening Validation Workbench for session: ${sessionId}`, 'info', 'Analysis');
+  }, [addLog]);
+
   const handleSelectMockSource = useCallback(() => {
     bridgeClient.selectSource('synthetic_dev');
     setSourceType('synthetic');
@@ -889,8 +897,19 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
             <SamplesView
               onSelectSample={loadSample}
               onReplaySession={handleReplaySession}
+              onAnalyzeSession={handleAnalyzeSession}
               activeSampleId={activeMetadata?.id}
               isDark={isDark}
+            />
+          )}
+
+          {currentDestination === 'analysis' && (
+            <AnalysisWorkbench
+              initialSessionId={analysisTargetSessionId}
+              isDark={isDark}
+              onNavigateToLive={() => setCurrentDestination('live')}
+              onNavigateToSamples={() => setCurrentDestination('samples')}
+              addToast={addToast}
             />
           )}
 

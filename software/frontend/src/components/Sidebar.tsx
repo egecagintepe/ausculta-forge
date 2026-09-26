@@ -50,6 +50,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: <Stethoscope size={18} strokeWidth={2} />
     },
     {
+      id: 'analysis',
+      label: 'Validation Workbench',
+      subLabel: 'Analysis',
+      icon: <Layers size={18} strokeWidth={2} />
+    },
+    {
       id: 'settings',
       label: 'DSP & Calibration',
       subLabel: 'Settings',
