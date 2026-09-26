@@ -6,9 +6,9 @@ The AuscultaForge digital stethoscope system acquires cardiac acoustic signals v
 
 ```text
 +------------------------+        +--------------------------+        +--------------------+
-|    Acoustic Head &     | -----> | MCU / Acquisition Unit   | -----> |      Host PC       |
-| Microphone/Transducer  | (I/F)  | Sampling & Framing       | (Wire) | Ingestion & Buffer |
-|        (Ozan)          |        | (Candidate: ESP32, Kaan) |        |       (Ege)        |
+| Reference PCG / Phantom| -----> | ESP32-S3 Dev Board       | -----> |      Host PC       |
+| I2S Mic (Ozan / Kaan)  | (I2S)  | Sampling & Packet Native | (USB)  | Ingestion, DSP, UI |
+|   (INMP441/ICS-43434)  |        |     USB Driver (Ege)     |        |       (Ege)        |
 +------------------------+        +--------------------------+        +--------------------+
                                                                       |
                                                                       v

@@ -72,7 +72,7 @@ class SampleBlock:
 
 ## Neden Bu Tasarım Seçildi? Hangi Problemleri Önlüyor?
 
-- **Protokol Kilidini Önleme:** Fiziksel kablo (wire) veya UART paket formatı (CRC, başlık baytları, baud hızı) henüz Kaan ile kesinleştirilmemiştir. Sinyal işleme kodunun donanım baytlarına doğrudan bağlanması engellenmiştir.
+- **Protokol Kilidini Önleme:** Taşıma katmanı kablolu Native USB olarak seçilmiş olup wire paket formatı (CRC, başlık baytları, framing) henüz kilitlenmemiştir. Sinyal işleme kodunun donanım baytlarına doğrudan bağlanması engellenmiştir.
 - **Tekrarlanabilir Test Edilebilirlik:** Filtreleme ve analiz kodları hiçbir zaman "gerçek porta bağlı mıyım?" kontrolü yapmaz; bu sayede birim testleri sıfır donanımla nanosaniyeler içinde koşar.
 
 ---

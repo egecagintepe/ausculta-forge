@@ -3,10 +3,10 @@
 This directory contains the embedded software running on the microcontroller (MCU).
 
 ## Scope & Responsibility
-- **Owner:** Kaan
-- **Hardware Target:** Candidate: ESP32 family (provisional; final selection subject to evaluation)
+- **Owner:** Ege
+- **Hardware Target:** ESP32-S3-WROOM development board (finalized Phase-1 platform)
 - **Key Responsibilities:**
-  - Sensor/transducer interface (e.g. I2S digital audio or ADC sampling depending on microphone selection)
-  - DMA / ring buffer management and framing
-  - Serial/USB communication driver for PC streaming
-  - Status monitoring, packet sequence counters, and transmission health
+  - I2S MEMS microphone acquisition (DMA double-buffering) at target ~4 kHz
+  - Hardware transport: Wired Native USB (ESP32-S3 USB OTG / TinyUSB)
+  - Packet framing, sequence counting, timestamping, and CRC generation
+  - Status monitoring, packet loss indicators, and hardware health flags

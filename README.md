@@ -51,9 +51,9 @@ The PC software does not couple directly to wire-level protocols or specific har
 
 | Team Member | Area of Responsibility | Key Focus Areas |
 |---|---|---|
-| **Ozan** | Acoustic / Mechanical Acquisition & Physical Prototype | Chest piece acoustic coupling, bell/diaphragm design, noise isolation, 3D casing, mechanical ergonomics. |
-| **Kaan** | Embedded Electronics, MCU / Acquisition Platform, Firmware & PCB | Sensor interfacing (analog/digital options), MCU firmware, DMA/buffer management, wire communication driver, PCB schematics & layout. |
-| **Ege** | System Architecture, PC Software, DSP & Integration | Software architecture, PC-side ingestion, DSP filtering pipeline, integration testing, verification tools. |
+| **Ozan** | Hardware Component Selection, Schematics & PCB | Hardware component selection, Altium schematic & digital hardware skeleton, Native USB hardware routing, I2S routing & configurable ~6-pin header, LDO regulation, PCB layout, dev-board/breadboard integration. |
+| **Kaan** | Power Architecture & Acoustic Phantom Physical System | MCP73831 + PFET + Schottky power-path reference design & integration support, acoustic phantom physical system/chamber, speaker/exciter setup, acoustic/mechanical coupling, reference PCG playback setup, phantom test procedure. |
+| **Ege** | ESP32 Firmware, Transport Protocol, PC DSP & Integration | ESP32 firmware development, I2S + DMA acquisition, Native USB firmware & PC transport, MCU-to-PC packet/protocol design, PC software backend & DSP, UI integration, CRC/data integrity logic, repository management. |
 
 ---
 

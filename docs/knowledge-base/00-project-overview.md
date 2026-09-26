@@ -25,9 +25,9 @@ Bu aşamada henüz grafik arayüz (GUI), makine öğrenmesi (AI), tanı koyma al
 
 | Mühendis | Alan | Temel Odak Noktaları |
 |---|---|---|
-| **Ozan** | Akustik & Mekanik Edinim, Fiziksel Prototip | Göğüs parçası akustik kuplajı, diyafram/çan tasarımı, akustik oda geometrisi, mekanik gürültü izolasyonu, 3D ergonomik gövde. |
-| **Kaan** | Gömülü Elektronik, MCU, Firmware & PCB | Sensör/mikrofon arayüzü (I2S veya analog ADC), MCU donanım seçimi (aday: ESP32 ailesi), DMA tamponlama, seri haberleşme sürücüsü, şematik ve PCB çizimi. |
-| **Ege** | Sistem Mimarisi, PC Yazılımı, DSP & Entegrasyon | Katmanlı yazılım mimarisi, PCG akış ve sinyal işleme hattı (DSP), metrikler, spektral analiz, kalite izleme, test otomasyonu ve entegrasyon. |
+| **Ozan** | Donanım Bileşen Seçimi, Şematik & PCB | Altium şematik/iskelet tasarımı, Native USB donanım hatları, yapılandırılabilir ~6-pin I2S mikrofon başlığı, LDO regülasyonu, PCB yerleşimi, dev-board entegrasyonu. |
+| **Kaan** | Güç Mimarisi & Akustik Fantom Sistemi | MCP73831 + PFET + Schottky güç yolu referans tasarımı, akustik fantom test düzeneği, uyarıcı (exciter) / hoparlör mekanik kuplajı, referans PCG yürütme ve test prosedürü. |
+| **Ege** | ESP32 Firmware, Taşıma Protokolü, PC DSP & Entegrasyon | ESP32-S3 firmware, I2S + DMA edinim, Native USB veri aktarımı, MCU-PC paket/protokol tasarımı, PC yazılım backend ve DSP, UI entegrasyonu, CRC doğrulama, repo yönetimi. |
 
 ---
 
@@ -49,10 +49,11 @@ AuscultaForge şu prensiple tasarlanmıştır:
 
 ## Geçici (Provisional) Varsayımlar
 
-Aşağıdaki unsurlar şu an için **aday/geçici (provisional)** mühendislik tercihleridir ve kesinleştirilmemiştir:
-- **Mikrodenetleyici:** ESP32-S3 güçlü bir adaydır ancak değerlendirme sürecindedir.
-- **Arayüz:** I2S dijital mikrofon veya harici ADC/analog katman seçimi sensör prototip testlerine bağlıdır.
-- **Filtre Bandı:** 20–600 Hz bandı biyomedikal literatür başlangıç varsayımıdır; akustik gövde frekans cevabı ve ilerleyen aşamalardaki akustik/fantom doğrulama testleriyle revize edilecektir.
+Takım kararlarıyla netleşen ve açıkta kalan mühendislik tercihleri:
+- **Mikrodenetleyici:** ESP32-S3-WROOM olarak kesinleşti (Faz 1 kablolu Native USB). Wi-Fi ve BLE Faz 1 için kapsam dışıdır.
+- **Arayüz & Mikrofon:** I2S MEMS mikrofonlar (INMP441 ve ICS-43434/43432 adayları) fantom testinde karşılaştırılacaktır. Özel PCB, mikrofon modelini kilitlememek için yapılandırılabilir ~6-pin başlık içerecektir.
+- **Protokol:** Start, Sequence, Timestamp, Payload, Flags, CRC kavramsal alanları belirlendi; byte genişlikleri ve USB sınıfı Ege tarafından deneysel bench testleriyle kilitlenecektir.
+- **Filtre Bandı:** 20–600 Hz bandı biyomedikal literatür başlangıç varsayımıdır; fantom doğrulama testleriyle optimize edilecektir.
 
 
 ---
