@@ -171,7 +171,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
 
     const waveColor = isDark ? '#D19AA3' : '#7A3842';
 
-    if (filteredData.length > 0 && sampleRate > 0) {
+    if (sourceType !== 'none' && filteredData.length > 0 && sampleRate > 0) {
       const startIndex = Math.max(0, Math.floor(windowStart * sampleRate));
       const endIndex = Math.min(filteredData.length, Math.ceil(windowEnd * sampleRate));
       const count = endIndex - startIndex;
@@ -214,7 +214,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
         ctx.stroke();
       }
     }
-  }, [filteredData, sampleRate, windowStart, windowEnd, isDark, visibleWindowSec]);
+  }, [filteredData, sampleRate, windowStart, windowEnd, isDark, visibleWindowSec, sourceType]);
 
   // Draw Raw Waveform on Canvas
   useEffect(() => {
@@ -236,7 +236,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
 
     const waveColor = isDark ? '#948E84' : '#93897C';
 
-    if (rawData.length > 0 && sampleRate > 0) {
+    if (sourceType !== 'none' && rawData.length > 0 && sampleRate > 0) {
       const startIndex = Math.max(0, Math.floor(windowStart * sampleRate));
       const endIndex = Math.min(rawData.length, Math.ceil(windowEnd * sampleRate));
       const count = endIndex - startIndex;
@@ -278,7 +278,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
         ctx.stroke();
       }
     }
-  }, [rawData, sampleRate, windowStart, windowEnd, isDark, showRaw, visibleWindowSec]);
+  }, [rawData, sampleRate, windowStart, windowEnd, isDark, showRaw, visibleWindowSec, sourceType]);
 
   // Draw Full Overview mini-waveform
   useEffect(() => {
@@ -297,7 +297,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
     const h = rect.height;
     ctx.clearRect(0, 0, w, h);
 
-    if (filteredData.length > 0) {
+    if (sourceType !== 'none' && filteredData.length > 0) {
       ctx.fillStyle = isDark ? 'rgba(183, 154, 112, 0.6)' : 'rgba(141, 116, 80, 0.6)';
       const step = Math.ceil(filteredData.length / w);
       for (let x = 0; x < w; x++) {
@@ -312,7 +312,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
         ctx.fillRect(x, (h - barH) / 2, 1, barH);
       }
     }
-  }, [filteredData, isDark]);
+  }, [filteredData, isDark, sourceType]);
 
   // Click on main canvas to seek
   const handleMainCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -572,7 +572,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                   color: 'var(--accent-metal)'
                 }}
               >
-                CAL: 100 mV/Pa · NOISE FLR -72 dBFS
+                {sourceType === 'none' ? 'INPUT: NO ACQUISITION SOURCE' : 'INPUT: ACTIVE STREAM (4.0 kHz)'}
               </div>
             </div>
 
@@ -608,31 +608,49 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
               {/* High-Resolution Waveform Canvas */}
               <canvas ref={mainCanvasRef} className="absolute inset-0 w-full h-full z-10" />
 
-              {/* Frequency Scrubbing Selection Bounding Region (8.0s - 9.2s window) */}
-              <div className="absolute top-0 bottom-0 left-[80%] w-[12%] bg-[var(--selection-window)]/35 border-x border-dashed border-[var(--accent-oxblood)]/60 pointer-events-none z-10">
-                <span className="absolute top-1 left-1.5 font-mono-code text-[9px] text-[var(--accent-oxblood)] font-bold tracking-wider">
-                  Δt: 1.20 s
-                </span>
-              </div>
+              {/* Empty state overlay when no source is selected */}
+              {sourceType === 'none' && (
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[var(--bg-canvas)]/65 backdrop-blur-[2px] p-6 text-center select-none pointer-events-none">
+                  <div className="w-10 h-10 rounded-full bg-[var(--surface-card)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-metal)] mb-3 shadow-xs">
+                    <Activity size={20} className="opacity-70" />
+                  </div>
+                  <h4 className="font-serif-display text-sm font-semibold text-[var(--on-surface)] tracking-tight mb-1">
+                    No live acquisition source
+                  </h4>
+                  <p className="font-mono-code text-[11px] text-[var(--on-surface-variant)] max-w-sm leading-relaxed">
+                    Connect an AuscultaForge device<br />or select an offline recorded session.
+                  </p>
+                </div>
+              )}
+
+              {/* Frequency Scrubbing Selection Bounding Region (when source active) */}
+              {sourceType !== 'none' && (
+                <div className="absolute top-0 bottom-0 left-[80%] w-[12%] bg-[var(--selection-window)]/35 border-x border-dashed border-[var(--accent-oxblood)]/60 pointer-events-none z-10">
+                  <span className="absolute top-1 left-1.5 font-mono-code text-[9px] text-[var(--accent-oxblood)] font-bold tracking-wider">
+                    Δt: 1.20 s
+                  </span>
+                </div>
+              )}
 
               {/* Acoustic Playhead (Vertical hairline) */}
-              <div
-                className="absolute top-0 bottom-0 w-px bg-[var(--accent-oxblood)] z-20 pointer-events-none flex flex-col items-center transition-all duration-75"
-                style={{ left: `${playheadPercent}%` }}
-              >
-                {/* Playhead Handle: Inverted Brass-Oxblood Triangle Indicator */}
-                <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[8px] border-t-[var(--accent-oxblood)] -mt-0.5" />
+              {sourceType !== 'none' && (
                 <div
-                  className="mt-auto mb-1 px-1 rounded shadow-xs font-mono-code text-[9px] font-bold border"
-                  style={{
-                    backgroundColor: 'var(--surface-card)',
-                    borderColor: 'var(--border-subtle)',
-                    color: 'var(--accent-oxblood)'
-                  }}
+                  className="absolute top-0 bottom-0 w-px bg-[var(--accent-oxblood)] z-20 pointer-events-none flex flex-col items-center transition-all duration-75"
+                  style={{ left: `${playheadPercent}%` }}
                 >
-                  {currentTime.toFixed(2)}s
+                  <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[8px] border-t-[var(--accent-oxblood)] -mt-0.5" />
+                  <div
+                    className="mt-auto mb-1 px-1 rounded shadow-xs font-mono-code text-[9px] font-bold border"
+                    style={{
+                      backgroundColor: 'var(--surface-card)',
+                      borderColor: 'var(--border-subtle)',
+                      color: 'var(--accent-oxblood)'
+                    }}
+                  >
+                    {currentTime.toFixed(2)}s
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -806,7 +824,11 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
             <button
               id="play-pause-btn"
               onClick={onTogglePlay}
-              className="px-5 h-10 rounded text-white font-semibold flex items-center gap-2 transition-all active:scale-95 shadow-md cursor-pointer"
+              disabled={sourceType === 'none'}
+              title={sourceType === 'none' ? 'No active acquisition source' : (isPlaying ? 'Pause stream' : 'Play stream')}
+              className={`px-5 h-10 rounded text-white font-semibold flex items-center gap-2 transition-all shadow-md ${
+                sourceType === 'none' ? 'opacity-40 cursor-not-allowed' : 'active:scale-95 cursor-pointer'
+              }`}
               style={{
                 backgroundColor: 'var(--accent-oxblood)'
               }}
@@ -966,13 +988,19 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
               <button
                 id="btn-start-recording"
                 onClick={onStartRecording}
-                className="h-10 px-4 rounded text-[var(--on-surface)] transition-all flex items-center gap-2 shadow-xs text-xs font-medium active:scale-95 border cursor-pointer hover:bg-[var(--surface-muted)]"
+                disabled={sourceType === 'none'}
+                title={sourceType === 'none' ? 'Cannot record: no active acquisition source' : 'Start Session Recording'}
+                className={`h-10 px-4 rounded transition-all flex items-center gap-2 shadow-xs text-xs font-medium border ${
+                  sourceType === 'none'
+                    ? 'opacity-40 cursor-not-allowed text-[var(--on-surface-variant)]'
+                    : 'text-[var(--on-surface)] active:scale-95 cursor-pointer hover:bg-[var(--surface-muted)]'
+                }`}
                 style={{
                   backgroundColor: 'var(--surface-card)',
                   borderColor: 'var(--border-subtle)'
                 }}
               >
-                <Disc size={16} className="text-[var(--status-danger)]" />
+                <Disc size={16} className={sourceType === 'none' ? 'text-[var(--on-surface-variant)]' : 'text-[var(--status-danger)]'} />
                 <span>Record Session</span>
               </button>
             )}

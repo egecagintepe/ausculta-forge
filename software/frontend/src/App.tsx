@@ -22,7 +22,10 @@ import {
   DiagnosticState,
   DiagnosticLogEvent,
   AudioMetrics,
-  StethoscopeDevice
+  StethoscopeDevice,
+  DeviceRuntimeState,
+  DeviceIntegrityStats,
+  DeviceEventItem
 } from './types';
 
 export default function App() {
@@ -31,17 +34,17 @@ export default function App() {
     return false;
   });
 
-  // Navigation
+  // Navigation & Acquisition Source
   const [currentDestination, setCurrentDestination] = useState<NavigationDestination>('live');
-  const [sourceType, setSourceType] = useState<AudioSourceType>('sample');
-  const [activeMetadata, setActiveMetadata] = useState<HeartSoundMetadata | null>(STARTER_SAMPLES[0]);
+  const [sourceType, setSourceType] = useState<AudioSourceType>('none');
+  const [activeMetadata, setActiveMetadata] = useState<HeartSoundMetadata | null>(null);
 
-  // Audio Data (preloaded with normal_sample_01.wav as seen in Stitch reference)
+  // Audio Data (Empty at startup until source selected)
   const [rawData, setRawData] = useState<Float32Array>(new Float32Array(0));
   const [filteredData, setFilteredData] = useState<Float32Array>(new Float32Array(0));
   const [sampleRate, setSampleRate] = useState<number>(4000);
-  const [duration, setDuration] = useState<number>(15.0);
-  const [currentTime, setCurrentTime] = useState<number>(8.4);
+  const [duration, setDuration] = useState<number>(0.0);
+  const [currentTime, setCurrentTime] = useState<number>(0.0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [volume, setVolume] = useState<number>(0.78);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -58,13 +61,16 @@ export default function App() {
   const [diagnosticsOpen, setDiagnosticsOpen] = useState<boolean>(false);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
 
-  // Hardware Device State
+  // Hardware Device State (Truthful device runtime)
+  const [deviceRuntimeState, setDeviceRuntimeState] = useState<DeviceRuntimeState | null>(null);
+  const [deviceStats, setDeviceStats] = useState<DeviceIntegrityStats | null>(null);
+  const [deviceEvents, setDeviceEvents] = useState<DeviceEventItem[]>([]);
   const [deviceState, setDeviceState] = useState<StethoscopeDevice>({
     connected: false,
     state: 'Not connected',
-    deviceId: 'STETH-USB-8842',
-    port: 'COM4 (USB Serial)',
-    firmwareVersion: 'v1.0.4-PROD',
+    deviceId: 'None (Waiting for Probe)',
+    port: 'Pending Native USB Descriptor Decision',
+    firmwareVersion: 'Pending',
     sampleRateHz: 4000,
   });
   const [deviceConnecting, setDeviceConnecting] = useState<boolean>(false);
@@ -93,7 +99,7 @@ export default function App() {
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordingElapsedSeconds, setRecordingElapsedSeconds] = useState<number>(0);
   const [recordingSessionId, setRecordingSessionId] = useState<string | null>(null);
-  const [activeSourceName, setActiveSourceName] = useState<string>('Synthetic PCG (S1/S2 Normal)');
+  const [activeSourceName, setActiveSourceName] = useState<string>('None');
 
   // Dialogs & Modals
   const [saveAsOpen, setSaveAsOpen] = useState<boolean>(false);
@@ -209,6 +215,52 @@ export default function App() {
       }
     });
 
+    const unsubDevState = bridgeClient.onDeviceState((dev) => {
+      setDeviceRuntimeState(dev);
+      setDeviceState(prev => ({
+        ...prev,
+        connected: dev.connected,
+        state: dev.connected ? (dev.state === 'streaming' ? 'Streaming' : 'Connected') : 'Not connected',
+        deviceId: dev.device_id || 'None (Waiting for Probe)',
+        firmwareVersion: dev.firmware_version || 'Pending',
+      }));
+    });
+
+    const unsubDevEvt = bridgeClient.onDeviceEvent((evt) => {
+      setDeviceEvents(prev => [evt, ...prev.slice(0, 199)]);
+      addLog(`[${evt.code}] ${evt.message}`, evt.severity, 'Device');
+    });
+
+    const unsubDevStats = bridgeClient.onDeviceStats((stats) => {
+      setDeviceStats(stats);
+    });
+
+    // Fetch initial device state & history snapshot
+    bridgeClient.fetchDeviceState().then(dev => {
+      if (dev) {
+        setDeviceRuntimeState(dev);
+        setDeviceState(prev => ({
+          ...prev,
+          connected: dev.connected,
+          state: dev.connected ? (dev.state === 'streaming' ? 'Streaming' : 'Connected') : 'Not connected',
+          deviceId: dev.device_id || 'None (Waiting for Probe)',
+          firmwareVersion: dev.firmware_version || 'Pending',
+        }));
+      }
+    });
+
+    bridgeClient.fetchDeviceEvents().then(evts => {
+      if (evts && evts.length > 0) {
+        setDeviceEvents(evts);
+      }
+    });
+
+    bridgeClient.fetchDeviceStats().then(stats => {
+      if (stats) {
+        setDeviceStats(stats);
+      }
+    });
+
     const capacity = 15 * 4000;
     const rawBuf = new Float32Array(capacity);
     const filtBuf = new Float32Array(capacity);
@@ -243,24 +295,13 @@ export default function App() {
       unsubConn();
       unsubState();
       unsubRec();
+      unsubDevState();
+      unsubDevEvt();
+      unsubDevStats();
       unsubFrame();
       bridgeClient.disconnect();
     };
   }, [addLog, addToast]);
-
-  // Preload initial Normal S1/S2 heart sample
-  useEffect(() => {
-    const defaultSample = STARTER_SAMPLES[0];
-    const { raw, filtered } = generateSyntheticHeartAudio(defaultSample.id, defaultSample.durationSeconds, defaultSample.sampleRateHz);
-    audioEngine.setAudioData(raw, filtered, defaultSample.sampleRateHz);
-    audioEngine.seek(8.4);
-    setRawData(raw);
-    setFilteredData(filtered);
-    setSampleRate(defaultSample.sampleRateHz);
-    setDuration(defaultSample.durationSeconds);
-    setCurrentTime(8.4);
-    setActiveMetadata(defaultSample);
-  }, []);
 
   // Subscribe to audio engine time updates
   useEffect(() => {
@@ -426,6 +467,8 @@ export default function App() {
   }, [addLog]);
 
   const handleReplaySession = useCallback((sessionId: string) => {
+    bridgeClient.selectSource('session', undefined, sessionId);
+    setSourceType('session');
     setActiveSourceName(`Session Replay: ${sessionId}`);
     setCurrentDestination('live');
     addLog(`Replaying session ${sessionId} through Python DSP pipeline`, 'info', 'Pipeline');
@@ -433,10 +476,28 @@ export default function App() {
   }, [addLog, addToast]);
 
   const handleSelectMockSource = useCallback(() => {
-    bridgeClient.selectSource('mock');
-    setActiveSourceName('Synthetic PCG (S1/S2 Normal)');
-    addLog('Selected Synthetic PCG mock source', 'info', 'Source');
-    addToast('Switched to Synthetic PCG', 'info');
+    bridgeClient.selectSource('synthetic_dev');
+    setSourceType('synthetic');
+    setActiveSourceName('Synthetic Development Signal — Not Hardware');
+    setActiveMetadata({
+      id: 'synthetic-dev-benchmark',
+      title: 'Synthetic Development Signal',
+      filename: 'synthetic_dev_benchmark.wav',
+      category: 'DSP Benchmark Signal',
+      durationSeconds: 30,
+      sampleRateHz: 4000,
+      channels: 1,
+      description: 'Synthetic S1/S2 acoustic PCG benchmark for filter testing. Not hardware.',
+      sourceAttribution: 'AuscultaForge synthetic development signal',
+      quality: {
+        rating: 'Unavailable',
+        score: null,
+        message: 'Synthetic development benchmark — Not hardware'
+      }
+    });
+    addLog('Activated Synthetic Development Signal — Not Hardware', 'info', 'Source');
+    addToast('Activated Synthetic Benchmark', 'info');
+    setCurrentDestination('live');
   }, [addLog, addToast]);
 
   // Audio Playback Controls
@@ -689,6 +750,7 @@ State: DISCIPLINED ACQUISITION (Host Buffer: 4096 samples)`;
         isFullscreen={isFullscreen}
         onToggleFullscreen={handleToggleFullscreen}
         backendConnected={backendConnected}
+        deviceState={deviceRuntimeState?.state ?? 'absent'}
         isRecording={isRecording}
         recordingElapsedSeconds={recordingElapsedSeconds}
         recordingSessionId={recordingSessionId}
@@ -776,6 +838,7 @@ State: DISCIPLINED ACQUISITION (Host Buffer: 4096 samples)`;
           {currentDestination === 'device' && (
             <DeviceView
               deviceState={deviceState}
+              deviceRuntimeState={deviceRuntimeState}
               onDetectDevice={handleDetectDevice}
               onDisconnectDevice={handleDisconnectDevice}
               onSimulateInterruption={handleSimulateInterruption}
@@ -784,7 +847,9 @@ State: DISCIPLINED ACQUISITION (Host Buffer: 4096 samples)`;
               isDark={isDark}
               backendConnected={backendConnected}
               activeSourceName={activeSourceName}
+              sourceType={sourceType}
               onSelectMockSource={handleSelectMockSource}
+              onNavigateToSamples={() => setCurrentDestination('samples')}
             />
           )}
 
@@ -811,6 +876,9 @@ State: DISCIPLINED ACQUISITION (Host Buffer: 4096 samples)`;
           diagnosticState={diagnosticState}
           audioMetrics={audioMetrics}
           deviceState={deviceState}
+          deviceRuntimeState={deviceRuntimeState}
+          deviceStats={deviceStats}
+          deviceEvents={deviceEvents}
           onCopySummary={handleCopyDiagnostics}
           copySuccess={copySuccess}
           isDark={isDark}

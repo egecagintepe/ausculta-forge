@@ -1,6 +1,55 @@
 export type NavigationDestination = 'home' | 'live' | 'samples' | 'device' | 'settings';
 
-export type AudioSourceType = 'none' | 'file' | 'device' | 'sample';
+export type AudioSourceType = 'none' | 'file' | 'device' | 'sample' | 'session' | 'synthetic';
+
+export type DeviceLifecycleState =
+  | 'absent'
+  | 'detected'
+  | 'opening'
+  | 'handshaking'
+  | 'ready'
+  | 'streaming'
+  | 'interrupted'
+  | 'error'
+  | 'incompatible';
+
+export interface DeviceRuntimeState {
+  state: DeviceLifecycleState;
+  device_state?: DeviceLifecycleState;
+  connected: boolean;
+  is_connected?: boolean;
+  device_id: string | null;
+  firmware_version: string | null;
+  sample_rate_hz: number | null;
+  sample_format: string | null;
+  transport_type: string | null;
+  connected_at_utc: string | null;
+  disconnected_at_utc: string | null;
+  last_error: string | null;
+  discovery_status: string;
+}
+
+export interface DeviceEventItem {
+  timestamp_utc: string;
+  code: string;
+  message: string;
+  severity: 'info' | 'warning' | 'error';
+  metadata: Record<string, unknown>;
+}
+
+export interface DeviceIntegrityStats {
+  packets_received: number;
+  samples_received: number;
+  sequence_gaps: number;
+  repeated_packets: number;
+  out_of_order_packets: number;
+  crc_failures: number;
+  malformed_frames: number;
+  timestamp_regressions: number;
+  disconnect_count: number;
+  reconnect_count: number;
+  last_packet_timestamp_s: number | null;
+}
 
 export type FilterPreset = 'recommended' | 'bell' | 'diaphragm' | 'extended';
 

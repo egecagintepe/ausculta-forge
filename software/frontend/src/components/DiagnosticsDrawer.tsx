@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   Terminal
 } from 'lucide-react';
-import { DiagnosticState, AudioMetrics, StethoscopeDevice } from '../types';
+import { DiagnosticState, AudioMetrics, StethoscopeDevice, DeviceRuntimeState, DeviceIntegrityStats, DeviceEventItem } from '../types';
 
 interface DiagnosticsDrawerProps {
   isOpen: boolean;
@@ -22,6 +22,9 @@ interface DiagnosticsDrawerProps {
   diagnosticState: DiagnosticState;
   audioMetrics: AudioMetrics;
   deviceState: StethoscopeDevice;
+  deviceRuntimeState?: DeviceRuntimeState | null;
+  deviceStats?: DeviceIntegrityStats | null;
+  deviceEvents?: DeviceEventItem[];
   onCopySummary: () => void;
   copySuccess: boolean;
   isDark: boolean;
@@ -33,6 +36,9 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
   diagnosticState,
   audioMetrics,
   deviceState,
+  deviceRuntimeState,
+  deviceStats,
+  deviceEvents = [],
   onCopySummary,
   copySuccess,
 }) => {
@@ -241,30 +247,64 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
           {!collapsed.hardware && (
             <div className="px-4 py-2 flex flex-col gap-1 font-mono-code text-[11px]">
               <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
-                <span className="text-[var(--on-surface-variant)]">Connection State:</span>
-                <span className={`font-semibold flex items-center gap-1 ${deviceState.connected ? 'text-[var(--status-success)]' : 'text-[var(--status-danger)]'}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${deviceState.connected ? 'bg-[var(--status-success)]' : 'bg-[var(--status-danger)]'}`} />
-                  {deviceState.state}
+                <span className="text-[var(--on-surface-variant)]">Lifecycle State:</span>
+                <span className={`font-semibold uppercase flex items-center gap-1 ${
+                  deviceRuntimeState?.connected ? 'text-[var(--status-success)]' : 'text-[var(--status-danger)]'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    deviceRuntimeState?.connected ? 'bg-[var(--status-success)]' : 'bg-[var(--status-danger)]'
+                  }`} />
+                  {deviceRuntimeState?.state ?? 'absent'}
                 </span>
               </div>
               <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
-                <span className="text-[var(--on-surface-variant)]">COM Port:</span>
+                <span className="text-[var(--on-surface-variant)]">Physical Transport:</span>
                 <span className="text-[var(--on-surface)] font-mono-code">
-                  {deviceState.connected ? deviceState.port : 'Inactive (No Carrier)'}
+                  ESP32-S3 Native USB
                 </span>
               </div>
               <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
-                <span className="text-[var(--on-surface-variant)]">Polling Interval:</span>
-                <span className="text-[var(--on-surface)] font-mono-code">1000 ms</span>
+                <span className="text-[var(--on-surface-variant)]">Device ID:</span>
+                <span className="text-[var(--on-surface)] font-mono-code">
+                  {deviceRuntimeState?.device_id ?? 'None (Waiting for Probe)'}
+                </span>
               </div>
+              <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
+                <span className="text-[var(--on-surface-variant)]">Discovery:</span>
+                <span className="text-[10px] text-[var(--on-surface-variant)] text-right max-w-[240px]">
+                  {deviceRuntimeState?.discovery_status ?? 'Configuration pending USB descriptor decision'}
+                </span>
+              </div>
+              {deviceStats && (
+                <>
+                  <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
+                    <span className="text-[var(--on-surface-variant)]">Packets / Gaps:</span>
+                    <span className="text-[var(--on-surface)] font-mono-code">
+                      {deviceStats.packets_received} pkts · {deviceStats.sequence_gaps} gaps
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
+                    <span className="text-[var(--on-surface-variant)]">CRC Failures:</span>
+                    <span className="text-[var(--on-surface)] font-mono-code">
+                      {deviceStats.crc_failures}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
+                    <span className="text-[var(--on-surface-variant)]">Disconnect / Reconnect:</span>
+                    <span className="text-[var(--on-surface)] font-mono-code">
+                      {deviceStats.disconnect_count} / {deviceStats.reconnect_count}
+                    </span>
+                  </div>
+                </>
+              )}
               <div className="flex items-center justify-between py-1">
                 <span className="text-[var(--on-surface-variant)]">Hardware Telemetry:</span>
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                  deviceState.connected
+                  deviceRuntimeState?.connected
                     ? 'bg-[var(--status-success)]/10 text-[var(--status-success)]'
                     : 'bg-[var(--status-warning)]/10 text-[var(--status-warning)]'
                 }`}>
-                  {deviceState.connected ? 'Synchronized (Simulation / Bench)' : 'Hardware Native USB (Coming Soon)'}
+                  {deviceRuntimeState?.connected ? 'Hardware Stream Active' : 'No Compatible AuscultaForge Hardware'}
                 </span>
               </div>
             </div>
@@ -337,21 +377,43 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
 
           {!collapsed.log && (
             <div className="p-3 bg-[var(--surface-muted)]/30 flex flex-col gap-1.5 font-mono-code text-[11px] max-h-56 overflow-y-auto">
-              {diagnosticState.logs.map(log => (
-                <div key={log.id} className="flex items-start gap-2 py-0.5 leading-tight">
-                  <span className="text-[var(--accent-metal)] font-semibold shrink-0">{log.timestamp}</span>
-                  <span className="text-[var(--on-surface-variant)] shrink-0">·</span>
-                  <span className={
-                    log.severity === 'error'
-                      ? 'text-[var(--status-danger)] font-bold'
-                      : log.severity === 'warning'
-                      ? 'text-[var(--status-warning)] font-semibold'
-                      : 'text-[var(--on-surface)]'
-                  }>
-                    {log.message}
-                  </span>
-                </div>
-              ))}
+              {deviceEvents && deviceEvents.length > 0 ? (
+                deviceEvents.map((evt, idx) => (
+                  <div key={`${evt.timestamp_utc}-${idx}`} className="flex items-start gap-2 py-0.5 leading-tight">
+                    <span className="text-[var(--accent-metal)] font-semibold shrink-0 text-[10px]">
+                      {evt.timestamp_utc.slice(11, 19)}
+                    </span>
+                    <span className="px-1 py-0.2 rounded text-[9px] font-bold shrink-0 bg-[var(--surface-card)] border border-[var(--border-subtle)] text-[var(--accent-oxblood)]">
+                      {evt.code}
+                    </span>
+                    <span className={
+                      evt.severity === 'error'
+                        ? 'text-[var(--status-danger)] font-bold'
+                        : evt.severity === 'warning'
+                        ? 'text-[var(--status-warning)] font-semibold'
+                        : 'text-[var(--on-surface)]'
+                    }>
+                      {evt.message}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                diagnosticState.logs.map(log => (
+                  <div key={log.id} className="flex items-start gap-2 py-0.5 leading-tight">
+                    <span className="text-[var(--accent-metal)] font-semibold shrink-0">{log.timestamp}</span>
+                    <span className="text-[var(--on-surface-variant)] shrink-0">·</span>
+                    <span className={
+                      log.severity === 'error'
+                        ? 'text-[var(--status-danger)] font-bold'
+                        : log.severity === 'warning'
+                        ? 'text-[var(--status-warning)] font-semibold'
+                        : 'text-[var(--on-surface)]'
+                    }>
+                      {log.message}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>

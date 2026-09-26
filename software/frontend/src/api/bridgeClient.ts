@@ -5,7 +5,7 @@
  * Decouples waveform ingestion from hardware protocols.
  */
 
-import { FilterPreset } from '../types';
+import { FilterPreset, DeviceRuntimeState, DeviceEventItem, DeviceIntegrityStats } from '../types';
 
 export interface SignalFrameData {
   sequence: number;
@@ -68,11 +68,17 @@ export interface SessionItem {
     is_healthy: boolean;
   };
   session_dir?: string;
+  acquisition_mode?: string;
+  termination_reason?: string;
+  device_info?: Record<string, unknown>;
 }
 
 type FrameCallback = (frame: SignalFrameData) => void;
 type StreamStateCallback = (state: StreamStateData) => void;
 type RecordingStateCallback = (state: RecordingStateData) => void;
+type DeviceStateCallback = (state: DeviceRuntimeState) => void;
+type DeviceEventCallback = (event: DeviceEventItem) => void;
+type DeviceStatsCallback = (stats: DeviceIntegrityStats) => void;
 type ConnectionCallback = (connected: boolean) => void;
 
 class BridgeClient {
@@ -85,6 +91,9 @@ class BridgeClient {
   private frameListeners: Set<FrameCallback> = new Set();
   private stateListeners: Set<StreamStateCallback> = new Set();
   private recordingListeners: Set<RecordingStateCallback> = new Set();
+  private deviceStateListeners: Set<DeviceStateCallback> = new Set();
+  private deviceEventListeners: Set<DeviceEventCallback> = new Set();
+  private deviceStatsListeners: Set<DeviceStatsCallback> = new Set();
   private connectionListeners: Set<ConnectionCallback> = new Set();
 
   public isConnected: boolean = false;
@@ -160,9 +169,25 @@ class BridgeClient {
     if (type === 'signal_frame') {
       const frame = msg as unknown as SignalFrameData;
       this.frameListeners.forEach(cb => cb(frame));
-    } else if (type === 'stream_state' || type === 'hello') {
+    } else if (type === 'stream_state') {
       const state = (msg.state || msg) as unknown as StreamStateData;
       this.stateListeners.forEach(cb => cb(state));
+    } else if (type === 'hello') {
+      if (msg.state) {
+        this.stateListeners.forEach(cb => cb(msg.state as unknown as StreamStateData));
+      }
+      if (msg.device_state) {
+        this.deviceStateListeners.forEach(cb => cb(msg.device_state as unknown as DeviceRuntimeState));
+      }
+    } else if (type === 'device_state') {
+      const dev = (msg.state || msg) as unknown as DeviceRuntimeState;
+      this.deviceStateListeners.forEach(cb => cb(dev));
+    } else if (type === 'device_event') {
+      const evt = (msg.event || msg) as unknown as DeviceEventItem;
+      this.deviceEventListeners.forEach(cb => cb(evt));
+    } else if (type === 'device_stats') {
+      const stats = (msg.stats || msg) as unknown as DeviceIntegrityStats;
+      this.deviceStatsListeners.forEach(cb => cb(stats));
     } else if (type === 'recording_state') {
       const rec = msg as unknown as RecordingStateData;
       this.recordingListeners.forEach(cb => cb(rec));
@@ -187,6 +212,21 @@ class BridgeClient {
   public onStreamState(cb: StreamStateCallback) {
     this.stateListeners.add(cb);
     return () => this.stateListeners.delete(cb);
+  }
+
+  public onDeviceState(cb: DeviceStateCallback) {
+    this.deviceStateListeners.add(cb);
+    return () => this.deviceStateListeners.delete(cb);
+  }
+
+  public onDeviceEvent(cb: DeviceEventCallback) {
+    this.deviceEventListeners.add(cb);
+    return () => this.deviceEventListeners.delete(cb);
+  }
+
+  public onDeviceStats(cb: DeviceStatsCallback) {
+    this.deviceStatsListeners.add(cb);
+    return () => this.deviceStatsListeners.delete(cb);
   }
 
   public onRecordingState(cb: RecordingStateCallback) {
@@ -260,6 +300,36 @@ class BridgeClient {
       return resp.ok;
     } catch {
       return false;
+    }
+  }
+
+  public async fetchDeviceState(): Promise<DeviceRuntimeState | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/device/state`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public async fetchDeviceEvents(): Promise<DeviceEventItem[]> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/device/events`);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async fetchDeviceStats(): Promise<DeviceIntegrityStats | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/device/stats`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
     }
   }
 }
