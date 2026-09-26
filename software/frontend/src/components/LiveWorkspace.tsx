@@ -509,7 +509,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
             <div className="flex items-center gap-2">
               <span className="font-mono-code text-[10px] text-[var(--on-surface-variant)]">SPAN:</span>
               <div className="flex items-center bg-[var(--surface-muted)] rounded p-0.5 border border-[var(--border-subtle)]">
-                {[5, 10, 15].map(sec => (
+                {[2, 5, 10].map(sec => (
                   <button
                     key={sec}
                     onClick={() => onChangeWindowSec(sec)}
@@ -752,7 +752,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
               </span>
             </div>
             <span className="font-mono-code text-[10px] text-[var(--accent-metal)]">
-              WINDOW: 00:00.0 - 00:{visibleWindowSec.toString().padStart(2, '0')}.0 [{Math.round(viewportWidthPercent)}% ZOOM]
+              WINDOW: {formatTime(windowStart)} - {formatTime(windowEnd)} [{visibleWindowSec}s SPAN | {sampleRate} Hz]
             </span>
           </div>
 

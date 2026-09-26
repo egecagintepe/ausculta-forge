@@ -78,21 +78,30 @@ AuscultaForge maintains an explicit architectural distinction between two fundam
      "app": "AuscultaForge Bridge",
      "capabilities": {
        "sample_rate_hz": 4000,
-       "sources": ["mock", "realtime_wav", "session"],
-       "filter_presets": ["recommended", "bell", "diaphragm", "extended"]
+       "sources": ["none", "hardware", "session", "realtime_wav", "synthetic_dev"],
+       "filter_presets": ["recommended", "bell", "diaphragm", "extended"],
+       "display_pipeline": {
+         "target_display_hz": 25.0,
+         "points_per_frame": 128,
+         "spectral_update_hz": 5.0
+       }
      },
      "state": { ... }
    }
    ```
-2. **`signal_frame`:** Periodic chunk transmission containing both raw and filtered audio arrays:
+2. **`display_frame`:** Primary display-oriented snapshot emitted at UI cadence (~25 Hz):
    ```json
    {
-     "type": "signal_frame",
-     "sequence": 142,
-     "timestamp_s": 4.544,
-     "sample_rate_hz": 4000,
-     "raw_samples": [-0.012, 0.045, ...],
-     "filtered_samples": [-0.008, 0.038, ...],
+     "type": "display_frame",
+     "version": "1.0",
+     "source_seq_start": 140,
+     "source_seq_end": 143,
+     "window_start_ts": 4.544,
+     "window_end_ts": 4.584,
+     "sample_rate_hz": 48000,
+     "source_sample_count": 1920,
+     "raw_points": [-0.012, 0.045, ...],
+     "filtered_points": [-0.008, 0.038, ...],
      "metrics": {
        "rms": 0.08412,
        "peak": 0.34120,
@@ -105,14 +114,17 @@ AuscultaForge maintains an explicit architectural distinction between two fundam
        "sequence_discontinuities": 0,
        "is_healthy": true
      },
-     "recording_active": false
+     "recording_active": false,
+     "dropped_display_frames": 0,
+     "spectral_frame": { ... }
    }
    ```
-3. **`stream_state`:** Broadcast whenever active source, filter passband, or run state changes.
-4. **`recording_state`:** Broadcast whenever a session recording is started, progressing, or stopped.
-5. **`device_state`:** Real-time hardware lifecycle and capability status (`absent`, `detected`, `opening`, `handshaking`, `ready`, `streaming`, `interrupted`, `error`, `incompatible`).
-6. **`device_event`:** Structured audit log event emission (`timestamp_utc`, `code`, `severity`, `message`).
-7. **`device_stats`:** Real-time physical stream integrity counters (packets received, sequence gaps, CRC failures, disconnect/reconnect counts).
+3. **`signal_frame`:** Backward-compatible per-block signal transmission (optional, for legacy tooling).
+4. **`stream_state`:** Broadcast whenever active source, filter passband, or run state changes.
+5. **`recording_state`:** Broadcast whenever a session recording is started, progressing, or stopped.
+6. **`device_state`:** Real-time hardware lifecycle and capability status (`absent`, `detected`, `opening`, `handshaking`, `ready`, `streaming`, `interrupted`, `error`, `incompatible`).
+7. **`device_event`:** Structured audit log event emission (`timestamp_utc`, `code`, `severity`, `message`).
+8. **`device_stats`:** Real-time physical stream integrity counters (packets received, sequence gaps, CRC failures, disconnect/reconnect counts).
 
 ### Client $\rightarrow$ Server Commands
 
@@ -124,45 +136,56 @@ AuscultaForge maintains an explicit architectural distinction between two fundam
 
 ---
 
-## 5. Device Runtime Foundation & Configurable Acquisition Profiles
+## 5. Decoupled Display Pipeline & Backpressure Isolation
 
-A dedicated subsystem (`software/pcg_app/device_runtime.py`) manages physical transducer hardware readiness without hardcoded sample-rate assumptions:
+A dedicated subsystem (`software/pcg_app/display_pipeline.py`) isolates high-rate hardware acquisition from UI visualization:
 
-1. **Truthful Startup State:**
-   The application starts in a truthful inactive state:
-   - `source_type`: `"none"`
-   - `active_source`: `"None"`
-   - `device_state`: `"absent"`
-   - `is_streaming`: `false`
-   No synthetic waveforms are emitted until an offline replay source or explicitly labeled synthetic test signal is selected.
-2. **Centralized Acquisition Profile (`AcquisitionProfile`):**
-   - **Rev-A Baseline Profile:** 48,000 Hz, mono, 32-bit I2S container, 24-bit meaningful sensor data, signed PCM.
-   - **Hardware Distinctions:** Distinguishes container width (32-bit DMA slot), meaningful data bits (24-bit sensor word), and sensor acoustic precision (microphone transducer SNR / noise floor).
-   - **Decoupled Architecture:** Core DSP pipeline and file recording operate on sample-rate-aware `SampleBlock` instances, preventing lock-in to fixed sample rates.
-3. **Explicit 9-State Lifecycle Machine:**
-   Deterministic state transitions: `ABSENT -> DETECTED -> OPENING -> HANDSHAKING -> READY -> STREAMING`.
-   When disconnected while streaming: `STREAMING -> INTERRUPTED`.
-   Reconnect path: `INTERRUPTED -> DETECTED -> OPENING -> HANDSHAKING -> READY`. (No separate phantom reconnecting state).
-4. **Disconnection Handling:**
-   - Link drop while streaming: Transitions to `INTERRUPTED` and notifies UI.
-   - Link drop while recording: Safely stops and seals recording with `termination_reason: "device_disconnected"`.
-5. **Decoupled High-Rate Stream Ingestion:**
-   ```text
-   48 kHz Hardware USB Acquisition
-              │
-              ▼
-   Full-Rate Storage & Analysis (SampleBlock, 48 kHz WAV, session.json)
-              │
-              ▼
-   Rolling Buffers & Decimated UI Display Frames (~30-60 fps)
-   ```
-   Recording preserves the full uncompressed acquisition stream with zero downsampling.
-6. **Dürüst Bütünlük Telemetrisi (10 Sayaç):**
-   Exposes strictly real counters: `packets_received`, `samples_received`, `sequence_gaps`, `repeated_packets`, `out_of_order_packets`, `crc_failures`, `malformed_frames`, `timestamp_regressions`, `disconnect_count`, `reconnect_count`.
-7. **Transport & Packet Abstraction:**
-   - Physical transport technology is ESP32-S3 Native USB (final decision).
-   - CDC-ACM is the current Rev-A proposal under team review; no fake COM ports or fake VID/PID are injected until descriptors are finalized.
-   - `DeviceSamplePacket` carries raw container integer samples until the `packet_to_sample_block` normalization adapter.
+```text
+48 kHz Physical Acquisition (Hardware Rev-A)
+         │
+         ▼
+DeviceSamplePacket (~512 samples / 10.67 ms)
+         │
+         ▼
+StreamManager.ingest_device_packet()
+         │
+         ▼
+Integrity Validation + SampleBlock Conversion
+         │
+         ├─────────────────────────────────────────┐
+         │                                         │
+         ▼                                         ▼
+FULL-RATE DSP (48 kHz Bandpass)           FULL-RATE SessionRecorder (48 kHz WAV)
+         │                                         │
+         └───────────────────┬─────────────────────┘
+                             │
+                             ▼
+                     Display Aggregator (DisplayPipeline)
+                             │ (Peak-Preserving Decimation: decimate_min_max)
+                             │ (Decoupled Spectral Computation: ~5 Hz)
+                             ▼
+                     Bounded Drop-Oldest Queue (ClientSession, maxsize=2)
+                             │ (Display frame drops DO NOT affect recording)
+                             │ (Hardware sequence_gaps NEVER increment on UI drop)
+                             ▼
+                     Lower-Rate WebSocket UI (display_frame @ 25 Hz)
+                             │
+                             ▼
+                     React Desktop Client (LiveWorkspace / Canvas)
+```
+
+### Key Principles
+
+1. **Full-Rate Recording Preservation:**
+   Every single valid hardware sample passes through DSP and reaches `SessionRecorder`. A slow or frozen WebSocket consumer can never cause sample drops in recording.
+2. **Peak-Preserving Decimation (`decimate_min_max`):**
+   Instead of naive decimation (`samples[::N]`) which can skip narrow transients (S1/S2 clicks, murmurs), min/max bucket aggregation preserves both the minimum and maximum extrema in chronological order within each bin.
+3. **Backpressure Isolation:**
+   Each client possesses an independent bounded queue (`maxsize=2`). Slow clients drop obsolete display frames without stalling fast clients or ingestion. Dropped frames increment `dropped_display_frames` in display telemetry only, strictly isolated from hardware `sequence_gaps`.
+4. **Decoupled Spectrogram Computation:**
+   Welch power spectral density is computed at a sensible periodic cadence (5 Hz) over recent audio buffers, avoiding executing spectral algorithms 94 times per second.
+5. **Throughput vs Latency:**
+   Host processing capacity exceeds real-time by >4.5x (processing runtime <2.5 ms per 10.67 ms block). End-to-end device latency remains explicitly unmeasured until physical Rev-A hardware is physically connected.
 
 ---
 
