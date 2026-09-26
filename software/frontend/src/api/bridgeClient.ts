@@ -13,6 +13,8 @@ import {
   ReferenceAssetItem,
   SessionAnalysisSummary,
   AnalysisComparisonResult,
+  ScientificSessionAnalysisResult,
+  SystemIdReport,
 } from '../types';
 
 export interface SignalFrameData {
@@ -462,6 +464,95 @@ class BridgeClient {
 
   public getExportReportUrl(analysisId: string): string {
     return `${this.apiUrl}/analysis/${encodeURIComponent(analysisId)}/export`;
+  }
+
+  // =========================================================================
+  // Scientific Signal Quality, Spectral & System Identification APIs
+  // =========================================================================
+
+  public async getScientificProfiles(): Promise<any[]> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/profiles`);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async analyzeSessionScientific(
+    sessionId: string,
+    profileId: string = 'GENERAL_PCG_V1',
+    welchNperseg: number = 2048,
+    maxPoints: number = 600
+  ): Promise<ScientificSessionAnalysisResult> {
+    const resp = await fetch(`${this.apiUrl}/scientific/session/${encodeURIComponent(sessionId)}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile_id: profileId,
+        welch_nperseg: welchNperseg,
+        max_display_points: maxPoints,
+      }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Scientific analysis failed' }));
+      throw new Error(err.detail || `Analysis failed with status ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
+  public async runSystemIdentification(
+    assetId: string,
+    sessionId: string,
+    params?: {
+      nperseg?: number;
+      noverlap?: number;
+      excited_band_min_hz?: number;
+      excited_band_max_hz?: number;
+      energy_threshold_db_rel_max?: number;
+      max_display_points?: number;
+    }
+  ): Promise<SystemIdReport> {
+    const resp = await fetch(`${this.apiUrl}/scientific/system-id`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        asset_id: assetId,
+        session_id: sessionId,
+        nperseg: params?.nperseg ?? 1024,
+        noverlap: params?.noverlap ?? 512,
+        excited_band_min_hz: params?.excited_band_min_hz ?? 20.0,
+        excited_band_max_hz: params?.excited_band_max_hz ?? 1000.0,
+        energy_threshold_db_rel_max: params?.energy_threshold_db_rel_max ?? -30.0,
+        max_display_points: params?.max_display_points ?? 300,
+      }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'System identification failed' }));
+      throw new Error(err.detail || `System ID failed with status ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
+  public async listSystemIdReports(): Promise<any[]> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/system-id/reports`);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async getSystemIdReport(analysisId: string): Promise<SystemIdReport | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/system-id/${encodeURIComponent(analysisId)}`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
   }
 }
 

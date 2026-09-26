@@ -31,6 +31,7 @@ from pcg_core.scientific_config import (
     PHANTOM_VALIDATION_V1,
     PCG_EVENT_FEATURES_V1,
     SPRINGER_SEGMENTATION_RESEARCH_V1,
+    BROADBAND_SYSTEM_ID_V1,
 )
 from pcg_app.analysis_service import AnalysisService
 
@@ -298,6 +299,17 @@ class TestScientificConsistencyRegression:
         assert p.feature_policy["per_recording_z_normalization"] is True
         assert p.feature_policy["feature_sampling_rate_hz"] == 50.0
         assert p.calibration_requirement == "dimensionless_features"
+
+    def test_broadband_system_id_profile_consistency(self):
+        p = BROADBAND_SYSTEM_ID_V1
+        assert p.profile_id == "BROADBAND_SYSTEM_ID_V1"
+        assert p.sample_rate_policy == "resample_capture_to_reference"
+        assert p.filter_policy == "none"  # Broadband all-pass; no silent 20-600 Hz filtering
+        assert p.spectral_policy.nperseg == 1024
+        assert p.spectral_policy.effective_noverlap() == 512
+        assert p.feature_policy["h1_estimator"] is True
+        assert p.feature_policy["excited_band_mask"] is True
+        assert p.calibration_requirement == "relative_comparison_only"
 
     def test_all_standard_profiles_serialize_without_contradiction(self):
         for profile in list_analysis_profiles():

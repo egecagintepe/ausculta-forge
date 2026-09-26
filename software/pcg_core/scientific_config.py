@@ -397,12 +397,38 @@ SPRINGER_SEGMENTATION_RESEARCH_V1 = AnalysisProfile(
     literature_sources=("R006", "R007"),
 )
 
+BROADBAND_SYSTEM_ID_V1 = AnalysisProfile(
+    profile_id="BROADBAND_SYSTEM_ID_V1",
+    profile_version="1.0.0",
+    purpose="Broadband SISO system identification without narrow PCG bandpass filtering.",
+    sample_rate_policy="resample_capture_to_reference",
+    filter_policy="none",
+    spectral_policy=SpectralAnalysisConfig(
+        window="hann",
+        nperseg=1024,
+        noverlap=512,
+        nfft=1024,
+        scaling=SpectralScaling.DENSITY,
+        detrend=DetrendMode.CONSTANT,
+    ),
+    feature_policy={
+        "h1_estimator": True,
+        "coherence": True,
+        "excited_band_mask": True,
+        "excited_band_hz": [20.0, 1000.0],
+        "energy_threshold_db_rel_max": -30.0,
+    },
+    calibration_requirement="relative_comparison_only",
+    literature_sources=("R002", "R003", "R004"),
+)
+
 STANDARD_PROFILES: dict[str, AnalysisProfile] = {
     RAW_INTEGRITY_V1.profile_id: RAW_INTEGRITY_V1,
     GENERAL_PCG_V1.profile_id: GENERAL_PCG_V1,
     PHANTOM_VALIDATION_V1.profile_id: PHANTOM_VALIDATION_V1,
     PCG_EVENT_FEATURES_V1.profile_id: PCG_EVENT_FEATURES_V1,
     SPRINGER_SEGMENTATION_RESEARCH_V1.profile_id: SPRINGER_SEGMENTATION_RESEARCH_V1,
+    BROADBAND_SYSTEM_ID_V1.profile_id: BROADBAND_SYSTEM_ID_V1,
 }
 
 

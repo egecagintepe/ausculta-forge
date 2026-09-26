@@ -15,6 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from pcg_core.recording import list_sessions, get_session, validate_session_id
+from pcg_core.scientific import SystemIdConfig
+from pcg_core.scientific_config import list_analysis_profiles
 from .state import StreamManager
 from .device_runtime import DeviceRuntime
 from .analysis_service import AnalysisService
@@ -99,6 +101,23 @@ def create_app(
         asset_id: str
         session_id: str
         max_points: Optional[int] = 600
+
+    class ScientificAnalyzeRequest(BaseModel):
+        profile_id: Optional[str] = "GENERAL_PCG_V1"
+        welch_nperseg: Optional[int] = 2048
+        welch_noverlap: Optional[int] = None
+        max_display_points: Optional[int] = 600
+
+    class SystemIdRequest(BaseModel):
+        asset_id: str
+        session_id: str
+        nperseg: Optional[int] = 1024
+        noverlap: Optional[int] = 512
+        window: Optional[str] = "hann"
+        excited_band_min_hz: Optional[float] = 20.0
+        excited_band_max_hz: Optional[float] = 1000.0
+        energy_threshold_db_rel_max: Optional[float] = -30.0
+        max_display_points: Optional[int] = 300
 
     # REST Endpoints
     @app.get("/api/status")
@@ -237,6 +256,65 @@ def create_app(
                     "Content-Disposition": f'attachment; filename="{filename}"'
                 },
             )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # Scientific Analysis & System Identification Endpoints
+    @app.get("/api/scientific/profiles")
+    def api_list_scientific_profiles() -> list[dict[str, Any]]:
+        return [p.to_dict() for p in list_analysis_profiles()]
+
+    @app.post("/api/scientific/session/{session_id}/analyze")
+    def api_analyze_session_scientific(
+        session_id: str,
+        req: Optional[ScientificAnalyzeRequest] = None,
+    ) -> dict[str, Any]:
+        payload = req or ScientificAnalyzeRequest()
+        try:
+            return analysis.analyze_session_scientific(
+                session_id=session_id,
+                profile_id=payload.profile_id or "GENERAL_PCG_V1",
+                welch_nperseg=payload.welch_nperseg or 2048,
+                welch_noverlap=payload.welch_noverlap,
+                max_display_points=payload.max_display_points or 600,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+    @app.post("/api/scientific/system-id")
+    def api_run_system_id(req: SystemIdRequest) -> dict[str, Any]:
+        cfg = SystemIdConfig(
+            nperseg=req.nperseg or 1024,
+            noverlap=req.noverlap,
+            window=req.window or "hann",
+            excited_band_hz=(req.excited_band_min_hz or 20.0, req.excited_band_max_hz or 1000.0),
+            energy_threshold_db_rel_max=req.energy_threshold_db_rel_max if req.energy_threshold_db_rel_max is not None else -30.0,
+        )
+        try:
+            return analysis.run_system_id(
+                asset_id=req.asset_id,
+                session_id=req.session_id,
+                config=cfg,
+                max_display_points=req.max_display_points or 300,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+    @app.get("/api/scientific/system-id/reports")
+    def api_list_system_id_reports() -> list[dict[str, Any]]:
+        return analysis.list_system_id_reports()
+
+    @app.get("/api/scientific/system-id/{analysis_id}")
+    def api_get_system_id_report(analysis_id: str) -> dict[str, Any]:
+        try:
+            report = analysis.get_system_id_report(analysis_id)
+            if not report:
+                raise HTTPException(status_code=404, detail=f"System identification report not found: {analysis_id}")
+            return report
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
