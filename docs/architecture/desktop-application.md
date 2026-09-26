@@ -197,5 +197,64 @@ FULL-RATE DSP (48 kHz Bandpass)           FULL-RATE SessionRecorder (48 kHz WAV)
 - `GET /api/device/stats`: Real-time packet, sample, sequence gap, and CRC failure telemetry counters.
 - `GET /api/sessions`: List all recorded sessions in `experiments/sessions/`.
 - `GET /api/sessions/{session_id}`: Load specific `session.json` metadata.
+- `GET /api/sessions/{session_id}/analysis-summary`: Bounded session inspection summary (metrics, integrity, decimated preview waveform).
 - `POST /api/sessions/{session_id}/replay`: Replay a saved session through the live DSP streaming pipeline.
 - `POST /api/recording/start` & `POST /api/recording/stop`: Start and finalize acquisition sessions.
+- `POST /api/analysis/assets`: Upload and validate reference PCG WAV asset (mono enforcement, SHA-256 calculation).
+- `GET /api/analysis/assets`: List imported reference WAV assets.
+- `GET /api/analysis/assets/{asset_id}`: Inspect specific reference asset metadata.
+- `DELETE /api/analysis/assets/{asset_id}`: Remove imported reference asset from disk.
+- `POST /api/analysis/compare`: Run engineering validation comparing reference asset vs recorded session.
+- `GET /api/analysis/reports`: List persisted comparison reports in `experiments/analysis/`.
+- `GET /api/analysis/{analysis_id}`: Fetch full persisted comparison report.
+- `GET /api/analysis/{analysis_id}/export`: Download machine-readable JSON comparison report attachment.
+
+---
+
+## 7. Session Analysis & Reference-vs-Capture Workbench
+
+```text
+┌─────────────────────────────────┐       ┌─────────────────────────────────┐
+│ Reference Asset Storage         │       │ Session Recordings              │
+│ experiments/analysis-assets/    │       │ experiments/sessions/           │
+│ (Isolated, traversal-protected) │       │ (WAV + JSON Provenance)         │
+└────────────────┬────────────────┘       └────────────────┬────────────────┘
+                 │                                         │
+                 └───────────────────┬─────────────────────┘
+                                     │
+                                     ▼
+                     ┌───────────────────────────────┐
+                     │ AnalysisService (pcg_app)     │
+                     │ - Path validation             │
+                     │ - Rational resampling         │
+                     │ - Display decimation (<=600)  │
+                     │ - Report persistence          │
+                     └───────────────┬───────────────┘
+                                     │ Reuses DSP & Validation Math
+                                     ▼
+                     ┌───────────────────────────────┐
+                     │ pcg_core.validation           │
+                     │ - Cross-correlation delay     │
+                     │ - Least-squares gain (g)      │
+                     │ - RMSE, NRMSE, SER (dB)       │
+                     │ - Welch PSD & Coherence       │
+                     └───────────────┬───────────────┘
+                                     │
+                                     ▼
+                     ┌───────────────────────────────┐
+                     │ AnalysisComparisonResult      │
+                     │ experiments/analysis/<id>/    │
+                     │ - Zero machine-specific paths │
+                     │ - Complete provenance metadata│
+                     └───────────────────────────────┘
+```
+
+### Architectural Principles:
+1. **Mathematical Isolation:**
+   All engineering mathematics (cross-correlation, delay estimation, least-squares gain, RMSE, SER dB, Welch PSD, magnitude-squared coherence) reside exclusively in `pcg_core.validation`. `AnalysisService` acts solely as an orchestrator and serializer.
+2. **Display Decimation vs Full-Rate Evaluation:**
+   Metrics are evaluated strictly against full-rate NumPy arrays (e.g. 48 kHz or 4 kHz). Display waveforms are decimated to $\le 600$ points and spectral curves to $\le 128$ points using peak-preserving min/max aggregation, protecting browser rendering responsiveness.
+3. **Traversal and Security Hardening:**
+   All file operations validate identifiers against `^[a-zA-Z0-9_-]+$` and enforce directory containment checks (`relative_to`), preventing directory traversal.
+4. **Machine Portability:**
+   Persisted analysis reports contain relative identifiers and SHA-256 digests with zero absolute machine filesystem paths.
