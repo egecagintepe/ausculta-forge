@@ -398,3 +398,72 @@ export interface SystemIdReport {
   };
   provenance: Record<string, unknown>;
 }
+
+export interface StateIntervalItem {
+  state: number;
+  state_name: string;
+  start_s: number;
+  end_s: number;
+  duration_s: number;
+  start_frame_50hz: number;
+  end_frame_50hz: number;
+}
+
+export interface SpringerSegmentationModelSummary {
+  model_id: string;
+  algorithm_id: string;
+  feature_profile_id: string;
+  feature_names: string[];
+  feature_count: number;
+  feature_sample_rate_hz: number;
+  created_at_utc: string;
+  is_demo: boolean;
+  label: string;
+  notes: string;
+}
+
+export interface SpringerSegmentationCoreResult {
+  schema_version: string;
+  status: string;
+  profile_id: string;
+  model_id: string;
+  heart_rate_estimate_bpm: number | null;
+  cycle_duration_estimate_s: number | null;
+  systolic_interval_estimate_s: number | null;
+  feature_sample_rate_hz: number;
+  total_frames_50hz: number;
+  duration_s: number;
+  state_sequence_50hz: number[];
+  state_intervals: StateIntervalItem[];
+  s1_intervals: StateIntervalItem[];
+  s2_intervals: StateIntervalItem[];
+  systole_intervals: StateIntervalItem[];
+  diastole_intervals: StateIntervalItem[];
+  cycle_count: number;
+  technical_warnings: string[];
+  feature_traces?: Record<string, unknown> | null;
+  durations_summary: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+}
+
+export interface SpringerSegmentationReport {
+  schema_version: string;
+  analysis_id: string;
+  created_at_utc: string;
+  session: {
+    session_id: string;
+    sample_rate_hz: number;
+    duration_s: number;
+    total_samples: number;
+  };
+  segmentation: SpringerSegmentationCoreResult;
+  display: {
+    waveform: {
+      time_s: number[];
+      amplitude: number[];
+    };
+    state_intervals: StateIntervalItem[];
+    feature_traces: Record<string, { time_s: number[]; values: number[] }>;
+  };
+  provenance: Record<string, unknown>;
+}
