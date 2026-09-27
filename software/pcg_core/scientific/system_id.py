@@ -170,6 +170,7 @@ def estimate_siso_system_id(
     valid_coh = denom_coh > 1e-30
     coh[valid_coh] = np.abs(Gxy[valid_coh]) ** 2 / denom_coh[valid_coh]
     coh = np.clip(coh, 0.0, 1.0)
+    coh = np.nan_to_num(coh, nan=0.0, posinf=1.0, neginf=0.0)
 
     # 5. H1 Best-Linear FRF Estimator: H1(f) = Gxy(f) / Gxx(f)
     # Regularized to prevent division by near-zero at unexcited frequencies
@@ -182,22 +183,29 @@ def estimate_siso_system_id(
     h1_phase_deg = np.rad2deg(h1_phase_rad)
     h1_phase_unwrapped_deg = np.rad2deg(np.unwrap(h1_phase_rad))
 
+    h1_mag = np.nan_to_num(h1_mag, nan=0.0, posinf=0.0, neginf=0.0)
+    h1_mag_db = np.nan_to_num(h1_mag_db, nan=-300.0, posinf=0.0, neginf=-300.0)
+    h1_phase_rad = np.nan_to_num(h1_phase_rad, nan=0.0, posinf=0.0, neginf=0.0)
+    h1_phase_deg = np.nan_to_num(h1_phase_deg, nan=0.0, posinf=0.0, neginf=0.0)
+    h1_phase_unwrapped_deg = np.nan_to_num(h1_phase_unwrapped_deg, nan=0.0, posinf=0.0, neginf=0.0)
+
     # 6. Coherent and Residual Output Spectra
-    coherent_output = coh * Gyy
-    residual_output = np.maximum(0.0, (1.0 - coh) * Gyy)
+    coherent_output = np.nan_to_num(coh * Gyy, nan=0.0, posinf=0.0, neginf=0.0)
+    residual_output = np.nan_to_num(np.maximum(0.0, (1.0 - coh) * Gyy), nan=0.0, posinf=0.0, neginf=0.0)
 
     # 7. Excited-Frequency Energy Mask
     f_low, f_high = cfg.excited_band_hz
     in_freq_band = (freqs >= f_low) & (freqs <= f_high)
     
-    max_gxx = float(np.max(Gxx)) if len(Gxx) > 0 else 1.0
-    if max_gxx > 0:
+    max_gxx = float(np.max(Gxx)) if len(Gxx) > 0 else 0.0
+    # Silence is not excitation: zero or negligible input power excites no frequency bins
+    if max_gxx > 1e-20:
         gxx_rel_db = 10.0 * np.log10(np.maximum(Gxx, 1e-30) / max_gxx)
         sufficient_energy = gxx_rel_db >= float(cfg.energy_threshold_db_rel_max)
+        excited_mask = in_freq_band & sufficient_energy
     else:
-        sufficient_energy = np.ones_like(freqs, dtype=bool)
+        excited_mask = np.zeros_like(freqs, dtype=bool)
 
-    excited_mask = in_freq_band & sufficient_energy
     excited_count = int(np.sum(excited_mask))
 
     mean_coh_excited: Optional[float] = None

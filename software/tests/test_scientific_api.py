@@ -233,3 +233,38 @@ def test_api_system_id_missing_entities(scientific_test_app):
             json={"asset_id": "nonexistent_asset", "session_id": "nonexistent_session"},
         )
         assert resp.status_code == 404
+
+
+def test_api_system_id_cross_rate_resampling(scientific_test_app):
+    """Verifies REST API system-ID when reference is 4000 Hz and capture session is 2000 Hz."""
+    app, sessions_dir, assets_dir, _ = scientific_test_app
+    asset_id = "ref_cross_4000"
+    session_id = "sess_cross_2000"
+
+    _create_mock_reference_asset(assets_dir, asset_id, fs=4000, duration_s=1.5)
+    _create_mock_session(sessions_dir, session_id, fs=2000, duration_s=1.5)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/scientific/system-id",
+            json={
+                "asset_id": asset_id,
+                "session_id": session_id,
+                "nperseg": 512,
+                "noverlap": 256,
+                "window": "hann",
+                "excited_band_min_hz": 20.0,
+                "excited_band_max_hz": 500.0,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["schema_version"] == "1.0.0"
+        assert data["capture"]["resampled"] is True
+        assert data["capture"]["sample_rate_hz"] == 2000
+        assert data["reference"]["sample_rate_hz"] == 4000
+        assert data["capture"]["effective_sample_rate_hz"] == 4000.0
+        assert data["system_id"]["sample_rate_hz"] == 4000.0
+        assert len(data["system_id"]["coherence"]) > 0
+        assert len(data["system_id"]["h1_magnitude_db"]) > 0

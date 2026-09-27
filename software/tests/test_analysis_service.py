@@ -691,3 +691,66 @@ class TestAnalysisAPIEndpoints:
         exported_data = export_resp.json()
         assert exported_data["analysis_id"] == analysis_id
         assert exported_data["version"] == "1.0"
+
+    def test_system_id_cross_rate_resampling_service(self, tmp_path: Path):
+        """Regression test for system ID differing sample rates (ref: 4000 Hz, cap: 2000 Hz).
+
+        Verifies:
+        - No TypeError during resampling orchestration
+        - resampled == True
+        - effective/working sample rate == 4000 Hz
+        - finite H1 and coherence results
+        - persisted system-ID report reloads successfully from disk
+        """
+        assets_dir = tmp_path / "assets"
+        analysis_dir = tmp_path / "analysis"
+        sessions_dir = tmp_path / "sessions"
+
+        service = AnalysisService(
+            assets_dir=assets_dir,
+            analysis_dir=analysis_dir,
+            sessions_dir=sessions_dir,
+        )
+
+        # Reference WAV = 4000 Hz, 1.5 seconds
+        ref_bytes = make_mono_wav_bytes(fs=4000, duration_s=1.5, freq_hz=120.0, amplitude=0.4)
+        asset = service.import_reference_wav(ref_bytes, "ref_4000hz.wav")
+        asset_id = asset["asset_id"]
+
+        # Capture session WAV = 2000 Hz, 1.5 seconds
+        sess_id = "sess_cap_2000hz"
+        create_recorded_session(sessions_dir, sess_id, fs=2000, duration_s=1.5, freq_hz=120.0, amplitude=0.4)
+
+        # Execute system ID orchestration
+        report = service.run_system_id(asset_id=asset_id, session_id=sess_id)
+
+        # 1. No TypeError and valid analysis_id generated
+        assert isinstance(report, dict)
+        assert "analysis_id" in report
+        analysis_id = report["analysis_id"]
+
+        # 2. Resampled flag is true
+        assert report["capture"]["resampled"] is True
+        assert report["capture"]["sample_rate_hz"] == 2000
+        assert report["reference"]["sample_rate_hz"] == 4000
+
+        # 3. Effective/working sample rate is 4000 Hz
+        assert report["capture"]["effective_sample_rate_hz"] == 4000.0
+        assert report["system_id"]["sample_rate_hz"] == 4000.0
+
+        # 4. Finite H1/coherence results
+        h1_mag_db = report["system_id"]["h1_magnitude_db"]
+        coherence = report["system_id"]["coherence"]
+        assert len(h1_mag_db) > 0
+        assert len(coherence) > 0
+        assert np.all(np.isfinite(h1_mag_db))
+        assert np.all(np.isfinite(coherence))
+
+        # 5. Persisted result reloads successfully
+        reloaded = service.get_system_id_report(analysis_id)
+        assert reloaded is not None
+        assert reloaded["analysis_id"] == analysis_id
+        assert reloaded["capture"]["resampled"] is True
+        assert reloaded["system_id"]["sample_rate_hz"] == 4000.0
+        assert np.all(np.isfinite(reloaded["system_id"]["h1_magnitude_db"]))
+        assert np.all(np.isfinite(reloaded["system_id"]["coherence"]))

@@ -79,6 +79,19 @@ def compute_welch_psd(
     if nfft < nperseg:
         nfft = nperseg
 
+    # Validate configured SciPy window and compute ENBW strictly from actual coefficients
+    try:
+        win = scipy.signal.get_window(cfg.window, nperseg, fftbins=True)
+    except Exception as e:
+        raise ValueError(f"Invalid or unsupported window '{cfg.window}': {e}") from e
+
+    s1 = float(np.sum(win))
+    s2 = float(np.sum(win ** 2))
+    if s1 <= 0.0 or s2 <= 0.0:
+        raise ValueError(f"Window '{cfg.window}' has non-positive sum or energy; cannot compute valid ENBW.")
+
+    enbw_hz = float(sample_rate_hz) * (s2 / (s1 ** 2))
+
     # Compute Welch PSD via SciPy
     f, psd = scipy.signal.welch(
         signal,
@@ -97,15 +110,6 @@ def compute_welch_psd(
     # Actual Welch segment count
     step = nperseg - noverlap
     actual_segments = max(1, (n_samples - noverlap) // step) if step > 0 else 1
-
-    # Equivalent Noise Bandwidth (ENBW) from window coefficients
-    try:
-        win = scipy.signal.get_window(cfg.window, nperseg, fftbins=True)
-        s1 = float(np.sum(win))
-        s2 = float(np.sum(win ** 2))
-        enbw_hz = float(sample_rate_hz) * (s2 / (s1 ** 2)) if s1 != 0.0 else bin_spacing
-    except Exception:
-        enbw_hz = bin_spacing * 1.50  # Fallback approximation for standard Hann-like window
 
     # Explicit relative dB calculation
     ref_val = max(1e-20, float(cfg.relative_db_ref))

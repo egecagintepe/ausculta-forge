@@ -95,11 +95,11 @@ const METROLOGY_EXPLANATIONS: Record<string, MetrologyCardData> = {
     whatItDoesNotProve: 'TKEO is an experimental feature comparator. A TKEO peak is NOT automatically S1 or S2, and NOT a clinical diagnostic feature.'
   },
   psd_band_envelope: {
-    title: 'PSD-Band Envelope (Springer 40–60 Hz Research Profile)',
+    title: 'PSD-Band Envelope (40–60 Hz Feature Comparator)',
     whatIsIt: 'Short-time windowed energy extracted in the 40–60 Hz subband (50 ms Hamming window, 50% overlap).',
-    whyUseful: 'Implements the deterministic spectral feature stream from Springer et al. (2016) PCG segmentation literature.',
+    whyUseful: 'Implements the short-time spectral feature parameterization from Springer et al. (2016). In this generic lab, it serves as an energy comparator, not a full segmentation pipeline.',
     largeSmallMeaning: 'Reflects localized energy in the fundamental S1/S2 frequency band.',
-    whatItDoesNotProve: '40–60 Hz is a segmentation research convention; it is NOT a universal PCG standard band and does not capture murmurs or higher-frequency murmurs.'
+    whatItDoesNotProve: '40–60 Hz is an R006 research convention; it is NOT a universal PCG standard band and does not capture murmurs or higher-frequency murmurs.'
   },
   system_id_frf: {
     title: 'SISO Best-Linear FRF Estimate (H1)',
@@ -446,7 +446,7 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
                 {analysisResult.signal_quality.digital_saturation_count} samples
               </div>
               <div className="text-xs font-mono-code text-[var(--on-surface-variant)]">
-                Fraction: {(analysisResult.signal_quality.digital_saturation_fraction * 100).toFixed(4)}% (at >= 0.999 FS)
+                Fraction: {(analysisResult.signal_quality.digital_saturation_fraction * 100).toFixed(4)}% (at &gt;= 0.999 FS)
               </div>
             </div>
           </div>
@@ -873,7 +873,7 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="w-2.5 h-0.5 bg-[#d97706] inline-block"></span>
-                  <span>Springer 40–60Hz</span>
+                  <span>40–60Hz PSD-Band</span>
                 </div>
               </div>
             </div>
@@ -894,13 +894,13 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
 
               <div className="p-3 rounded bg-[var(--surface-muted)] border border-[var(--border-subtle)] flex flex-col gap-1">
                 <div className="flex items-center justify-between font-bold text-[var(--on-surface)]">
-                  <span>Springer 40–60 Hz Feature</span>
+                  <span>PSD-Band Feature (40–60 Hz)</span>
                   <button onClick={() => toggleExplanation('psd_band_envelope')} className="text-[var(--accent-oxblood)]">
                     <HelpCircle size={13} />
                   </button>
                 </div>
                 <div className="text-[11px] text-[var(--on-surface-variant)]">
-                  50 ms Hamming window, 50% overlap. Replicates Springer et al. (2016) research feature. NOT a universal PCG band.
+                  50 ms Hamming window, 50% overlap (R006 parameterization). Generic envelope comparator only — complete Springer reproduction requires full preprocessing &amp; Stage-B segmentation pipeline.
                 </div>
               </div>
 
@@ -1181,12 +1181,6 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
 
                 <div className="w-full h-44 bg-[var(--surface-muted)] rounded-lg p-2 relative overflow-hidden border border-[var(--border-subtle)]">
                   <svg className="w-full h-full" viewBox="0 0 600 120" preserveAspectRatio="none">
-                    {/* 0.8 Coherence Threshold line */}
-                    <line x1="0" y1="24" x2="600" y2="24" stroke="#059669" strokeWidth="0.8" strokeDasharray="3,3" strokeOpacity="0.7" />
-                    <text x="5" y="20" fill="#059669" fontSize="9" fontFamily="monospace">
-                      γ² = 0.8
-                    </text>
-
                     {/* Coherence Curve */}
                     <polyline
                       fill="none"
@@ -1206,7 +1200,7 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
                   </svg>
                 </div>
                 <div className="flex items-center justify-between text-[11px] font-mono-code text-[var(--on-surface-variant)]">
-                  <span>Coherence bounded in [0.0, 1.0]. Evaluated over excited frequencies.</span>
+                  <span>Coherence bounded in [0.0, 1.0]. Evaluated over excited frequencies (visual guide only — not a validated acceptance threshold).</span>
                   <span className="text-[var(--accent-oxblood)] font-bold">
                     Ordinary coherence measures linear association; it does NOT establish physical causality.
                   </span>

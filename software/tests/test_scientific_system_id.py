@@ -191,3 +191,48 @@ class TestScientificSystemIdentification:
             assert not math.isnan(val) and not math.isinf(val)
         for val in d["coherence"]:
             assert not math.isnan(val) and not math.isinf(val)
+        for val in d["h1_magnitude_db"]:
+            assert not math.isnan(val) and not math.isinf(val)
+
+    def test_silent_input_is_not_excitation(self):
+        """Validates that zero or silent input does NOT mark any frequency as excited.
+
+        Asserts:
+        - excited_frequency_mask contains no True bins
+        - excited_bins_count == 0
+        - mean_coherence_over_excited_band is None
+        - H1 and coherence arrays remain strictly finite and JSON-serializable
+        """
+        fs = 4000.0
+        n_samples = 4000
+        x_silent = np.zeros(n_samples, dtype=np.float64)
+        y_arbitrary = np.sin(2.0 * np.pi * 100.0 * np.arange(n_samples) / fs)
+
+        cfg = SystemIdConfig(excited_band_hz=(20.0, 500.0), energy_threshold_db_rel_max=-20.0)
+        res = estimate_siso_system_id(x_silent, y_arbitrary, sample_rate_hz=fs, config=cfg)
+
+        # 1. excited_frequency_mask must contain NO True bins
+        assert not any(res.excited_frequency_mask)
+        assert len(res.excited_frequency_mask) == len(res.frequencies_hz)
+
+        # 2. excited_bins_count == 0
+        assert res.excited_bins_count == 0
+
+        # 3. mean_coherence_over_excited_band is None
+        assert res.mean_coherence_over_excited_band is None
+
+        # 4. H1 and coherence arrays must remain strictly finite and JSON-safe
+        assert len(res.h1_magnitude) > 0
+        assert np.all(np.isfinite(res.h1_magnitude))
+        assert np.all(np.isfinite(res.h1_magnitude_db))
+        assert np.all(np.isfinite(res.h1_phase_rad))
+        assert np.all(np.isfinite(res.h1_phase_deg))
+        assert np.all(np.isfinite(res.coherence))
+        assert np.all(np.isfinite(res.gxx_autospectrum))
+        assert np.all(np.isfinite(res.gyy_autospectrum))
+
+        # Check serialization round-trip
+        data = res.to_dict()
+        assert data["excited_bins_count"] == 0
+        assert data["mean_coherence_over_excited_band"] is None
+        assert not any(data["excited_frequency_mask"])

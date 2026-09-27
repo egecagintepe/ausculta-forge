@@ -343,7 +343,11 @@ def compute_envelope_lab(
         },
         input_sample_count=n_samples,
         output_sample_count=len(psd_band_vals),
-        provenance={"literature": "R006 (Springer et al. 2016)", "profile": "SPRINGER_SEGMENTATION_RESEARCH_V1"},
+        provenance={
+            "literature": "R006 (Springer et al. 2016) feature parameterization",
+            "scope": "Generic 40-60 Hz PSD-band comparator (not full Springer pipeline)",
+            "profile": cfg.profile_behavior,
+        },
     )
 
     envelopes = {

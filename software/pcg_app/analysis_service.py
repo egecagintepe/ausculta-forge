@@ -859,11 +859,19 @@ class AnalysisService:
         cap_samples, cap_fs = load_wav_as_float32(cap_path)
 
         resampled = False
-        working_fs = ref_fs
+        working_fs = float(ref_fs)
         if ref_fs != cap_fs:
-            cap_samples = resample_analysis_signal(cap_samples, original_fs=cap_fs, target_fs=ref_fs)
+            cap_samples, working_fs = resample_analysis_signal(
+                cap_samples,
+                orig_sample_rate_hz=cap_fs,
+                target_sample_rate_hz=ref_fs,
+            )
             resampled = True
-            working_fs = ref_fs
+
+        if not isinstance(ref_samples, np.ndarray):
+            ref_samples = np.asarray(ref_samples, dtype=np.float64)
+        if not isinstance(cap_samples, np.ndarray):
+            cap_samples = np.asarray(cap_samples, dtype=np.float64)
 
         cfg = config or SystemIdConfig()
         sys_result = estimate_siso_system_id(
@@ -908,8 +916,9 @@ class AnalysisService:
                 "wav_sha256": sess_meta.get("raw_wav_sha256", ""),
                 "sample_rate_hz": cap_fs,
                 "resampled": resampled,
-                "duration_s": sess_meta.get("duration_s", round(float(len(cap_samples) / cap_fs), 4)),
-                "total_samples": sess_meta.get("total_samples", len(cap_samples)),
+                "effective_sample_rate_hz": working_fs,
+                "duration_s": sess_meta.get("duration_s", round(float(len(cap_samples) / working_fs), 4)),
+                "total_samples": len(cap_samples),
             },
             "system_id": sys_result.to_dict(),
             "display": {

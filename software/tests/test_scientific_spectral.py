@@ -146,3 +146,31 @@ class TestScientificSpectralEngine:
             compute_welch_psd(np.array([]), 4000)
         with pytest.raises(ValueError):
             compute_welch_psd(np.array([1.0, np.nan, 2.0]), 4000)
+
+    def test_enbw_hann_and_hamming_windows_finite_correct(self):
+        """Verifies ENBW calculation from actual window coefficients for Hann and Hamming windows."""
+        fs = 4000.0
+        n_samples = 4000
+        x = np.sin(2.0 * np.pi * 100.0 * np.arange(n_samples) / fs)
+
+        # Hann window: theoretical ENBW factor is 1.50 * bin_spacing
+        cfg_hann = WelchConfig(nperseg=1024, nfft=1024, window="hann")
+        res_hann = compute_welch_psd(x, sample_rate_hz=fs, config=cfg_hann)
+        expected_hann_enbw = 1.5 * res_hann.frequency_bin_spacing_hz
+        assert math.isfinite(res_hann.enbw_hz)
+        assert pytest.approx(res_hann.enbw_hz, rel=1e-3) == expected_hann_enbw
+
+        # Hamming window: theoretical ENBW factor is ~1.3628 * bin_spacing
+        cfg_hamming = WelchConfig(nperseg=1024, nfft=1024, window="hamming")
+        res_hamming = compute_welch_psd(x, sample_rate_hz=fs, config=cfg_hamming)
+        expected_hamming_enbw = 1.3628 * res_hamming.frequency_bin_spacing_hz
+        assert math.isfinite(res_hamming.enbw_hz)
+        assert pytest.approx(res_hamming.enbw_hz, rel=5e-3) == expected_hamming_enbw
+
+    def test_enbw_invalid_window_raises_explicit_value_error(self):
+        """Verifies that an unsupported or uninterpretable window raises a clear ValueError without invented fallback."""
+        fs = 4000.0
+        x = np.ones(1024)
+        cfg_invalid = WelchConfig(nperseg=512, window="fabricated_nonexistent_window")
+        with pytest.raises(ValueError, match="Invalid or unsupported window"):
+            compute_welch_psd(x, sample_rate_hz=fs, config=cfg_invalid)
