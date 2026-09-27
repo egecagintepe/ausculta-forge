@@ -17,6 +17,8 @@ import {
   SystemIdReport,
   SpringerSegmentationModelSummary,
   SpringerSegmentationReport,
+  ValidationBenchmarkSummary,
+  ValidationBenchmarkReport,
 } from '../types';
 
 export interface SignalFrameData {
@@ -603,6 +605,26 @@ class BridgeClient {
   public async getSegmentationReport(analysisId: string): Promise<SpringerSegmentationReport | null> {
     try {
       const resp = await fetch(`${this.apiUrl}/scientific/segmentation/${encodeURIComponent(analysisId)}`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public async listValidationBenchmarks(): Promise<ValidationBenchmarkSummary[]> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/validation/benchmarks`);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async getValidationBenchmark(benchmarkId: string): Promise<ValidationBenchmarkReport | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/validation/benchmarks/${encodeURIComponent(benchmarkId)}`);
       if (!resp.ok) return null;
       return await resp.json();
     } catch {

@@ -26,6 +26,7 @@ Buradaki dokümanlar genel teorik ders notu yığını değil; doğrudan Auscult
 | 13 | [Bilimsel Temeller ve Analiz Standartları](13-scientific-foundation-and-analysis-conventions.md) | Üçlü sinyal temsili, Welch PSD standartları, birim/kalibrasyon ilkeleri, segmentasyon yol haritası. |
 | 14 | [Bilimsel Sinyal Karakterizasyonu, Zarf Laboratuvarı ve Sistem Tanılama](14-scientific-signal-envelope-system-identification.md) | Signal quality, Hilbert/TKEO/Springer zarf algoritmaları, H1 FRF, koherans ve ScientificLab UI. |
 | 15 | [Springer LR-HSMM Kalp Sesi Segmentasyonu](15-springer-lr-hsmm-segmentation.md) | Springer LR-HSMM matematiksel modeli, 4 zarf özniteliği, Schmidt spike giderme, durasyon modeli ve genişletilmiş Viterbi. |
+| 16 | [Gerçek PCG Segmentasyonu Doğrulaması](16-real-pcg-segmentation-validation.md) | Stage-C CirCor v1.0.3 doğrulama çerçevesi, denek sızıntısını önleme, olay toleransları, uçtan-uca ve koşullu metrikler. |
 | -- | [Terimler Sözlüğü (Glossary)](GLOSSARY.md) | Biyomedikal, gömülü sistem ve DSP terimlerinin Türkçe-İngilizce tanımları. |
 
 ---

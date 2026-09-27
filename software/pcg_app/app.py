@@ -360,6 +360,20 @@ def create_app(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
+    @app.get("/api/scientific/validation/benchmarks")
+    def api_list_validation_benchmarks() -> list[dict[str, Any]]:
+        return analysis.list_validation_benchmarks()
+
+    @app.get("/api/scientific/validation/benchmarks/{benchmark_id}")
+    def api_get_validation_benchmark(benchmark_id: str) -> dict[str, Any]:
+        try:
+            report = analysis.get_validation_benchmark(benchmark_id)
+            if not report:
+                raise HTTPException(status_code=404, detail=f"Validation benchmark not found: {benchmark_id}")
+            return report
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
     @app.post("/api/stream/start")
     async def api_start_stream() -> dict[str, Any]:
         manager.start_stream()
