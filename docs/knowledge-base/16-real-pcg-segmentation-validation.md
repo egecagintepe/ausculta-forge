@@ -23,11 +23,13 @@ CirCor veri setinde bulunan üfürüm (murmur), klinik sonuç (outcome) veya dem
 
 Doğrulama altyapısının birincil veri kaynağı, PhysioNet üzerinde açık erişimli olarak sunulan **The CirCor DigiScope Phonocardiogram Dataset** (Sürüm 1.0.3) veri tabanıdır.
 
-- **Resmi DOI:** `10.13026/trmv-vx89`
+- **Resmi DOI:** `10.13026/tshs-mw03`
 - **Kaynak:** PhysioNet (`https://physionet.org/content/circor-heart-sound/1.0.3/`)
-- **Veri Yapısı:** Her kayıt için `.wav` (ham ses), `.hea` (başlık) ve `.tsv` (zaman aralığı durum etiketleri) dosyaları bulunur.
-- **Dosya İsimlendirme Formatı:** `SUBJECTID_LOCATION.wav` (örn. `2530_AV.wav`, `2530_MV.wav`, `85340_PV_1.wav`). Sayısal ön ek deneğin (*subject*) tekil kimliğini belirtir.
+- **Resmi Boyut:** 1568 denek, 5272 kayıt, yaklaşık 558.9 MB uncompressed.
+- **Veri Yapısı:** Her uygun kayıt için `.wav` (ham ses), `.hea` (başlık) ve `.tsv` (zaman aralığı durum etiketleri) zorunludur.
+- **Dosya İsimlendirme Formatı:** `SUBJECTID_LOCATION.wav` (örn. `2530_AV.wav`, `2530_MV.wav`, `50782_MV_1.wav`). Sayısal ön ek deneğin (*subject*) tekil kimliğini belirtir.
 - **Oskültasyon Konumları:** AV (Aort), MV (Mitral), PV (Pulmoner), TV (Triküspit) ve Phc (Prekordiyal).
+
 
 ### TSV Aralıkları ve Kritik "State 0" Anlambilimi
 TSV dosyasındaki 3 sütun:
@@ -85,10 +87,12 @@ Kalp seslerinin zamansal doğruluğu, tahmin edilen olaylar ile uzman etiketli r
 - **STATE ONSET (Birincil Standart):** S1 olayı = S1 başlangıç zamanı; S2 olayı = S2 başlangıç zamanı.
 - **SPRINGER_CONTEXT (İkincil / Opsiyonel):** S1 = S1 başlangıcı; S2 = S2 aralık merkezi.
 
-### 1-to-1 Deterministik Eşleştirme
+### 1-to-1 Deterministik Eşleştirme (Dynamic Programming Sequence Matcher)
 - Bir tahmin yalnızca tek bir referansla eşleşebilir.
 - Bir referans birden fazla tahmin tarafından paylaşılamaz (tekrar eden tahminler False Positive sayılır).
-- Eşleştirme, tolerans penceresi içerisindeki en yakın zaman farkına göre açgözlü (*greedy minimum absolute-time distance*) biçimde atanır.
+- Eşleştirme, açgözlü (greedy) yaklaşımın alt-optimal bloklamalarını engellemek için **Dynamic Programming** ile iki öncelik hiyerarşisinde çözülür:
+  1. Tolerans penceresi içindeki geçerli eşleşme sayısını (True Positive) maksimize etmek,
+  2. Eşit TP durumunda toplam mutlak zamanlama hatasını minimize etmek.
 
 ### Tolerans Pencereleri ve Metrikler
 Değerlendirme 5 sabit zaman toleransında ayrı ayrı raporlanır:
@@ -161,11 +165,12 @@ AV, MV, PV, TV ve Phc konumları için kayıt sayısı, denek sayısı, kapsama 
 
 ---
 
-## 11. İkincil Veri Seti: CinC 2016 (Cross-Database Evaluation)
+## 11. İkincil Veri Seti: CinC 2016 (DEFERRED_FORMAT_ADAPTER)
 
-PhysioNet / Computing in Cardiology Challenge 2016 veri seti, CirCor üzerinde eğitilen modellerin harici genelleme kabiliyetini sınamak için ikincil bir veri adaptörü olarak desteklenir.
-- CinC 2016 açık eğitim kayıtlarında güvenilir denek eşleşmesi bulunmadığından, veri seti içi rastgele bölme (*within-dataset split*) yapılmaz.
-- CinC 2016 sonuçları CirCor sonuçlarıyla asla tek bir ortalamada birleştirilemez; açıkça **CROSS_DATASET_EVALUATION** başlığı altında bağımsız sunulur.
+PhysioNet / Computing in Cardiology Challenge 2016 veri setinde elle düzeltilmiş resmi segmentasyon etiketleri, kardeş `.tsv`/`.csv` dosyaları olarak değil, `annotations/hand_corrected/training-a_StateAns/a0001_StateAns.mat` biçiminde MATLAB yapısında sunulmaktadır.
+- Bu nedenle CinC 2016 adaptörü `DEFERRED_FORMAT_ADAPTER` olarak açıkça işaretlenmiştir.
+- Resmi `*_StateAns.mat` ayrıştırıcısı eklenene kadar yanıltıcı bir ".tsv/.csv bulundu" iddiasından kaçınılır ve çapraz veritabanı testi bu gerekçeyle dürüstçe reddedilir.
+- CinC 2016 sonuçları CirCor sonuçlarıyla asla birleştirilmez.
 
 ---
 
@@ -191,10 +196,12 @@ Bu nedenle CirCor sonuçlarının yanına makale skoru konularak "makale sonucun
 | Aşama / Algoritmik Bileşen | Durum Tanımı | Doğrulama Seviyesi |
 | :--- | :--- | :--- |
 | **Springer Referans Öznitelik Çıkarımı** | IMPLEMENTED | Sentetik test edilmiş + Referans eşdeğerliği kontrol edilmiş |
-| **CirCor Veri Seti Adaptörü & Ayrıştırıcı** | IMPLEMENTED | Sentetik & Birim testleri tamamlanmış, doğrulanmış |
+| **CirCor Veri Seti Adaptörü & Ayrıştırıcı (v1.0.3)** | IMPLEMENTED | `.wav`, `.tsv`, `.hea` + Konum doğrulama + Tarama muhasebesi tamamlandı |
 | **Denek Gruplu Bölümleyici (Anti-Leakage)** | IMPLEMENTED | %0 denek sızıntısı matematiksel olarak kanıtlanmış |
-| **Gerçek LR Modeli Eğitimi (Fold-based)** | IMPLEMENTED | Sentetik döngüde uçtan uca doğrulanmış (Demo model yasaklı) |
-| **Uçtan-Uca & Koşullu Değerlendirme Motoru** | IMPLEMENTED | Sentetik test edilmiş, hayatta kalma yanlılığı engellenmiş |
-| **CirCor Üzerinde Gerçek Veri Kıyaslaması** | SOURCE SUPPORTED | Yerel veri seti mevcut olduğunda tam kıyaslama çalıştırılabilir |
+| **Gerçek LR Modeli Eğitimi (Fold-based)** | IMPLEMENTED | Gerçek CirCor denekleri üzerinde fold modelleri eğitilmiş |
+| **Uçtan-Uca & Koşullu Değerlendirme Motoru** | IMPLEMENTED | DP sekans eşleştirici + Hayatta kalma yanlılığı engellenmiş |
+| **CirCor Gerçek Veri Pilotu (Real Pilot)** | REAL_DATA_PILOT | 50 denek üzerinde gerçek WAV ve TSV ile icra edildi |
+| **Tam CirCor Kıyaslaması (Full 5272 Records)** | NOT YET EXECUTED | Çalışma süresi deneyi olarak bir sonraki adımda icra edilebilir |
+| **CinC 2016 Çapraz Veritabanı Değerlendirmesi** | DEFERRED_FORMAT_ADAPTER | `*_StateAns.mat` format ayrıştırıcısı ertelendi |
 | **Springer MATLAB Sayısal Birebir Eşdeğerliği** | NOT EXTERNALLY VALIDATED | Yalnızca MATLAB kahini ile doğrudan doğrulanabilir |
 | **Klinik Tanı Geçerliliği** | NOT CLAIMED | Teşhis veya klinik geçerlilik iddiası bulunmamaktadır |

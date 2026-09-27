@@ -119,8 +119,12 @@ def main() -> None:
     )
 
     print(f"\nBenchmark Status: {report.status}")
+    print(f"Files Seen: {report.dataset_summary.get('files_seen', 0)}")
     print(f"Eligible Records: {report.dataset_summary.get('eligible_record_count', 0)}")
     print(f"Eligible Subjects: {report.dataset_summary.get('eligible_subject_count', 0)}")
+    print(f"Records Excluded: {report.dataset_summary.get('records_excluded', 0)}")
+    if report.dataset_summary.get("exclusion_reasons"):
+        print(f"Exclusion Reasons: {report.dataset_summary.get('exclusion_reasons')}")
     print(f"Total Audio Duration: {report.dataset_summary.get('total_audio_duration_s', 0.0):.1f} s")
     print(f"Total Annotated Duration: {report.dataset_summary.get('total_annotated_duration_s', 0.0):.1f} s")
 

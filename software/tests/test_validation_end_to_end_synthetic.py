@@ -56,8 +56,10 @@ def _create_mini_circor_dataset(root_dir: Path) -> None:
     for s_idx in range(101, 106):
         wav_path = root_dir / f"{s_idx}_AV.wav"
         tsv_path = root_dir / f"{s_idx}_AV.tsv"
+        hea_path = root_dir / f"{s_idx}_AV.hea"
         wavfile.write(str(wav_path), fs, pcm16)
         tsv_path.write_text(tsv_content, encoding="utf-8")
+        hea_path.write_text(f"{s_idx}_AV 1 4000 12800\n", encoding="utf-8")
 
 
 def test_miniature_end_to_end_benchmark(tmp_path):

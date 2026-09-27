@@ -93,3 +93,32 @@ def test_s1_and_s2_independent_matching():
 
     assert m_s1.tp == 1 and m_s1.fp == 0 and m_s1.fn == 0
     assert m_s2.tp == 0 and m_s2.fp == 0 and m_s2.fn == 1
+
+
+def test_adversarial_greedy_suboptimal_matching():
+    """Adversarial case where naive nearest-distance greedy matching finds 1 match,
+    but optimal sequence DP matching finds 2 matches."""
+    refs = [1.00, 1.04]
+    preds = [1.03, 1.07]
+    tol_s = 0.035
+
+    # Naive greedy would pick |1.03 - 1.04| = 0.010 first, leaving 1.07 and 1.00
+    # which has distance 0.070 > 0.035, yielding only 1 match (TP=1).
+    # Optimal DP matches (1.03 -> 1.00, dt=0.030) and (1.07 -> 1.04, dt=0.030),
+    # yielding 2 matches (TP=2).
+    matches, unmatched_p, unmatched_r = match_events_one_to_one(preds, refs, tolerance_s=tol_s)
+
+    assert len(matches) == 2
+    assert len(unmatched_p) == 0
+    assert len(unmatched_r) == 0
+
+    # Verify matched pairs and signed errors
+    # Match 0: p_idx 0 (1.03) -> r_idx 0 (1.00), signed error = +0.030
+    assert matches[0][0] == 0
+    assert matches[0][1] == 0
+    assert pytest.approx(matches[0][2], abs=1e-5) == 0.030
+
+    # Match 1: p_idx 1 (1.07) -> r_idx 1 (1.04), signed error = +0.030
+    assert matches[1][0] == 1
+    assert matches[1][1] == 1
+    assert pytest.approx(matches[1][2], abs=1e-5) == 0.030

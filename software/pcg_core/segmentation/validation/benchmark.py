@@ -42,6 +42,8 @@ from .circor import (
     CIRCOR_DATASET_ID,
     CIRCOR_DATASET_VERSION,
     CIRCOR_DOI,
+    CIRCOR_TOTAL_SUBJECTS,
+    CIRCOR_TOTAL_RECORDINGS,
 )
 from .splitting import create_subject_grouped_folds
 from .training import train_fold_springer_model
@@ -152,11 +154,12 @@ def run_segmentation_benchmark(
             limitations=["No real dataset available for evaluation."],
         )
 
-    records = scan_circor_dataset(
+    scan_res = scan_circor_dataset(
         root_path=root_p,
         max_subjects=cfg.max_subjects,
         max_records=cfg.max_records,
     )
+    records = scan_res.records if hasattr(scan_res, "records") else scan_res
 
     if not records:
         provenance = build_system_provenance(cfg.profile_id)
@@ -164,7 +167,13 @@ def run_segmentation_benchmark(
             benchmark_id=benchmark_id,
             status=BenchmarkStatus.DATASET_NOT_AVAILABLE.value,
             config=cfg,
-            dataset_summary={"error": "No valid annotated PCG records found in dataset directory."},
+            dataset_summary={
+                "error": "No valid annotated PCG records found in dataset directory.",
+                "files_seen": getattr(scan_res, "files_seen", 0),
+                "records_eligible": 0,
+                "records_excluded": getattr(scan_res, "records_excluded", 0),
+                "exclusion_reasons": getattr(scan_res, "exclusion_reasons", {}),
+            },
             fold_summaries=[],
             outcomes=[],
             end_to_end_event_metrics={},
@@ -191,8 +200,13 @@ def run_segmentation_benchmark(
         "dataset_version": cfg.dataset_version,
         "dataset_doi": CIRCOR_DOI,
         "source": "PhysioNet",
+        "official_subject_count": CIRCOR_TOTAL_SUBJECTS,
+        "official_recording_count": CIRCOR_TOTAL_RECORDINGS,
+        "files_seen": getattr(scan_res, "files_seen", len(records)),
         "eligible_record_count": len(records),
         "eligible_subject_count": len(unique_subjects),
+        "records_excluded": getattr(scan_res, "records_excluded", 0),
+        "exclusion_reasons": getattr(scan_res, "exclusion_reasons", {}),
         "total_audio_duration_s": round(total_audio_duration_s, 2),
         "total_annotated_duration_s": round(total_annotated_duration_s, 2),
         "total_ignored_duration_s": round(total_ignored_duration_s, 2),

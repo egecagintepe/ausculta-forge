@@ -24,10 +24,12 @@ def convert_intervals_to_50hz_labels(
     total_frames_50hz: Optional[int] = None,
     duration_s: Optional[float] = None,
     feature_sample_rate_hz: float = 50.0,
-    **kwargs: Any,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Convert reference interval sequence into 50 Hz frame labels and evaluation mask."""
-    fs = float(kwargs.get("feature_fs_hz", feature_sample_rate_hz))
+    """Convert reference interval sequence into frame labels and evaluation mask on the feature timebase."""
+    fs = float(feature_sample_rate_hz)
+    if fs <= 0.0:
+        raise ValueError(f"feature_sample_rate_hz must be positive, got {feature_sample_rate_hz}")
+
     if total_frames_50hz is None:
         if duration_s is not None:
             total_frames_50hz = int(round(duration_s * fs))
@@ -47,8 +49,6 @@ def convert_intervals_to_50hz_labels(
     starts = [iv.start_s for iv in intervals]
     ends = [iv.end_s for iv in intervals]
     states = [iv.state for iv in intervals]
-
-    fs = float(feature_sample_rate_hz)
 
     # For each frame, check the state at the exact frame-center time
     for i in range(total_frames_50hz):
@@ -80,7 +80,7 @@ def extract_events_from_reference_intervals(
     event_anchor: str = "ONSET",
 ) -> dict[str, list[float]]:
     """Extract reference S1 and S2 event timestamps in seconds from interval annotations.
-    
+
     Anchors:
     - 'ONSET' (Primary Stage-C standard):
       S1 event = S1 interval start_s
@@ -88,7 +88,7 @@ def extract_events_from_reference_intervals(
     - 'SPRINGER_CONTEXT' (Historical contextual comparison):
       S1 event = S1 interval start_s
       S2 event = S2 interval center (start_s + 0.5 * duration_s)
-      
+
     State 0 intervals NEVER produce events.
     """
     s1_events: list[float] = []
@@ -115,16 +115,55 @@ def extract_events_from_predictions(
     state_intervals: Sequence[Any],
     event_anchor: str = "ONSET",
 ) -> dict[str, list[float]]:
-    """Extract predicted S1 and S2 event timestamps in seconds from StateInterval items."""
+    """Extract predicted S1 and S2 event timestamps in seconds from StateInterval items or dicts.
+
+    Supports both:
+    - StateInterval-like objects (with .state, .start_s, .duration_s / .end_s)
+    - Serialized dictionaries (with 'state', 'start_s', 'duration_s' / 'end_s')
+
+    Validates required fields and raises ValueError on malformed interval entries.
+    """
     s1_events: list[float] = []
     s2_events: list[float] = []
 
     is_springer_context = event_anchor.upper() == "SPRINGER_CONTEXT"
 
-    for iv in state_intervals:
-        state = getattr(iv, "state", None)
-        start_s = getattr(iv, "start_s", 0.0)
-        duration_s = getattr(iv, "duration_s", 0.0)
+    for idx, iv in enumerate(state_intervals):
+        if isinstance(iv, dict):
+            if "state" not in iv:
+                raise ValueError(f"Interval dictionary at index {idx} missing required 'state' field: {iv}")
+            if "start_s" not in iv:
+                raise ValueError(f"Interval dictionary at index {idx} missing required 'start_s' field: {iv}")
+            try:
+                state = int(iv["state"])
+                start_s = float(iv["start_s"])
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Invalid numeric values in interval dict at index {idx}: {iv} ({e})")
+
+            if "duration_s" in iv and iv["duration_s"] is not None:
+                duration_s = float(iv["duration_s"])
+            elif "end_s" in iv and iv["end_s"] is not None:
+                duration_s = max(0.0, float(iv["end_s"]) - start_s)
+            else:
+                duration_s = 0.0
+        elif hasattr(iv, "state") and hasattr(iv, "start_s"):
+            try:
+                state = int(iv.state)
+                start_s = float(iv.start_s)
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Invalid numeric values in interval object at index {idx}: {iv} ({e})")
+
+            if hasattr(iv, "duration_s") and iv.duration_s is not None:
+                duration_s = float(iv.duration_s)
+            elif hasattr(iv, "end_s") and iv.end_s is not None:
+                duration_s = max(0.0, float(iv.end_s) - start_s)
+            else:
+                duration_s = 0.0
+        else:
+            raise ValueError(f"Interval at index {idx} is neither a dict nor a valid interval object: {type(iv)!r}")
+
+        if state not in (1, 2, 3, 4):
+            raise ValueError(f"Interval at index {idx} has invalid cardiac state {state}. Must be in {{1, 2, 3, 4}}.")
 
         if state == 1:  # S1
             s1_events.append(float(start_s))

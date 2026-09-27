@@ -94,14 +94,15 @@ export const ValidationLab: React.FC<ValidationLabProps> = ({ isDark, addToast }
         return (
           <span className="px-2.5 py-1 rounded text-xs font-mono-code font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center gap-1.5">
             <CheckCircle2 size={13} />
-            COMPLETE DATASET
+            COMPLETE DATASET (Full Validation)
           </span>
         );
       case 'PARTIAL_DATASET':
+      case 'REAL_DATA_PILOT':
         return (
           <span className="px-2.5 py-1 rounded text-xs font-mono-code font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5">
             <AlertTriangle size={13} />
-            PARTIAL DATASET (Pilot / Subset)
+            PARTIAL REAL-DATA VALIDATION
           </span>
         );
       case 'DATASET_NOT_AVAILABLE':

@@ -542,7 +542,7 @@ export interface FoldSummaryData {
 export interface ValidationBenchmarkReport {
   schema_version: string;
   benchmark_id: string;
-  status: 'COMPLETE_DATASET' | 'PARTIAL_DATASET' | 'DATASET_NOT_AVAILABLE' | 'FAILED';
+  status: 'COMPLETE_DATASET' | 'PARTIAL_DATASET' | 'REAL_DATA_PILOT' | 'DATASET_NOT_AVAILABLE' | 'FAILED';
   config: {
     dataset_id: string;
     dataset_version: string;

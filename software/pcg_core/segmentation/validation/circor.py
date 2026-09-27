@@ -2,20 +2,28 @@
 
 Parses and validates the PhysioNet CirCor DigiScope Phonocardiogram Dataset (v1.0.3).
 Handles:
-- Filename pattern extraction (SUBJECTID_LOCATION.wav / .tsv)
+- Filename pattern extraction (SUBJECTID_LOCATION.wav / .tsv / .hea)
 - Strict TSV segment validation (start, end, state in {0, 1, 2, 3, 4})
+- Mandatory companion files (.wav, .tsv, .hea)
+- Strict auscultation location verification ({AV, MV, PV, TV, Phc})
+- Scan accounting (files_seen, records_eligible, records_excluded, exclusion_reasons)
 - Duration alignment checks (with small tolerance)
 - Integrity verification against SHA256SUMS.txt when present
 - Safe subject ID grouping
 
 Official Provenance:
-- Dataset: The CirCor DigiScope Phonocardiogram Dataset (Version 1.0.3)
+- Dataset: The CirCor DigiScope Phonocardiogram Dataset
+- Version: 1.0.3
 - PhysioNet: https://physionet.org/content/circor-heart-sound/1.0.3/
-- DOI: 10.13026/trmv-vx89
+- Official DOI: 10.13026/tshs-mw03
+- Subjects: 1568
+- Recordings: 5272
+- Uncompressed Size: ~558.9 MB
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import hashlib
 import os
 from pathlib import Path
@@ -26,19 +34,52 @@ import wave
 from .models import AnnotatedPCGRecord, ReferenceStateInterval
 
 CIRCOR_DATASET_ID = "CIRCOR_DIGISCOPE"
+CIRCOR_DATASET_NAME = "The CirCor DigiScope Phonocardiogram Dataset"
 CIRCOR_DATASET_VERSION = "1.0.3"
-CIRCOR_DOI = "10.13026/trmv-vx89"
+CIRCOR_DOI = "10.13026/tshs-mw03"
 CIRCOR_URL = "https://physionet.org/content/circor-heart-sound/1.0.3/"
+CIRCOR_TOTAL_SUBJECTS = 1568
+CIRCOR_TOTAL_RECORDINGS = 5272
+CIRCOR_UNCOMPRESSED_SIZE_MB = 558.9
 
 KNOWN_LOCATIONS = {"AV", "MV", "PV", "TV", "Phc"}
 
 
-def parse_circor_filename(stem_or_filename: str) -> tuple[str, Optional[str]]:
+@dataclass(slots=True)
+class CirCorScanResult:
+    """Detailed accounting of CirCor dataset scan outcomes for reproducibility."""
+    records: list[AnnotatedPCGRecord]
+    files_seen: int
+    records_eligible: int
+    records_excluded: int
+    exclusion_reasons: dict[str, int] = field(default_factory=dict)
+
+    def __iter__(self):
+        return iter(self.records)
+
+    def __len__(self) -> int:
+        return len(self.records)
+
+    def __getitem__(self, idx: int) -> AnnotatedPCGRecord:
+        return self.records[idx]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "files_seen": self.files_seen,
+            "records_eligible": self.records_eligible,
+            "records_excluded": self.records_excluded,
+            "exclusion_reasons": dict(self.exclusion_reasons),
+        }
+
+
+def parse_circor_filename(stem_or_filename: str) -> tuple[str, str]:
     """Extract numeric subject ID and auscultation location code from CirCor filename stem.
-    
+
     Examples:
     - '2530_AV' -> ('2530', 'AV')
     - '2530_AV_1.wav' -> ('2530', 'AV')
+    - '50782_MV_1' -> ('50782', 'MV')
+    - '50782_MV_2' -> ('50782', 'MV')
     - '85340_MV.tsv' -> ('85340', 'MV')
     """
     stem = Path(stem_or_filename).stem
@@ -49,7 +90,13 @@ def parse_circor_filename(stem_or_filename: str) -> tuple[str, Optional[str]]:
     subject_id = parts[0]
     if len(parts) < 2:
         raise ValueError(f"CirCor filename missing location code: '{stem_or_filename}'")
-    location: Optional[str] = parts[1]
+    location = parts[1]
+
+    if location not in KNOWN_LOCATIONS:
+        raise ValueError(
+            f"Invalid auscultation location '{location}' in '{stem_or_filename}'. "
+            f"Must be one of {sorted(KNOWN_LOCATIONS)}."
+        )
 
     return subject_id, location
 
@@ -60,12 +107,12 @@ def parse_circor_tsv(
     tolerance_s: float = 0.05,
 ) -> list[ReferenceStateInterval]:
     """Strictly parse and validate a CirCor .tsv interval segmentation file.
-    
+
     Columns:
     1: start time in seconds (float)
     2: end time in seconds (float)
     3: state (int in {0, 1, 2, 3, 4})
-    
+
     Rules:
     - Finite float values
     - start <= end
@@ -146,7 +193,7 @@ def parse_circor_tsv(
 
 def read_wav_header_metadata(wav_path: Path | str) -> tuple[float, float, int]:
     """Read sample rate, duration in seconds, and total sample count from WAV header.
-    
+
     Returns
     -------
     tuple[float, float, int]
@@ -203,9 +250,19 @@ def scan_circor_dataset(
     max_subjects: Optional[int] = None,
     max_records: Optional[int] = None,
     verify_checksums: bool = False,
-) -> list[AnnotatedPCGRecord]:
+) -> CirCorScanResult:
     """Discover, parse, and validate all eligible CirCor records in a directory.
-    
+
+    Accounting:
+    Tracks files_seen, records_eligible, records_excluded, and explicit exclusion_reasons:
+    - MISSING_TSV
+    - MISSING_HEA
+    - INVALID_FILENAME
+    - INVALID_LOCATION
+    - INVALID_WAV
+    - INVALID_TSV
+    - CHECKSUM_MISMATCH
+
     Parameters
     ----------
     root_path : Path | str
@@ -216,11 +273,11 @@ def scan_circor_dataset(
         Debug/pilot constraint: stop after collecting this many records.
     verify_checksums : bool
         If True, verify available files against SHA256SUMS.txt if found.
-        
+
     Returns
     -------
-    list[AnnotatedPCGRecord]
-        List of strictly validated CirCor records.
+    CirCorScanResult
+        Container with validated records, counts, and exclusion reasons.
     """
     root = Path(root_path)
     if not root.exists():
@@ -239,40 +296,74 @@ def scan_circor_dataset(
 
     records: list[AnnotatedPCGRecord] = []
     seen_subjects: set[str] = set()
+    files_seen = 0
+    records_excluded = 0
+    exclusion_reasons: dict[str, int] = {}
 
     for wav_file in wav_files:
+        files_seen += 1
         stem = wav_file.stem
-        tsv_file = wav_file.with_suffix(".tsv")
 
-        # Skip if companion TSV does not exist
-        if not tsv_file.exists():
-            continue
-
+        # 1. Filename & Location Validation
         try:
             subject_id, location = parse_circor_filename(stem)
-        except ValueError:
-            # Skip files that don't match CirCor subject naming
+        except ValueError as e:
+            err_msg = str(e)
+            if "location" in err_msg.lower():
+                exclusion_reasons["INVALID_LOCATION"] = exclusion_reasons.get("INVALID_LOCATION", 0) + 1
+            else:
+                exclusion_reasons["INVALID_FILENAME"] = exclusion_reasons.get("INVALID_FILENAME", 0) + 1
+            records_excluded += 1
             continue
 
-        # Check subject pilot limit
+        # 2. Required .hea companion check
+        hea_file = wav_file.with_suffix(".hea")
+        if not hea_file.is_file():
+            exclusion_reasons["MISSING_HEA"] = exclusion_reasons.get("MISSING_HEA", 0) + 1
+            records_excluded += 1
+            continue
+
+        # 3. Required .tsv companion check
+        tsv_file = wav_file.with_suffix(".tsv")
+        if not tsv_file.is_file():
+            exclusion_reasons["MISSING_TSV"] = exclusion_reasons.get("MISSING_TSV", 0) + 1
+            records_excluded += 1
+            continue
+
+        # Check subject pilot limit before heavy audio I/O
         if max_subjects is not None and subject_id not in seen_subjects:
             if len(seen_subjects) >= max_subjects:
                 continue
 
-        # Verify checksums if available and requested
+        # 4. Verify checksums if available and requested
         if verify_checksums and checksums:
-            if wav_file.name in checksums:
-                if not verify_sha256_checksum(wav_file, checksums[wav_file.name]):
-                    raise ValueError(f"Checksum mismatch for WAV: {wav_file.name}")
-            if tsv_file.name in checksums:
-                if not verify_sha256_checksum(tsv_file, checksums[tsv_file.name]):
-                    raise ValueError(f"Checksum mismatch for TSV: {tsv_file.name}")
+            checksum_mismatch = False
+            for f in (wav_file, tsv_file, hea_file):
+                if f.name in checksums:
+                    if not verify_sha256_checksum(f, checksums[f.name]):
+                        checksum_mismatch = True
+                        break
+            if checksum_mismatch:
+                exclusion_reasons["CHECKSUM_MISMATCH"] = exclusion_reasons.get("CHECKSUM_MISMATCH", 0) + 1
+                records_excluded += 1
+                continue
 
+        # 5. Validate WAV header readability
         try:
             fs, duration_s, _ = read_wav_header_metadata(wav_file)
+            if duration_s <= 0.0 or fs <= 0.0:
+                raise ValueError("Non-positive duration or sample rate")
+        except Exception:
+            exclusion_reasons["INVALID_WAV"] = exclusion_reasons.get("INVALID_WAV", 0) + 1
+            records_excluded += 1
+            continue
+
+        # 6. Validate TSV content and intervals
+        try:
             intervals = parse_circor_tsv(tsv_file, wav_duration_s=duration_s)
         except Exception:
-            # Any unparsable or invalid file is excluded from eligibility
+            exclusion_reasons["INVALID_TSV"] = exclusion_reasons.get("INVALID_TSV", 0) + 1
+            records_excluded += 1
             continue
 
         rec = AnnotatedPCGRecord(
@@ -297,4 +388,10 @@ def scan_circor_dataset(
         if max_records is not None and len(records) >= max_records:
             break
 
-    return records
+    return CirCorScanResult(
+        records=records,
+        files_seen=files_seen,
+        records_eligible=len(records),
+        records_excluded=records_excluded,
+        exclusion_reasons=exclusion_reasons,
+    )

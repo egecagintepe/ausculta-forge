@@ -22,7 +22,14 @@ def match_events_one_to_one(
     tolerance_s: float,
 ) -> tuple[list[tuple[int, int, float]], list[int], list[int]]:
     """Perform deterministic one-to-one event matching within a tolerance window.
-    
+
+    Optimizes with priority:
+    1. Maximize number of valid matches within tolerance (TP).
+    2. Among solutions with equal TP count, minimize total absolute timing error.
+
+    Uses a dynamic-programming sequence alignment matcher on sorted event sequences,
+    guaranteeing the optimal 1-to-1 matching without greedy suboptimal blocking.
+
     Parameters
     ----------
     predicted_times_s : Sequence[float]
@@ -31,7 +38,7 @@ def match_events_one_to_one(
         Reference event timestamps in seconds.
     tolerance_s : float
         Maximum allowable absolute time difference in seconds.
-        
+
     Returns
     -------
     tuple[list[tuple[int, int, float]], list[int], list[int]]
@@ -45,27 +52,83 @@ def match_events_one_to_one(
     if n_preds == 0 or n_refs == 0:
         return [], list(range(n_preds)), list(range(n_refs))
 
-    # Build all candidate pairs within tolerance
-    candidates: list[tuple[float, int, int]] = []
-    for p_idx, p_t in enumerate(predicted_times_s):
-        for r_idx, r_t in enumerate(reference_times_s):
-            dt = abs(p_t - r_t)
-            if dt <= tolerance_s:
-                candidates.append((dt, p_idx, r_idx))
+    # Sort preserving original indices
+    p_sorted = sorted(enumerate(predicted_times_s), key=lambda x: (x[1], x[0]))
+    r_sorted = sorted(enumerate(reference_times_s), key=lambda x: (x[1], x[0]))
 
-    # Sort ascending by distance, breaking ties deterministically by indices
-    candidates.sort(key=lambda c: (c[0], c[1], c[2]))
+    # DP table: dp[i][j] = (max_matches: int, min_total_error: float)
+    dp: list[list[tuple[int, float]]] = [
+        [(0, 0.0) for _ in range(n_refs + 1)] for _ in range(n_preds + 1)
+    ]
+    parent: list[list[tuple[int, int, bool]]] = [
+        [(0, 0, False) for _ in range(n_refs + 1)] for _ in range(n_preds + 1)
+    ]
 
-    matched_p: set[int] = set()
-    matched_r: set[int] = set()
-    matches: list[tuple[int, int, float]] = []
+    def _is_better(cand: tuple[int, float, int, int, bool], current: tuple[int, float, int, int, bool]) -> bool:
+        if cand[0] > current[0]:
+            return True
+        if cand[0] < current[0]:
+            return False
+        # Equal match count: minimize total error
+        if cand[1] < current[1] - 1e-12:
+            return True
+        if cand[1] > current[1] + 1e-12:
+            return False
+        # Equal count and error: prefer matching
+        if cand[4] and not current[4]:
+            return True
+        return False
 
-    for dt, p_idx, r_idx in candidates:
-        if p_idx not in matched_p and r_idx not in matched_r:
-            matched_p.add(p_idx)
-            matched_r.add(r_idx)
-            signed_err = predicted_times_s[p_idx] - reference_times_s[r_idx]
-            matches.append((p_idx, r_idx, signed_err))
+    for i in range(n_preds + 1):
+        for j in range(n_refs + 1):
+            if i == 0 and j == 0:
+                continue
+
+            best: tuple[int, float, int, int, bool] | None = None
+
+            # Option 1: Skip prediction i (if i > 0)
+            if i > 0:
+                cand = (dp[i - 1][j][0], dp[i - 1][j][1], i - 1, j, False)
+                if best is None or _is_better(cand, best):
+                    best = cand
+
+            # Option 2: Skip reference j (if j > 0)
+            if j > 0:
+                cand = (dp[i][j - 1][0], dp[i][j - 1][1], i, j - 1, False)
+                if best is None or _is_better(cand, best):
+                    best = cand
+
+            # Option 3: Match prediction i - 1 with reference j - 1 (if i > 0 and j > 0)
+            if i > 0 and j > 0:
+                p_idx, p_time = p_sorted[i - 1]
+                r_idx, r_time = r_sorted[j - 1]
+                dt = abs(p_time - r_time)
+                if dt <= tolerance_s + 1e-12:
+                    cand = (dp[i - 1][j - 1][0] + 1, dp[i - 1][j - 1][1] + dt, i - 1, j - 1, True)
+                    if best is None or _is_better(cand, best):
+                        best = cand
+
+            if best is not None:
+                dp[i][j] = (best[0], best[1])
+                parent[i][j] = (best[2], best[3], best[4])
+
+    # Reconstruct optimal matches via backtracking
+    raw_matches: list[tuple[int, int, float]] = []
+    curr_i, curr_j = n_preds, n_refs
+    while curr_i > 0 or curr_j > 0:
+        prev_i, prev_j, is_match = parent[curr_i][curr_j]
+        if is_match:
+            orig_p_idx = p_sorted[prev_i][0]
+            orig_r_idx = r_sorted[prev_j][0]
+            signed_err = float(predicted_times_s[orig_p_idx] - reference_times_s[orig_r_idx])
+            raw_matches.append((orig_p_idx, orig_r_idx, signed_err))
+        curr_i, curr_j = prev_i, prev_j
+
+    raw_matches.reverse()
+    matches = sorted(raw_matches, key=lambda m: m[0])
+
+    matched_p = {m[0] for m in matches}
+    matched_r = {m[1] for m in matches}
 
     unmatched_preds = [p_idx for p_idx in range(n_preds) if p_idx not in matched_p]
     unmatched_refs = [r_idx for r_idx in range(n_refs) if r_idx not in matched_r]
@@ -79,7 +142,7 @@ def compute_event_metrics_at_tolerance(
     tolerance_ms: float,
 ) -> tuple[EventToleranceMetrics, list[float]]:
     """Compute event TP/FP/FN/precision/recall/F1 and collect signed errors at given tolerance.
-    
+
     Returns
     -------
     tuple[EventToleranceMetrics, list[float]]
