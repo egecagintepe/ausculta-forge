@@ -76,10 +76,16 @@ def apply_springer_bandpass_filter(
     high_hz: float = 400.0,
     order: int = 2,
 ) -> np.ndarray:
-    """Apply zero-phase Butterworth bandpass filter for Springer segmentation.
-    
-    Design order: 2 (effective order 4 after forward-backward filtfilt).
-    Band: 25–400 Hz at 1000 Hz fs.
+    """Apply cascaded zero-phase Butterworth filtering as in Springer getSpringerPCGFeatures.m.
+
+    Architecture:
+    Explicit cascade of two separate filters:
+    1. 2nd-order zero-phase LOW-PASS Butterworth at high_hz (400 Hz at 1000 Hz Fs) via filtfilt.
+    2. 2nd-order zero-phase HIGH-PASS Butterworth at low_hz (25 Hz at 1000 Hz Fs) via filtfilt.
+
+    Design order of each individual filter = 2. Forward-backward filtering (filtfilt) produces
+    zero-phase response offline without phase distortion. This is NOT a single combined
+    bandpass design.
     """
     if len(signal) == 0:
         return np.array([], dtype=np.float64)
@@ -91,17 +97,19 @@ def apply_springer_bandpass_filter(
     if low >= high:
         raise ValueError(f"Invalid bandpass cutoffs: low={low_hz} Hz, high={high_hz} Hz at fs={sample_rate_hz} Hz")
 
-    b, a = scipy.signal.butter(order, [low, high], btype="bandpass")
+    # 1. Low-pass filter at high_hz (design order = 2)
+    b_lp, a_lp = scipy.signal.butter(order, high, btype="lowpass")
+    min_pad_lp = 3 * max(len(a_lp), len(b_lp))
+    padlen_lp = max(1, len(signal) - 1) if len(signal) <= min_pad_lp else min_pad_lp
+    lp_filtered = scipy.signal.filtfilt(b_lp, a_lp, signal, padlen=padlen_lp)
 
-    # Adapt padlen for short recordings to prevent filtfilt crash
-    min_pad = 3 * max(len(a), len(b))
-    if len(signal) <= min_pad:
-        padlen = max(1, len(signal) - 1)
-    else:
-        padlen = min_pad
+    # 2. High-pass filter at low_hz (design order = 2)
+    b_hp, a_hp = scipy.signal.butter(order, low, btype="highpass")
+    min_pad_hp = 3 * max(len(a_hp), len(b_hp))
+    padlen_hp = max(1, len(lp_filtered) - 1) if len(lp_filtered) <= min_pad_hp else min_pad_hp
+    cascaded = scipy.signal.filtfilt(b_hp, a_hp, lp_filtered, padlen=padlen_hp)
 
-    filtered = scipy.signal.filtfilt(b, a, signal, padlen=padlen)
-    return np.asarray(filtered, dtype=np.float64)
+    return np.asarray(cascaded, dtype=np.float64)
 
 
 def remove_schmidt_spikes(

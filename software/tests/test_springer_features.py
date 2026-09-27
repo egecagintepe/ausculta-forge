@@ -101,10 +101,90 @@ class TestSpringerFeatures:
         feat_paper = compute_springer_psd_feature(x, sample_rate_hz=fs, mode="paper")
 
         assert len(feat_ref) == len(feat_paper)
-        # Mean scaling differs between total integrated band power and mean spectral density
+        # Distinguishable due to window length (25 ms vs 50 ms) and frequency grid/timing
         assert not np.allclose(feat_ref, feat_paper)
         assert np.all(feat_ref >= 0.0)
         assert np.all(feat_paper >= 0.0)
+
+    def test_psd_reference_exact_semantics_window_grid_mean(self):
+        """Verify reference PSD uses 25ms window, 1Hz grid, mean (not sum), and direct 50Hz resampling."""
+        import scipy.signal
+        fs = 1000.0
+        n = 2000
+        t = np.arange(n) / fs
+        x = np.sin(2.0 * np.pi * 50.0 * t) + 0.3 * np.sin(2.0 * np.pi * 120.0 * t)
+
+        # 1. Config parameters
+        assert SPRINGER_PHYSIONET_REFERENCE_V1.psd_window_ms == 25.0
+        assert SPRINGER_PAPER_4FEATURE_V1.psd_window_ms == 50.0
+
+        # 2. Window length: at 1000 Hz, fs / 40 = 25 samples (25 ms)
+        win_len_ref = int(round(fs / 40.0))
+        noverlap_ref = int(round(fs / 80.0))
+        nfft_ref = int(round(fs))  # 1000 points -> 1 Hz spacing
+        assert win_len_ref == 25
+        assert nfft_ref == 1000
+
+        # 3. Direct comparison: compute spectrogram and mean across 40-60 Hz
+        f, t_spec, Sxx = scipy.signal.spectrogram(
+            x,
+            fs=fs,
+            window="hamming",
+            nperseg=win_len_ref,
+            noverlap=noverlap_ref,
+            nfft=nfft_ref,
+            detrend=False,
+            scaling="density",
+            mode="psd",
+        )
+        # Verify 1 Hz frequency grid spacing
+        assert pytest.approx(f[1] - f[0], abs=1e-6) == 1.0
+
+        mask_40_60 = (f >= 40.0) & (f <= 60.0)
+        expected_mean = np.mean(Sxx[mask_40_60, :], axis=0)
+        expected_sum = np.sum(Sxx[mask_40_60, :], axis=0)
+
+        # Compute with target 50 Hz length (100 frames for 2.0s)
+        target_len_50hz = 100
+        resampled_psd = compute_springer_psd_feature(
+            x, sample_rate_hz=fs, mode="reference", target_length_50hz=target_len_50hz
+        )
+
+        assert len(resampled_psd) == target_len_50hz
+        # Verify it reflects mean, not sum (mean is ~21 times smaller than sum over 21 bins)
+        ratio = np.mean(expected_sum) / max(1e-12, np.mean(expected_mean))
+        assert ratio > 15.0
+        # The resampled mean PSD energy must be consistent with expected_mean
+        assert pytest.approx(np.mean(resampled_psd), rel=0.15) == np.mean(expected_mean)
+
+    def test_wavelet_feature_no_hilbert_no_lowpass(self):
+        """Verify wavelet detail uses abs(cD) directly with NO Hilbert envelope and NO 8 Hz LPF."""
+        import pywt
+        fs = 1000.0
+        n = 2000
+        t = np.arange(n) / fs
+        x = np.sin(2.0 * np.pi * 80.0 * t)
+
+        wav_feat1 = compute_springer_wavelet_feature(x, sample_rate_hz=fs, wavelet_name="rbio3.9", level=3)
+        wav_feat2 = compute_springer_wavelet_feature(x, sample_rate_hz=fs, wavelet_name="rbio3.9", level=3)
+
+        # 1. Deterministic output
+        np.testing.assert_array_equal(wav_feat1, wav_feat2)
+        assert len(wav_feat1) == n
+
+        # 2. Detail coefficients expanded and absolute value taken (no Hilbert analytic envelope)
+        coeffs = pywt.wavedec(x, "rbio3.9", level=3)
+        cd3 = coeffs[1]
+        upsampled = np.repeat(cd3, 8)
+        start_idx = (len(upsampled) - n) // 2
+        expected_abs = np.abs(upsampled[start_idx : start_idx + n])
+        np.testing.assert_allclose(wav_feat1, expected_abs, atol=1e-12)
+
+        # 3. Provenance records exact structural fidelity
+        res = extract_springer_features(x, config=SPRINGER_PAPER_4FEATURE_V1, original_fs=fs)
+        assert res.provenance["wavelet_name"] == "rbio3.9"
+        assert res.provenance["wavelet_fidelity_status"] == "SOURCE-STRUCTURAL MATCH / NUMERICAL ORACLE NOT EXECUTED"
+        assert res.provenance["oracle_status"] == "REFERENCE_ORACLE_NOT_EXECUTED"
 
     def test_wavelet_feature_rbio39_level3(self):
         fs = 1000.0

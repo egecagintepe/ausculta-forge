@@ -68,34 +68,31 @@ def compute_springer_duration_distributions(
         If parameters yield physically or mathematically invalid state durations.
     """
     fs_feat = float(feature_sample_rate_hz)
+    floor_frames = max(1, int(round(fs_feat / 50.0)))
 
-    # 1. State 1: S1
-    mu_s1 = float(s1_mean_s)
-    std_s1 = float(s1_std_s)
+    # Frame-domain exact reference calculations
+    mean_s1_f = float(round(s1_mean_s * fs_feat))
+    std_s1_f = float(round(s1_std_s * fs_feat))
 
-    # 2. State 3: S2
-    mu_s2 = float(s2_mean_s)
-    std_s2 = float(s2_std_s)
+    mean_s2_f = float(round(s2_mean_s * fs_feat))
+    std_s2_f = float(round(s2_std_s * fs_feat))
 
-    # 3. State 2: Systole (interval between S1 and S2)
-    mu_sys = float(systolic_interval_s) - mu_s1
-    std_sys = 0.025  # Reference standard deviation ~25 ms
+    mean_sys_f = float(round(systolic_interval_s * fs_feat)) - mean_s1_f
+    std_sys_f = 0.025 * fs_feat
 
-    # 4. State 4: Diastole (interval between S2 and next S1)
-    mu_dia = float(cycle_duration_s) - float(systolic_interval_s) - mu_s2
-    std_dia = max(0.020, 0.035 * (mu_dia / 0.40))  # Scales mildly with diastolic length
+    mean_dia_f = (float(cycle_duration_s) - float(systolic_interval_s) - s2_mean_s) * fs_feat
+    std_dia_f = 0.07 * mean_dia_f + 0.006 * fs_feat
 
-    # Physiological validity checks
-    min_frame_s = 1.0 / fs_feat  # 0.02 s = 20 ms
-    if mu_sys < min_frame_s:
+    # Physiological / technical validity guards
+    if mean_sys_f < 1.0:
         raise ValueError(
-            f"SEGMENTATION_PARAMETERS_INVALID: Estimated systolic duration ({mu_sys:.3f} s) "
-            f"is below minimum feature frame duration ({min_frame_s:.3f} s)."
+            f"SEGMENTATION_PARAMETERS_INVALID: Estimated systolic frames ({mean_sys_f:.1f}) < 1.0 "
+            f"(systolic_interval_s={systolic_interval_s:.3f} s, S1 mean={s1_mean_s:.3f} s)."
         )
-    if mu_dia < min_frame_s:
+    if mean_dia_f < 1.0:
         raise ValueError(
-            f"SEGMENTATION_PARAMETERS_INVALID: Estimated diastolic duration ({mu_dia:.3f} s) "
-            f"is below minimum feature frame duration ({min_frame_s:.3f} s)."
+            f"SEGMENTATION_PARAMETERS_INVALID: Estimated diastolic frames ({mean_dia_f:.1f}) < 1.0 "
+            f"(cycle_duration_s={cycle_duration_s:.3f} s, systolic_interval_s={systolic_interval_s:.3f} s)."
         )
     if cycle_duration_s <= systolic_interval_s:
         raise ValueError(
@@ -103,44 +100,37 @@ def compute_springer_duration_distributions(
             f"must be strictly greater than systolic interval ({systolic_interval_s:.3f} s)."
         )
 
-    means = {
-        HeartSoundState.S1: mu_s1,
-        HeartSoundState.SYSTOLE: mu_sys,
-        HeartSoundState.S2: mu_s2,
-        HeartSoundState.DIASTOLE: mu_dia,
-    }
-    stds = {
-        HeartSoundState.S1: std_s1,
-        HeartSoundState.SYSTOLE: std_sys,
-        HeartSoundState.S2: std_s2,
-        HeartSoundState.DIASTOLE: std_dia,
+    # 3-sigma bounds with Fs_feat / 50 floor
+    min_s1_f = max(floor_frames, int(round(mean_s1_f - 3.0 * std_s1_f)))
+    max_s1_f = int(round(mean_s1_f + 3.0 * std_s1_f))
+
+    min_s2_f = max(floor_frames, int(round(mean_s2_f - 3.0 * std_s2_f)))
+    max_s2_f = int(round(mean_s2_f + 3.0 * std_s2_f))
+
+    min_sys_f = max(floor_frames, int(round(mean_sys_f - 3.0 * (std_sys_f + std_s1_f))))
+    max_sys_f = int(round(mean_sys_f + 3.0 * (std_sys_f + std_s1_f)))
+
+    min_dia_f = max(floor_frames, int(round(mean_dia_f - 3.0 * std_dia_f)))
+    max_dia_f = int(round(mean_dia_f + 3.0 * std_dia_f))
+
+    frame_params = {
+        HeartSoundState.S1: (mean_s1_f, std_s1_f, min_s1_f, max_s1_f),
+        HeartSoundState.SYSTOLE: (mean_sys_f, std_sys_f, min_sys_f, max_sys_f),
+        HeartSoundState.S2: (mean_s2_f, std_s2_f, min_s2_f, max_s2_f),
+        HeartSoundState.DIASTOLE: (mean_dia_f, std_dia_f, min_dia_f, max_dia_f),
     }
 
     stats: Dict[HeartSoundState, StateDurationStats] = {}
-
-    for state, mu in means.items():
-        std = stds[state]
-
-        # Convert to frames at 50 Hz
-        mean_frames = max(1, int(round(mu * fs_feat)))
-        std_frames = max(0.5, std * fs_feat)
-
-        # 3-sigma bounds truncated to at least 1 frame
-        min_frames = max(1, int(round(mean_frames - 3.0 * std_frames)))
-        max_frames = max(min_frames + 1, int(round(mean_frames + 3.0 * std_frames)))
-
-        min_s = float(min_frames) / fs_feat
-        max_s = float(max_frames) / fs_feat
-
+    for state, (mu_f, s_f, mn_f, mx_f) in frame_params.items():
         stats[state] = StateDurationStats(
-            mean_s=round(mu, 4),
-            std_s=round(std, 4),
-            min_s=round(min_s, 4),
-            max_s=round(max_s, 4),
-            mean_frames_50hz=mean_frames,
-            std_frames_50hz=round(std_frames, 3),
-            min_frames_50hz=min_frames,
-            max_frames_50hz=max_frames,
+            mean_s=round(mu_f / fs_feat, 4),
+            std_s=round(s_f / fs_feat, 4),
+            min_s=round(mn_f / fs_feat, 4),
+            max_s=round(mx_f / fs_feat, 4),
+            mean_frames_50hz=int(round(mu_f)),
+            std_frames_50hz=round(s_f, 4),
+            min_frames_50hz=int(mn_f),
+            max_frames_50hz=int(mx_f),
         )
 
     return stats

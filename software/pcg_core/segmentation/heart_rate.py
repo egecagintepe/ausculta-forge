@@ -90,17 +90,10 @@ def estimate_heart_rate_schmidt(
 
     search_region = autocorr[idx_min:idx_max + 1]
 
-    # Find candidate peaks within the lag region
-    peaks, properties = scipy.signal.find_peaks(search_region, distance=int(0.2 * fs), prominence=0.02)
-
-    if len(peaks) == 0:
-        # Fallback to absolute maximum within search window
-        best_peak_rel = int(np.argmax(search_region))
-        if search_region[best_peak_rel] < 0.05:
-            raise ValueError("No distinct autocorrelation peak found in heart-rate search band.")
-    else:
-        # Choose peak with highest autocorrelation value
-        best_peak_rel = peaks[np.argmax(search_region[peaks])]
+    # Source-faithful Springer/Schmidt reference behavior: argmax in [500ms, 2000ms]
+    best_peak_rel = int(np.argmax(search_region))
+    if search_region[best_peak_rel] <= 0.0:
+        raise ValueError("No positive autocorrelation peak found in heart-rate search band.")
 
     best_lag_samples = idx_min + best_peak_rel
     cycle_duration_s = float(best_lag_samples) / fs
@@ -116,48 +109,53 @@ def estimate_systolic_interval(
 ) -> float:
     """Estimate systolic time interval (S1-to-S2 time) from envelope autocorrelation.
     
-    Parameters
-    ----------
-    envelope : np.ndarray
-        1D envelope sequence.
-    cycle_duration_s : float
-        Estimated cardiac cycle duration in seconds.
-    sample_rate_hz : float
-        Sampling frequency in Hertz (default: 1000 Hz).
-        
-    Returns
-    -------
-    float
-        systolic_time_interval_s
+    Source-faithful reference behavior:
+    Search autocorrelation between 200 ms and half the estimated heart-cycle duration
+    and choose the maximum autocorrelation value (argmax).
+
+    No arbitrary 0.45s cap, no 0.38 fallback, no undocumented physiological fallback.
+    If valid search region cannot be formed or no positive peak exists, raises ValueError.
     """
+    if len(envelope) == 0:
+        raise ValueError("Cannot estimate systolic interval from empty envelope.")
+
     fs = float(sample_rate_hz)
     env_centered = envelope - np.mean(envelope)
     n = len(env_centered)
 
-    # Search window: between 200 ms and half the cardiac cycle
+    # Search window: between 200 ms and half the cardiac cycle (0.50 * cycle_duration_s)
     min_sys_s = 0.20
-    max_sys_s = min(0.50 * cycle_duration_s, 0.45)
+    max_sys_s = 0.50 * cycle_duration_s
+
+    if min_sys_s >= max_sys_s:
+        raise ValueError(
+            f"Invalid systolic search region: min={min_sys_s}s, max={max_sys_s}s (cycle={cycle_duration_s}s)."
+        )
 
     idx_min = int(round(min_sys_s * fs))
     idx_max = int(round(max_sys_s * fs))
 
-    if idx_min < idx_max and idx_max < n:
-        n_fft = 2 ** int(math.ceil(math.log2(2 * n - 1)))
-        fft_val = np.fft.rfft(env_centered, n=n_fft)
-        autocorr = np.fft.irfft(fft_val * np.conj(fft_val), n=n_fft)[:n]
-        autocorr = autocorr / max(1e-12, autocorr[0])
+    if idx_min >= idx_max or idx_max >= n:
+        raise ValueError(
+            f"Systolic search indices [{idx_min}, {idx_max}] exceed envelope length ({n})."
+        )
 
-        search_region = autocorr[idx_min:idx_max + 1]
-        peaks, _ = scipy.signal.find_peaks(search_region, prominence=0.01)
+    n_fft = 2 ** int(math.ceil(math.log2(2 * n - 1)))
+    fft_val = np.fft.rfft(env_centered, n=n_fft)
+    autocorr = np.fft.irfft(fft_val * np.conj(fft_val), n=n_fft)[:n]
+    if autocorr[0] > 1e-12:
+        autocorr = autocorr / autocorr[0]
 
-        if len(peaks) > 0:
-            best_rel = peaks[np.argmax(search_region[peaks])]
-            return float(idx_min + best_rel) / fs
+    search_region = autocorr[idx_min:idx_max + 1]
+    if len(search_region) == 0:
+        raise ValueError("Empty systolic autocorrelation search region.")
 
-    # Schmidt/Springer physiological relationship fallback:
-    # Systolic interval is approximately 38% of cardiac cycle duration
-    sys_est = 0.38 * cycle_duration_s
-    return float(np.clip(sys_est, min_sys_s, 0.50 * cycle_duration_s))
+    best_rel = int(np.argmax(search_region))
+    if search_region[best_rel] <= 0.0:
+        raise ValueError("No positive autocorrelation peak found in systolic interval search region.")
+
+    systolic_time_s = float(idx_min + best_rel) / fs
+    return systolic_time_s
 
 
 def run_cardiac_timing_estimation(

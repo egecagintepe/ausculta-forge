@@ -67,6 +67,26 @@ class TestSpringerPreprocessing:
         assert np.max(np.abs(filtered_low[200:-200])) < 0.15
         assert np.max(np.abs(filtered_high[200:-200])) < 0.20
 
+    def test_cascaded_lp_then_hp_filter_exact_match(self):
+        """Verify explicit cascaded LP400 (order 2) -> HP25 (order 2) zero-phase filtfilt against reference."""
+        import scipy.signal
+        fs = 1000.0
+        n = 2000
+        t = np.arange(n) / fs
+        x = np.sin(2.0 * np.pi * 50.0 * t) + 0.5 * np.cos(2.0 * np.pi * 120.0 * t)
+
+        # Independent explicit construction of the reference cascade
+        b_lp, a_lp = scipy.signal.butter(2, 400.0 / (fs / 2.0), btype="lowpass")
+        pad_lp = 3 * max(len(a_lp), len(b_lp))
+        lp_out = scipy.signal.filtfilt(b_lp, a_lp, x, padlen=pad_lp)
+
+        b_hp, a_hp = scipy.signal.butter(2, 25.0 / (fs / 2.0), btype="highpass")
+        pad_hp = 3 * max(len(a_hp), len(b_hp))
+        expected_cascade = scipy.signal.filtfilt(b_hp, a_hp, lp_out, padlen=pad_hp)
+
+        actual = apply_springer_bandpass_filter(x, sample_rate_hz=fs, low_hz=25.0, high_hz=400.0, order=2)
+        np.testing.assert_allclose(actual, expected_cascade, rtol=1e-12, atol=1e-12)
+
     def test_schmidt_spike_removal_no_spike(self):
         fs = 1000.0
         n = 3000

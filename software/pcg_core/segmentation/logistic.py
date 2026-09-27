@@ -135,18 +135,31 @@ def train_springer_one_vs_rest_logistic(
     for state_int in [1, 2, 3, 4]:
         state_key = str(state_int)
         pos_idx = np.where(y == state_int)[0]
-        neg_idx = np.where(y != state_int)[0]
-
         n_pos = len(pos_idx)
-        n_neg = len(neg_idx)
 
-        # Springer class balancing: subsample negative class to match positive class size
-        if n_neg > n_pos:
-            sampled_neg_idx = rng.choice(neg_idx, size=n_pos, replace=False)
-        else:
-            sampled_neg_idx = neg_idx
+        # Source-faithful Springer class balancing:
+        # Separate negative pools for each of the other three states
+        other_states = [s for s in [1, 2, 3, 4] if s != state_int]
+        other_pools = [np.where(y == s)[0] for s in other_states]
+        min_other_len = min(len(pool) for pool in other_pools)
 
-        balanced_idx = np.concatenate([pos_idx, sampled_neg_idx])
+        per_other = min(n_pos // 3, min_other_len)
+        if per_other < 1:
+            per_other = 1
+
+        # Sample per_other observations from EACH other state
+        sampled_neg_parts = []
+        for pool in other_pools:
+            replace = len(pool) < per_other
+            sampled_neg_parts.append(rng.choice(pool, size=per_other, replace=replace))
+        sampled_neg_idx = np.concatenate(sampled_neg_parts)
+
+        # Sample exactly 3 * per_other from the target state
+        n_pos_sample = 3 * per_other
+        replace_pos = n_pos < n_pos_sample
+        sampled_pos_idx = rng.choice(pos_idx, size=n_pos_sample, replace=replace_pos)
+
+        balanced_idx = np.concatenate([sampled_pos_idx, sampled_neg_idx])
         rng.shuffle(balanced_idx)
 
         X_b = X[balanced_idx]

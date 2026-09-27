@@ -60,6 +60,9 @@ class SpringerProfileConfig:
     per_recording_z_score: bool = True
     random_seed: int = 42
 
+    # Provenance metadata
+    source_fidelity: str = "PHYSIONET_REFERENCE_CODE_DERIVED"
+
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["psd_band_hz"] = list(self.psd_band_hz)
@@ -93,13 +96,14 @@ SPRINGER_PHYSIONET_REFERENCE_V1 = SpringerProfileConfig(
     homomorphic_lowpass_hz=8.0,
     homomorphic_filter_order=1,
     psd_band_hz=(40.0, 60.0),
-    psd_window_ms=50.0,
+    psd_window_ms=25.0,  # Fs / 40 = 25 ms in reference get_PSD_feature_Springer_HMM.m
     psd_overlap_fraction=0.5,
     psd_window_type="hamming",
     psd_mode="reference",
     include_wavelet=False,  # PhysioNet reference default
     per_recording_z_score=True,
     random_seed=42,
+    source_fidelity="PHYSIONET_REFERENCE_CODE_DERIVED",
 )
 
 # Standard Provenance Profile: Springer et al. (2016) Paper Model (R006)
@@ -112,7 +116,7 @@ SPRINGER_PAPER_4FEATURE_V1 = SpringerProfileConfig(
     homomorphic_lowpass_hz=8.0,
     homomorphic_filter_order=1,
     psd_band_hz=(40.0, 60.0),
-    psd_window_ms=50.0,
+    psd_window_ms=50.0,  # 50 ms Hamming in paper prose
     psd_overlap_fraction=0.5,
     psd_window_type="hamming",
     psd_mode="paper",
@@ -121,6 +125,7 @@ SPRINGER_PAPER_4FEATURE_V1 = SpringerProfileConfig(
     wavelet_level=3,
     per_recording_z_score=True,
     random_seed=42,
+    source_fidelity="PAPER_TEXT_DERIVED",
 )
 
 SUPPORTED_SPRINGER_PROFILES = {

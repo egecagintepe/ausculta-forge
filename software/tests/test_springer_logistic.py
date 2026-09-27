@@ -123,3 +123,48 @@ class TestSpringerLogistic:
         assert reloaded.feature_count == 3
         assert reloaded.lr_weights == model.lr_weights
         assert reloaded.lr_intercepts == model.lr_intercepts
+
+    def test_per_other_state_class_balancing_imbalanced_counts(self, monkeypatch):
+        """Verify Springer class balancing samples equal numbers from EACH other non-target state."""
+        import pcg_core.segmentation.logistic as L
+
+        # Deliberately heavily imbalanced counts: 300, 200, 500, 800
+        y = np.concatenate([
+            np.full(300, 1),
+            np.full(200, 2),
+            np.full(500, 3),
+            np.full(800, 4),
+        ])
+        # Feature 0 encodes the state ID directly so we can inspect sampled indices
+        X = np.column_stack([y.astype(np.float64), np.ones(len(y))])
+
+        captured_batches = []
+        orig_train = L.train_single_binary_logistic_model
+
+        def mock_train(X_b, y_binary, **kwargs):
+            captured_batches.append((X_b.copy(), y_binary.copy()))
+            return orig_train(X_b, y_binary, **kwargs)
+
+        monkeypatch.setattr(L, "train_single_binary_logistic_model", mock_train)
+
+        w, b = L.train_springer_one_vs_rest_logistic(X, y, random_seed=42)
+
+        # 4 models trained (one for each state)
+        assert len(captured_batches) == 4
+
+        # For target state 1:
+        # N_target = 300, min_other = min(200, 500, 800) = 200
+        # per_other = min(300 // 3, 200) = 100
+        # Positive pool = 3 * 100 = 300
+        # Negative pool = 100 from state 2, 100 from state 3, 100 from state 4
+        X_b1, y_b1 = captured_batches[0]
+        pos_mask = (y_b1 == 1)
+        neg_mask = (y_b1 == 0)
+
+        assert np.sum(pos_mask) == 300
+        assert np.sum(neg_mask) == 300
+
+        neg_states = X_b1[neg_mask, 0].astype(int)
+        for other_state in [2, 3, 4]:
+            count = np.sum(neg_states == other_state)
+            assert count == 100, f"Expected 100 samples from state {other_state}, got {count}"

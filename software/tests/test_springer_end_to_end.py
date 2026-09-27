@@ -145,3 +145,25 @@ class TestSpringerEndToEnd:
         assert res.profile_id == "SPRINGER_PAPER_4FEATURE_V1"
         assert res.total_frames_50hz == 200  # 4.0 s * 50 Hz
         assert len(res.s1_intervals) > 0
+
+    def test_model_profile_mismatch_guard(self):
+        """Passing a model with incompatible profile or feature names returns MODEL_PROFILE_MISMATCH."""
+        fs = 4000.0
+        x_pcg = _generate_synthetic_pcg_wav(fs=fs, duration_s=4.0, bpm=60.0)
+
+        # 3-feature reference model
+        ref_model = build_demo_springer_model(include_wavelet=False)
+        assert ref_model.feature_profile_id == "SPRINGER_PHYSIONET_REFERENCE_V1"
+
+        # Attempt to run under 4-feature paper profile
+        res = segment_pcg_springer(
+            signal=x_pcg,
+            sample_rate_hz=fs,
+            model=ref_model,
+            config=SPRINGER_PAPER_4FEATURE_V1,
+        )
+
+        assert res.status == SegmentationStatus.MODEL_PROFILE_MISMATCH
+        assert len(res.state_sequence_50hz) == 0
+        assert len(res.state_intervals) == 0
+        assert any("MODEL_PROFILE_MISMATCH" in w or "does not match" in w for w in res.technical_warnings)

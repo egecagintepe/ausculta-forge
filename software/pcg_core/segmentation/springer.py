@@ -80,6 +80,20 @@ def segment_pcg_springer(
             provenance={"notice": "Model required for Springer LR-HSMM segmentation inference."},
         )
 
+    # 1b. MODEL / PROFILE COMPATIBILITY GUARD
+    if model.feature_profile_id != profile_id or list(model.feature_names) != list(cfg.feature_names):
+        return SpringerSegmentationResult(
+            schema_version="1.0.0",
+            status=SegmentationStatus.MODEL_PROFILE_MISMATCH,
+            profile_id=profile_id,
+            model_id=model.model_id,
+            technical_warnings=[
+                f"Model profile ({model.feature_profile_id}, features={model.feature_names}) does not match "
+                f"extraction config profile ({profile_id}, features={cfg.feature_names}). Segmentation halted."
+            ],
+            provenance={"notice": "MODEL_PROFILE_MISMATCH: extraction profile is incompatible with loaded model."},
+        )
+
     # Validate signal
     if not isinstance(signal, np.ndarray):
         signal = np.asarray(signal, dtype=np.float64)
@@ -377,7 +391,7 @@ def build_demo_springer_model(
 
     model_id = "springer_demo_3feature_v1" if not include_wavelet else "springer_demo_4feature_v1"
     meta = {
-        "purpose": "DEMO / REPRODUCIBILITY MODEL",
+        "purpose": "DEMO / REPRODUCIBILITY ONLY",
         "is_production_validated": False,
         "synthetic": True,
         "sample_count": len(y_syn),

@@ -65,6 +65,10 @@ from .springer import (
     train_springer_model_from_features,
     build_demo_springer_model,
 )
+from .training_labels import (
+    SpringerTrainingAnnotations,
+    label_pcg_states_from_annotations,
+)
 
 __all__ = [
     "HeartSoundState",
@@ -107,4 +111,6 @@ __all__ = [
     "segment_pcg_springer",
     "train_springer_model_from_features",
     "build_demo_springer_model",
+    "SpringerTrainingAnnotations",
+    "label_pcg_states_from_annotations",
 ]

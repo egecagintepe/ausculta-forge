@@ -111,3 +111,46 @@ class TestSpringerHeartRate:
         assert timing["is_valid"] is False
         assert timing["heart_rate_bpm"] is None
         assert timing["error"] is not None
+
+    def test_heart_rate_argmax_rule_no_prominence_required(self):
+        """Verify HR estimator chooses lag by argmax in [500ms, 2000ms] without find_peaks prominence."""
+        fs = 1000.0
+        duration_s = 4.0
+        n = int(fs * duration_s)
+        t = np.arange(n) / fs
+        # Gentle 1 Hz modulation (60 BPM)
+        env = 1.0 + 0.1 * np.cos(2.0 * np.pi * 1.0 * t)
+
+        bpm, cycle_s = estimate_heart_rate_schmidt(env, sample_rate_hz=fs)
+        assert pytest.approx(bpm, rel=0.03) == 60.0
+        assert pytest.approx(cycle_s, rel=0.03) == 1.0
+
+    def test_systolic_interval_argmax_up_to_half_cycle_no_045_cap(self):
+        """Verify systolic interval searches up to 0.50 * cycle duration (e.g. 0.55s for 1.1s cycle) without 0.45s cap."""
+        fs = 1000.0
+        duration_s = 6.0
+        cycle_s = 1.10  # Half cycle is 0.55s (exceeds previous arbitrary 0.45s cap)
+        n = int(fs * duration_s)
+        t = np.arange(n) / fs
+
+        # Construct envelope with peak at 0.50s in each cycle
+        env = np.zeros(n)
+        for c in range(5):
+            t_s1 = 0.1 + c * cycle_s
+            t_s2 = t_s1 + 0.50  # S2 at 500 ms (between 200ms and 550ms)
+            if t_s2 < duration_s:
+                env += np.exp(-0.5 * ((t - t_s1) / 0.04) ** 2)
+                env += 0.8 * np.exp(-0.5 * ((t - t_s2) / 0.04) ** 2)
+
+        sys_s = estimate_systolic_interval(env, cycle_duration_s=cycle_s, sample_rate_hz=fs)
+        # Must detect peak around 0.50s (proving search region was not capped at 0.45s)
+        assert sys_s > 0.45
+        assert pytest.approx(sys_s, abs=0.05) == 0.50
+
+    def test_systolic_interval_fails_when_search_region_cannot_be_formed(self):
+        """Verify systolic interval fails with ValueError when min_sys (0.20s) >= 0.50 * cycle (no fallback)."""
+        fs = 1000.0
+        env = np.ones(3000)
+        # If cycle_s = 0.38s, 0.50 * cycle_s = 0.19s < 0.20s (invalid region)
+        with pytest.raises(ValueError, match="Invalid systolic search region"):
+            estimate_systolic_interval(env, cycle_duration_s=0.38, sample_rate_hz=fs)

@@ -129,6 +129,10 @@ export const SegmentationLab: React.FC<SegmentationLabProps> = ({
         if (addToast) {
           addToast('Truthful Notice: No trained model selected. No state sequence fabricated.', 'info');
         }
+      } else if (res.segmentation.status === 'MODEL_PROFILE_MISMATCH') {
+        if (addToast) {
+          addToast('Model Profile Mismatch: Selected model features do not match extraction profile.', 'warning');
+        }
       } else if (res.segmentation.status === 'SUCCESS') {
         if (addToast) {
           addToast(`Segmentation completed (${res.segmentation.cycle_count} cycles identified)`, 'success');
@@ -328,6 +332,33 @@ export const SegmentationLab: React.FC<SegmentationLabProps> = ({
               cardiac state sequences are <strong className="text-[var(--on-surface)]">never fabricated</strong>.
               Select the synthetic Demo/Reproducibility model or train a model from research data to run inference.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Truthful Model Profile Mismatch Banner */}
+      {seg?.status === 'MODEL_PROFILE_MISMATCH' && (
+        <div
+          className="rounded-xl border p-4 flex items-start gap-3 shadow-xs"
+          style={{
+            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+            borderColor: 'rgba(239, 68, 68, 0.35)',
+          }}
+        >
+          <ShieldAlert size={20} className="text-red-500 shrink-0 mt-0.5" />
+          <div className="flex flex-col gap-1 text-xs font-mono-code">
+            <span className="font-bold text-red-600 dark:text-red-400">
+              Model Profile Incompatibility Detected (MODEL_PROFILE_MISMATCH)
+            </span>
+            <p className="text-[var(--on-surface-variant)] leading-relaxed">
+              The selected model artifact was trained on a feature profile incompatible with the
+              current extraction profile ({selectedProfileId}). Segmentation was halted to prevent corrupted inference.
+            </p>
+            {seg.technical_warnings && seg.technical_warnings.length > 0 && (
+              <span className="text-[11px] text-red-500 mt-1">
+                {seg.technical_warnings.join(' ')}
+              </span>
+            )}
           </div>
         </div>
       )}

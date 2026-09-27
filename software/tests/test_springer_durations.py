@@ -42,27 +42,59 @@ class TestSpringerDurations:
         s2 = dur_stats[HeartSoundState.S2]
         diastole = dur_stats[HeartSoundState.DIASTOLE]
 
-        # 1. S1: mean 0.122 s -> ~6 frames at 50 Hz
-        assert pytest.approx(s1.mean_s) == SPRINGER_S1_MEAN_S
+        # Hand-computed exact reference values at Fs_feat = 50.0:
+        # S1:
+        # mean_f = round(0.122 * 50) = 6
+        # std_f = round(0.022 * 50) = 1
+        # bounds: 6 +/- 3*1 = [3, 9]
         assert s1.mean_frames_50hz == 6
+        assert s1.std_frames_50hz == 1.0
+        assert s1.min_frames_50hz == 3
+        assert s1.max_frames_50hz == 9
+        assert s1.mean_s == 0.12
+        assert s1.std_s == 0.02
+        assert s1.min_s == 0.06
+        assert s1.max_s == 0.18
 
-        # 2. S2: mean 0.094 s -> ~5 frames at 50 Hz
-        assert pytest.approx(s2.mean_s) == SPRINGER_S2_MEAN_S
+        # S2:
+        # mean_f = round(0.094 * 50) = 5
+        # std_f = round(0.022 * 50) = 1
+        # bounds: 5 +/- 3*1 = [2, 8]
         assert s2.mean_frames_50hz == 5
+        assert s2.std_frames_50hz == 1.0
+        assert s2.min_frames_50hz == 2
+        assert s2.max_frames_50hz == 8
+        assert s2.mean_s == 0.10
+        assert s2.std_s == 0.02
+        assert s2.min_s == 0.04
+        assert s2.max_s == 0.16
 
-        # 3. Systole: mean = sys_interval (0.35) - S1 (0.122) = 0.228 s -> ~11 frames
-        expected_sys_mean = 0.35 - SPRINGER_S1_MEAN_S
-        assert pytest.approx(systole.mean_s, abs=1e-3) == expected_sys_mean
-        assert systole.mean_frames_50hz == int(round(expected_sys_mean * 50.0))
+        # Systole:
+        # mean_f = round(0.35 * 50) - 6 = 18 - 6 = 12
+        # std_f = 0.025 * 50 = 1.25
+        # bounds: 12 +/- 3*(1.25 + 1.0) = 12 +/- 6.75 = [5.25, 18.75] -> [5, 19]
+        assert systole.mean_frames_50hz == 12
+        assert systole.std_frames_50hz == 1.25
+        assert systole.min_frames_50hz == 5
+        assert systole.max_frames_50hz == 19
+        assert systole.mean_s == 0.24
+        assert systole.std_s == 0.025
+        assert systole.min_s == 0.10
+        assert systole.max_s == 0.38
 
-        # 4. Diastole: mean = cycle (1.0) - sys_interval (0.35) - S2 (0.094) = 0.556 s -> ~28 frames
-        expected_dia_mean = 1.0 - 0.35 - SPRINGER_S2_MEAN_S
-        assert pytest.approx(diastole.mean_s, abs=1e-3) == expected_dia_mean
-        assert diastole.mean_frames_50hz == int(round(expected_dia_mean * 50.0))
-
-        # Sum of mean state durations must equal total cycle duration
-        total_mean = s1.mean_s + systole.mean_s + s2.mean_s + diastole.mean_s
-        assert pytest.approx(total_mean, abs=1e-3) == cycle_s
+        # Diastole:
+        # mean_f = (1.00 - 0.35 - 0.094) * 50 = 27.8
+        # std_f = 0.07 * 27.8 + 0.006 * 50 = 1.946 + 0.3 = 2.246
+        # bounds: 27.8 +/- 3*2.246 = 27.8 +/- 6.738 = [21.062, 34.538] -> [21, 35]
+        assert systole.mean_frames_50hz == 12
+        assert diastole.mean_frames_50hz == 28  # round(27.8) = 28
+        assert pytest.approx(diastole.std_frames_50hz, abs=1e-3) == 2.246
+        assert diastole.min_frames_50hz == 21
+        assert diastole.max_frames_50hz == 35
+        assert pytest.approx(diastole.mean_s, abs=1e-3) == 0.556
+        assert pytest.approx(diastole.std_s, abs=1e-4) == 0.0449
+        assert diastole.min_s == 0.42
+        assert diastole.max_s == 0.70
 
     def test_duration_probabilities_sum_to_one(self):
         cycle_s = 0.80  # 75 BPM

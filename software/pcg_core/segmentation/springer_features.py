@@ -93,56 +93,93 @@ def compute_springer_psd_feature(
     signal: np.ndarray,
     sample_rate_hz: float = 1000.0,
     band_hz: Tuple[float, float] = (40.0, 60.0),
-    window_ms: float = 50.0,
+    window_ms: float = 25.0,
     overlap_fraction: float = 0.5,
     window_type: str = "hamming",
     mode: str = "reference",
+    target_length_50hz: Optional[int] = None,
 ) -> np.ndarray:
-    """Compute the short-time PSD band feature aligned with the 1000 Hz analysis signal.
+    """Compute short-time PSD band feature aligned with Springer pipeline.
     
     Modes:
-    - 'reference': PhysioNet reference implementation conventions (sum of band spectrogram power).
-    - 'paper': Springer et al. (2016) paper conventions (mean normalized PSD spectral density).
+    - 'reference' (SPRINGER_PHYSIONET_REFERENCE_V1):
+      Reproduces PhysioNet get_PSD_feature_Springer_HMM.m:
+      window = Fs / 40 (25 ms at 1000 Hz Fs)
+      noverlap = round(Fs / 80) (12 or 13 samples)
+      nfft = Fs (1000) yielding 1 Hz frequency grid spacing (1:1:500 Hz)
+      mean PSD over 40–60 Hz (mean across frequency bins, NOT sum)
+      direct frame sequence resampling to target 50 Hz length.
+
+    - 'paper' (SPRINGER_PAPER_4FEATURE_V1):
+      Follows Springer et al. (2016) paper description:
+      window = 50 ms Hamming window
+      overlap = 50%
+      mean PSD over 40–60 Hz
     """
     if len(signal) == 0:
+        if target_length_50hz is not None:
+            return np.array([], dtype=np.float64)
         return np.array([], dtype=np.float64)
 
     n_samples = len(signal)
-    win_len = max(8, int(round(sample_rate_hz * (window_ms / 1000.0))))
-    hop_len = max(1, int(round(win_len * (1.0 - overlap_fraction))))
+    fs = float(sample_rate_hz)
 
-    # STFT via SciPy
-    f, t_stft, Zxx = scipy.signal.stft(
+    if mode == "reference":
+        win_len = max(8, int(round(fs / 40.0)))       # 25 samples at 1000 Hz (25 ms)
+        noverlap = max(1, int(round(fs / 80.0)))      # 12 samples at 1000 Hz (approx 12.5 ms)
+        nfft = max(win_len, int(round(fs)))           # 1000 points -> 1 Hz frequency spacing
+    else:  # paper mode
+        win_len = max(8, int(round(fs * (window_ms / 1000.0))))  # 50 samples at 1000 Hz (50 ms)
+        noverlap = max(1, int(round(win_len * overlap_fraction))) # 25 samples
+        nfft = max(win_len, 256)
+
+    # Ensure signal has enough samples for at least one segment
+    if len(signal) < win_len:
+        if target_length_50hz is not None:
+            return np.zeros(target_length_50hz, dtype=np.float64)
+        return np.zeros(n_samples, dtype=np.float64)
+
+    # Use scipy.signal.spectrogram with mode='psd' and scaling='density'
+    f, t_spec, Sxx = scipy.signal.spectrogram(
         signal,
-        fs=sample_rate_hz,
+        fs=fs,
         window=window_type,
         nperseg=win_len,
-        noverlap=win_len - hop_len,
+        noverlap=noverlap,
+        nfft=nfft,
         detrend=False,
-        boundary="zeros",
-        padded=True,
+        scaling="density",
+        mode="psd",
     )
 
-    power = np.abs(Zxx) ** 2
     f_low, f_high = band_hz
     band_mask = (f >= f_low) & (f <= f_high)
 
-    if not np.any(band_mask):
-        band_power_frames = np.zeros(power.shape[1], dtype=np.float64)
+    if not np.any(band_mask) or Sxx.size == 0:
+        band_power_frames = np.zeros(Sxx.shape[1] if Sxx.ndim > 1 else 0, dtype=np.float64)
     else:
-        if mode == "paper":
-            # Paper mode: mean PSD density across frequency bins
-            band_power_frames = np.mean(power[band_mask, :], axis=0)
-        else:
-            # Reference mode: total integrated band power
-            band_power_frames = np.sum(power[band_mask, :], axis=0)
+        # Both reference code and paper compute MEAN PSD over the 40-60 Hz region
+        band_power_frames = np.mean(Sxx[band_mask, :], axis=0)
 
-    # Interpolate frame values back to the full 1000 Hz continuous time grid
-    frame_times = t_stft
-    full_times = np.arange(n_samples) / float(sample_rate_hz)
+    # If target 50 Hz length is requested (direct frame-series resampling per reference code)
+    if target_length_50hz is not None:
+        if len(band_power_frames) < 2:
+            val = float(band_power_frames[0]) if len(band_power_frames) > 0 else 0.0
+            return np.full(target_length_50hz, val, dtype=np.float64)
+        # Resample frame sequence directly to target_length_50hz
+        resampled_psd = np.interp(
+            np.linspace(0.0, 1.0, target_length_50hz),
+            np.linspace(0.0, 1.0, len(band_power_frames)),
+            band_power_frames,
+        )
+        return np.maximum(0.0, np.asarray(resampled_psd, dtype=np.float64))
 
+    # Fallback / continuous 1000 Hz interpolation
+    frame_times = t_spec
+    full_times = np.arange(n_samples) / fs
     if len(frame_times) < 2:
-        return np.full(n_samples, float(band_power_frames[0]) if len(band_power_frames) > 0 else 0.0)
+        val = float(band_power_frames[0]) if len(band_power_frames) > 0 else 0.0
+        return np.full(n_samples, val, dtype=np.float64)
 
     interp_psd = np.interp(full_times, frame_times, band_power_frames)
     return np.maximum(0.0, np.asarray(interp_psd, dtype=np.float64))
@@ -154,10 +191,17 @@ def compute_springer_wavelet_feature(
     wavelet_name: str = "rbio3.9",
     level: int = 3,
 ) -> np.ndarray:
-    """Compute the level-3 wavelet detail envelope aligned with the 1000 Hz analysis signal.
-    
-    Decomposes signal using discrete wavelet transform, isolates level-3 detail coefficients,
-    reconstructs the detail sequence at 1000 Hz, and extracts instantaneous magnitude.
+    """Compute DWT detail envelope matching Springer reference structure.
+
+    Structure:
+    - Discrete wavelet decomposition via pywt.wavedec(signal, wavelet_name, level=3).
+    - Select level-3 detail coefficients cD3 (at index len(coeffs) - level or index 1).
+    - Expand / upsample detail coefficients toward original input length.
+    - Absolute value: abs(cD3_expanded).
+    - NO Hilbert transform, and NO 8 Hz low-pass filter (per reference getDWT.m).
+
+    Fidelity status:
+    SOURCE-STRUCTURAL MATCH / NUMERICAL ORACLE NOT EXECUTED
     """
     if len(signal) == 0:
         return np.array([], dtype=np.float64)
@@ -166,30 +210,35 @@ def compute_springer_wavelet_feature(
         raise RuntimeError("PyWavelets (pywt) is required to compute the Springer wavelet feature.")
 
     n_samples = len(signal)
-
-    # Check maximum valid decomposition level for signal length
     max_level = pywt.dwt_max_level(n_samples, pywt.Wavelet(wavelet_name))
     actual_level = min(level, max_level)
     if actual_level < 1:
         return np.zeros(n_samples, dtype=np.float64)
 
-    # Decompose
     coeffs = pywt.wavedec(signal, wavelet_name, level=actual_level)
+    # pywt.wavedec returns [cA_n, cD_n, cD_{n-1}, ..., cD_1]
+    # For actual_level, cD_level is at index 1
+    detail_idx = 1 if len(coeffs) > 1 else 0
+    cd = coeffs[detail_idx]
 
-    # Isolate detail coefficients at requested level (index -actual_level)
-    zeroed_coeffs = [np.zeros_like(c) for c in coeffs]
-    detail_idx = len(coeffs) - actual_level
-    zeroed_coeffs[detail_idx] = coeffs[detail_idx]
+    # Expand/upsample detail coefficients according to level (2^actual_level)
+    upsample_factor = 2 ** actual_level
+    upsampled = np.repeat(cd, upsample_factor)
 
-    # Reconstruct isolated detail signal at 1000 Hz
-    d_rec = pywt.waverec(zeroed_coeffs, wavelet_name)
-    d_rec = d_rec[:n_samples]
+    # Center crop / pad deterministically to original signal length
+    if len(upsampled) >= n_samples:
+        start_idx = (len(upsampled) - n_samples) // 2
+        expanded = upsampled[start_idx : start_idx + n_samples]
+    else:
+        pad_total = n_samples - len(upsampled)
+        pad_left = pad_total // 2
+        pad_right = pad_total - pad_left
+        expanded = np.pad(upsampled, (pad_left, pad_right), mode="edge")
 
-    # Instantaneous magnitude envelope via Hilbert transform
-    analytic_d = scipy.signal.hilbert(d_rec)
-    env = np.abs(analytic_d)
-
-    return np.asarray(env, dtype=np.float64)
+    # Reference behavior: absolute value of detail coefficients
+    # NO Hilbert envelope, NO 8 Hz low-pass filter
+    wav_feature = np.abs(expanded)
+    return np.asarray(wav_feature, dtype=np.float64)
 
 
 def normalize_features_per_recording(
@@ -261,19 +310,22 @@ def extract_springer_features(
             feature_sample_rate_hz=fs_feature,
         )
 
-    # 1. Homomorphic envelope at 1000 Hz
+    # 1. Homomorphic envelope at 1000 Hz & downsample to 50 Hz
     homo_1000 = compute_springer_homomorphic_envelope(
         x,
         sample_rate_hz=fs_analysis,
         lowpass_hz=config.homomorphic_lowpass_hz,
         filter_order=config.homomorphic_filter_order,
     )
+    homo_50, _ = resample_analysis_signal(homo_1000, orig_sample_rate_hz=fs_analysis, target_sample_rate_hz=fs_feature)
+    target_50hz_len = len(homo_50)
 
-    # 2. Hilbert envelope at 1000 Hz
+    # 2. Hilbert envelope at 1000 Hz & downsample to 50 Hz
     hilb_1000 = compute_springer_hilbert_feature(x)
+    hilb_50, _ = resample_analysis_signal(hilb_1000, orig_sample_rate_hz=fs_analysis, target_sample_rate_hz=fs_feature)
 
-    # 3. PSD band feature at 1000 Hz
-    psd_1000 = compute_springer_psd_feature(
+    # 3. PSD band feature directly resampled to target 50 Hz length (matching reference code)
+    psd_50 = compute_springer_psd_feature(
         x,
         sample_rate_hz=fs_analysis,
         band_hz=config.psd_band_hz,
@@ -281,10 +333,13 @@ def extract_springer_features(
         overlap_fraction=config.psd_overlap_fraction,
         window_type=config.psd_window_type,
         mode=config.psd_mode,
+        target_length_50hz=target_50hz_len,
     )
+    psd_1000 = np.interp(np.linspace(0.0, 1.0, len(x)), np.linspace(0.0, 1.0, len(psd_50)), psd_50)
 
-    # 4. Wavelet feature at 1000 Hz if enabled
+    # 4. Wavelet feature at 1000 Hz if enabled & downsample to 50 Hz
     wav_1000: Optional[np.ndarray] = None
+    wav_50: Optional[np.ndarray] = None
     if config.include_wavelet:
         wav_1000 = compute_springer_wavelet_feature(
             x,
@@ -292,14 +347,6 @@ def extract_springer_features(
             wavelet_name=config.wavelet_name,
             level=config.wavelet_level,
         )
-
-    # 5. Downsample all features from 1000 Hz to 50 Hz using rational polyphase resampling
-    homo_50, _ = resample_analysis_signal(homo_1000, orig_sample_rate_hz=fs_analysis, target_sample_rate_hz=fs_feature)
-    hilb_50, _ = resample_analysis_signal(hilb_1000, orig_sample_rate_hz=fs_analysis, target_sample_rate_hz=fs_feature)
-    psd_50, _ = resample_analysis_signal(psd_1000, orig_sample_rate_hz=fs_analysis, target_sample_rate_hz=fs_feature)
-
-    wav_50: Optional[np.ndarray] = None
-    if wav_1000 is not None:
         wav_50, _ = resample_analysis_signal(wav_1000, orig_sample_rate_hz=fs_analysis, target_sample_rate_hz=fs_feature)
 
     # Harmonize lengths across features
@@ -333,14 +380,18 @@ def extract_springer_features(
     provenance = {
         "analysis_type": "springer_feature_extraction",
         "profile_id": config.profile_id,
+        "source_fidelity": getattr(config, "source_fidelity", "PHYSIONET_REFERENCE_CODE_DERIVED"),
+        "oracle_status": "REFERENCE_ORACLE_NOT_EXECUTED",
         "input_sample_count": len(x),
         "feature_frames_count": min_len,
         "feature_sample_rate_hz": fs_feature,
         "features_extracted": config.feature_names,
         "wavelet_enabled": config.include_wavelet,
         "wavelet_name": config.wavelet_name if config.include_wavelet else None,
+        "wavelet_fidelity_status": "SOURCE-STRUCTURAL MATCH / NUMERICAL ORACLE NOT EXECUTED" if config.include_wavelet else "DISABLED",
         "psd_mode": config.psd_mode,
         "psd_band_hz": list(config.psd_band_hz),
+        "psd_window_ms": config.psd_window_ms,
     }
 
     return SpringerFeatureResult(
