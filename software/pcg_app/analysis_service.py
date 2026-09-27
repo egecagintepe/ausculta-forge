@@ -60,6 +60,16 @@ from pcg_core.scientific_config import (
     RAW_INTEGRITY_V1,
     BROADBAND_SYSTEM_ID_V1,
 )
+from pcg_core.segmentation import (
+    SPRINGER_PROFILES,
+    get_springer_profile,
+    SpringerProfileConfig,
+    SpringerSegmentationModel,
+    SpringerSegmentationResult,
+    SegmentationStatus,
+    segment_pcg_springer,
+    build_demo_springer_model,
+)
 from .display_pipeline import decimate_min_max
 
 
@@ -186,14 +196,17 @@ class AnalysisService:
         assets_dir: str | Path = "experiments/analysis-assets",
         analysis_dir: str | Path = "experiments/analysis",
         sessions_dir: str | Path = "experiments/sessions",
+        models_dir: Optional[str | Path] = None,
     ) -> None:
         self.assets_dir = Path(assets_dir)
         self.analysis_dir = Path(analysis_dir)
         self.sessions_dir = Path(sessions_dir)
+        self.models_dir = Path(models_dir) if models_dir is not None else self.analysis_dir.parent / "models"
 
         self.assets_dir.mkdir(parents=True, exist_ok=True)
         self.analysis_dir.mkdir(parents=True, exist_ok=True)
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
+        self.models_dir.mkdir(parents=True, exist_ok=True)
 
     # =========================================================================
     # Reference WAV Asset Management
@@ -982,6 +995,228 @@ class AnalysisService:
                         "mean_coherence_over_excited_band": sys_dict.get("mean_coherence_over_excited_band"),
                         "excited_bins_count": sys_dict.get("excited_bins_count"),
                         "notes": sys_dict.get("notes", ""),
+                    })
+            except Exception:
+                pass
+
+        reports.sort(key=lambda r: r.get("created_at_utc", ""), reverse=True)
+        return reports
+
+    # =========================================================================
+    # Springer LR-HSMM Segmentation Orchestration
+    # =========================================================================
+
+    def list_segmentation_models(self) -> list[dict[str, Any]]:
+        """List available Springer segmentation model artifacts including built-in demo model."""
+        demo = build_demo_springer_model()
+        models: list[dict[str, Any]] = [
+            {
+                "model_id": demo.model_id,
+                "algorithm_id": demo.algorithm_id,
+                "feature_profile_id": demo.feature_profile_id,
+                "feature_names": demo.feature_names,
+                "feature_count": demo.feature_count,
+                "feature_sample_rate_hz": demo.feature_sample_rate_hz,
+                "created_at_utc": demo.created_at_utc,
+                "is_demo": True,
+                "label": "Demo / Reproducibility Model (Synthetic)",
+                "notes": (
+                    "Synthetic reproducibility model for development and testing. "
+                    "Not evaluated on real clinical PCGs. Must not be used for medical decisions."
+                ),
+            }
+        ]
+
+        if self.models_dir.exists():
+            for model_file in sorted(self.models_dir.glob("*.json")):
+                try:
+                    with open(model_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        alg_id = data.get("algorithm_id", "")
+                        if "SPRINGER" in alg_id:
+                            mid = data.get("model_id", model_file.stem)
+                            if mid != demo.model_id:
+                                models.append({
+                                    "model_id": mid,
+                                    "algorithm_id": alg_id,
+                                    "feature_profile_id": data.get("feature_profile_id", "SPRINGER_PHYSIONET_REFERENCE_V1"),
+                                    "feature_names": data.get("feature_names", []),
+                                    "feature_count": data.get("feature_count", 0),
+                                    "feature_sample_rate_hz": data.get("feature_sample_rate_hz", 50.0),
+                                    "created_at_utc": data.get("created_at_utc", ""),
+                                    "is_demo": False,
+                                    "label": mid,
+                                    "notes": data.get("training_metadata", {}).get("notes", ""),
+                                })
+                except Exception:
+                    pass
+
+        return models
+
+    def get_segmentation_model(self, model_id: str) -> Optional[SpringerSegmentationModel]:
+        """Load a Springer segmentation model artifact safely."""
+        clean_id = model_id.strip() if model_id else ""
+        if not clean_id:
+            return None
+        if clean_id == "springer_demo_3feature_v1":
+            return build_demo_springer_model()
+
+        valid_id = validate_identifier(clean_id, "model_id", self.models_dir)
+        model_file = self.models_dir / f"{valid_id}.json"
+        if not model_file.exists():
+            return None
+
+        try:
+            with open(model_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return SpringerSegmentationModel.from_dict(data)
+        except Exception:
+            return None
+
+    def save_segmentation_model(self, model: SpringerSegmentationModel) -> str:
+        """Persist a trained Springer segmentation model artifact to models directory."""
+        valid_id = validate_identifier(model.model_id, "model_id", self.models_dir)
+        target_path = self.models_dir / f"{valid_id}.json"
+        with open(target_path, "w", encoding="utf-8") as f:
+            json.dump(model.to_dict(), f, indent=2)
+        return valid_id
+
+    def run_segmentation(
+        self,
+        session_id: str,
+        model_id: Optional[str] = None,
+        profile_id: str = "SPRINGER_PHYSIONET_REFERENCE_V1",
+        max_display_points: int = 600,
+    ) -> dict[str, Any]:
+        """Execute Springer LR-HSMM heart-sound segmentation on a recorded session.
+
+        Guards:
+        - If model_id is None or empty: Returns truthful MODEL_REQUIRED result without fabricating states.
+        - Preserves strict non-diagnostic boundary: Output is acoustic temporal segmentation only.
+        - Provides peak-preserved decimated display representations bounded for UI rendering.
+        """
+        valid_sess_id = validate_session_id(session_id, self.sessions_dir)
+        sess_meta = get_session(valid_sess_id, self.sessions_dir)
+        if sess_meta is None:
+            raise FileNotFoundError(f"Recorded session not found: {session_id}")
+
+        cap_path = self.sessions_dir / valid_sess_id / "raw.wav"
+        if not cap_path.exists():
+            raise FileNotFoundError(f"Session audio file not found: {cap_path}")
+
+        cap_samples, cap_fs = load_wav_as_float32(cap_path)
+        if not isinstance(cap_samples, np.ndarray):
+            cap_samples = np.asarray(cap_samples, dtype=np.float64)
+
+        if profile_id not in SPRINGER_PROFILES:
+            raise ValueError(
+                f"Unknown Springer profile: {profile_id}. Available: {list(SPRINGER_PROFILES.keys())}"
+            )
+        cfg = get_springer_profile(profile_id)
+
+        model: Optional[SpringerSegmentationModel] = None
+        if model_id and model_id.strip():
+            model = self.get_segmentation_model(model_id.strip())
+            if model is None:
+                raise FileNotFoundError(f"Springer segmentation model not found: {model_id}")
+
+        seg_result = segment_pcg_springer(
+            signal=cap_samples,
+            sample_rate_hz=cap_fs,
+            model=model,
+            config=cfg,
+        )
+
+        target_pts = max(32, min(max_display_points, 1200))
+        dec_raw = decimate_min_max(cap_samples, target_pts)
+        duration_s = float(len(cap_samples) / cap_fs) if cap_fs > 0 else 0.0
+        time_points_s = [round(float(t), 4) for t in np.linspace(0.0, duration_s, len(dec_raw))]
+
+        disp_features: dict[str, Any] = {}
+        if seg_result.feature_traces:
+            t_feat = seg_result.feature_traces.get("time_s", [])
+            for feat_name, feat_vals in seg_result.feature_traces.items():
+                if feat_name == "time_s" or feat_vals is None:
+                    continue
+                f_t, f_v = subsample_curve(t_feat, feat_vals, max_points=max_display_points)
+                disp_features[feat_name] = {
+                    "time_s": f_t,
+                    "values": f_v,
+                }
+
+        now_utc = datetime.now(timezone.utc)
+        analysis_id = f"seg_{now_utc.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+
+        report: dict[str, Any] = {
+            "schema_version": "1.0.0",
+            "analysis_id": analysis_id,
+            "created_at_utc": now_utc.isoformat(),
+            "session": {
+                "session_id": valid_sess_id,
+                "sample_rate_hz": cap_fs,
+                "duration_s": round(duration_s, 4),
+                "total_samples": len(cap_samples),
+            },
+            "segmentation": seg_result.to_dict(),
+            "display": {
+                "waveform": {
+                    "time_s": time_points_s,
+                    "amplitude": [round(float(v), 5) for v in dec_raw],
+                },
+                "state_intervals": seg_result.state_intervals,
+                "feature_traces": disp_features,
+            },
+            "provenance": {
+                "app_version": "1.0.0",
+                "git_commit_sha": get_git_commit_sha(),
+                "python_version": platform.python_version(),
+                "numpy_version": np.__version__,
+                "scipy_version": scipy.__version__,
+                "profile_id": profile_id,
+                "model_id": model.model_id if model else "",
+                "notice": "Research acoustic temporal segmentation only. Not a medical diagnosis.",
+            },
+        }
+
+        # Persist report
+        report_dir = self.analysis_dir / analysis_id
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report_file = report_dir / "segmentation.json"
+        with open(report_file, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+
+        return report
+
+    def get_segmentation_report(self, analysis_id: str) -> Optional[dict[str, Any]]:
+        """Load a persisted Springer segmentation report safely."""
+        valid_id = validate_identifier(analysis_id, "analysis_id", self.analysis_dir)
+        report_file = self.analysis_dir / valid_id / "segmentation.json"
+        if not report_file.exists():
+            return None
+
+        try:
+            with open(report_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+
+    def list_segmentation_reports(self) -> list[dict[str, Any]]:
+        """List summary metadata of all persisted segmentation reports sorted newest first."""
+        reports: list[dict[str, Any]] = []
+        for report_file in self.analysis_dir.glob("seg_*/segmentation.json"):
+            try:
+                with open(report_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    seg = data.get("segmentation", {})
+                    reports.append({
+                        "analysis_id": data.get("analysis_id", report_file.parent.name),
+                        "created_at_utc": data.get("created_at_utc", ""),
+                        "session_id": data.get("session", {}).get("session_id"),
+                        "profile_id": seg.get("profile_id", ""),
+                        "model_id": seg.get("model_id", ""),
+                        "status": seg.get("status", ""),
+                        "heart_rate_estimate_bpm": seg.get("heart_rate_estimate_bpm"),
+                        "cycle_count": seg.get("cycle_count", 0),
                     })
             except Exception:
                 pass

@@ -101,35 +101,56 @@ AuscultaForge; kalibrasyonu yapılmamış donanımlarla kesin fiziksel basınç 
 
 ---
 
-## 7. Dört Durumlu PCG Segmentasyon Yol Haritası
+## 7. Dört Durumlu PCG Segmentasyon Yol Haritası ve Uygulama Durumu
 
-Kalp seslerinin $S_1$, Sistol, $S_2$, Diyastol olarak ayrıştırılması üç aşamalı olarak planlanmıştır:
+Kalp seslerinin $S_1$, Sistol, $S_2$, Diyastol olarak ayrıştırılması üç aşamalı olarak planlanmış olup AŞAMA A ve AŞAMA B tamamlanmıştır:
 
 ```text
-AŞAMA A (Planlanan NEXT_DSP):
+AŞAMA A (TAMAMLANDI — Stage-A Envelopes):
 Deterministik Zarf Çıkarımı
 - Hilbert Dönüşümü Zarfı
-- Homomorfik Zarf (Schmidt et al., R005)
-- Kayan Enerji Zarfı
-- Aday akustik tepe noktaları
+- Moving RMS Zarfı
+- Teager-Kaiser Enerji Operatörü (TKEO)
+- 40–60 Hz PSD-Band Zarfı
 
             │
             ▼
-AŞAMA B (Planlanan RESEARCH_LATER):
-Springer et al. (R006) LR-HSMM Modelinin Yeniden Üretimi
-- 4 adet zarf özniteliğinin 50 Hz'e seyreltilmesi
-- Lojistik regresyon ile durum olasılıkları
-- Süre bağımlı Gizli Yarı-Markov Modeli (HSMM)
-- Modifiye Viterbi algoritması ile 4 durumun kodunun çözülmesi
+AŞAMA B (TAMAMLANDI — Springer LR-HSMM Milestone):
+Springer et al. (R006) LR-HSMM Modelinin Kaynak-Sadık Uygulaması
+- 1000 Hz polifaz analiz sinyali ve 25–400 Hz sıfır fazlı filtreleme
+- Schmidt spike giderme (3x medyan eşiği, sıfır geçiş sınırları)
+- 4 adet zarf özniteliği (Homomorfik 8Hz, Hilbert, PSD 40-60Hz, rbio3.9 Seviye-3 Dalgacık)
+- 50 Hz'e seyreltme ve kayıt bazında z-score normalizasyonu
+- Schmidt/Springer normalleştirilmiş özilişki ile kalp hızı ve sistolik süre kestirimi
+- Süre bağımlı Gauss Gizli Yarı-Markov Modeli (HSMM)
+- Bire-karşı-diğerleri lojistik regresyon ve çok değişkenli normal Bayes düzeltmesi
+- Genişletilmiş Viterbi (Extended Viterbi) algoritması ile log-uzayında kısmi sınır kod çözümü
+- Detaylı dokümantasyon: Bkz. 15-springer-lr-hsmm-segmentation.md
 
             │
             ▼
-AŞAMA C (Planlanan RESEARCH_LATER):
-Liu et al. (R007) Bağımsız Doğrulama
-- PhysioNet veri tabanları üzerinde hasta ayrık testler
-- ±60 ms ve ±100 ms tolerans pencereleri
+AŞAMA C (Gelecek Araştırma — NEXT_BENCHMARK):
+Liu et al. (R007) Bağımsız Çapraz Veri Tabanı Değerlendirmesi
+- PhysioNet veri tabanları üzerinde hasta ayrık (subject-split) testler
+- ±20 ms, ±40 ms, ±60 ms, ±80 ms, ±100 ms tolerans pencereleri
 - Duyarlılık (Se), Kesinlik (PPV) ve F1 skoru raporlaması
 ```
+
+### Bilimsel Uygulama ve Doğrulama Durum Tablosu (Implementation Status)
+
+| Bileşen / Metrik | Kaynak Desteği | Uygulama Durumu | Test Durumu | Harici Doğrulama |
+|---|---|---|---|---|
+| **Hilbert Zarfı** | R006, R005 | `IMPLEMENTED` | `TESTED` | — |
+| **Homomorfik Zarf (8 Hz filtfilt)** | R006, R005 | `IMPLEMENTED` | `TESTED` | — |
+| **PSD Özniteliği (Paper vs Ref)** | R006, PhysioNet HSS | `IMPLEMENTED` | `TESTED` | — |
+| **Dalgacık Zarfı (rbio3.9 Seviye 3)** | R006 | `IMPLEMENTED` | `TESTED` | — |
+| **Schmidt Spike Giderme** | R005, PhysioNet HSS | `IMPLEMENTED` | `TESTED` | — |
+| **Schmidt Kalp Hızı Kestirimi** | R005, PhysioNet HSS | `IMPLEMENTED` | `TESTED` | — |
+| **Gauss Durasyon Modelleri (50 Hz)** | R006, R005 | `IMPLEMENTED` | `TESTED` | — |
+| **Lojistik Regresyon Emisyonu** | R006 | `IMPLEMENTED` | `TESTED` | — |
+| **Genişletilmiş Viterbi (Extended Viterbi)** | R006 | `IMPLEMENTED` | `TESTED` | — |
+| **MATLAB İle İkili Sayısal Denklik** | PhysioNet HSS v1.0 | `IMPLEMENTED` | — | `REFERENCE_ORACLE_NOT_EXECUTED` |
+| **Makalede Bildirilen %95.63 F1** | R006 | `SOURCE SUPPORTED` | — | Harici Makale Skoru (AuscultaForge skoru değildir) |
 
 ---
 

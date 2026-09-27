@@ -54,4 +54,7 @@ def __getattr__(name: str):
     ):
         from . import validation
         return getattr(validation, name)
+    if name == "segmentation":
+        from . import segmentation
+        return segmentation
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

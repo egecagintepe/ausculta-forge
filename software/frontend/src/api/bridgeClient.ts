@@ -15,6 +15,8 @@ import {
   AnalysisComparisonResult,
   ScientificSessionAnalysisResult,
   SystemIdReport,
+  SpringerSegmentationModelSummary,
+  SpringerSegmentationReport,
 } from '../types';
 
 export interface SignalFrameData {
@@ -548,6 +550,59 @@ class BridgeClient {
   public async getSystemIdReport(analysisId: string): Promise<SystemIdReport | null> {
     try {
       const resp = await fetch(`${this.apiUrl}/scientific/system-id/${encodeURIComponent(analysisId)}`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public async listSegmentationModels(): Promise<SpringerSegmentationModelSummary[]> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/segmentation/models`);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async runSegmentation(
+    sessionId: string,
+    modelId?: string | null,
+    profileId: string = 'SPRINGER_PHYSIONET_REFERENCE_V1',
+    maxPoints: number = 600
+  ): Promise<SpringerSegmentationReport> {
+    const resp = await fetch(`${this.apiUrl}/scientific/segmentation/segment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        model_id: modelId || null,
+        profile_id: profileId,
+        max_display_points: maxPoints,
+      }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Segmentation failed' }));
+      throw new Error(err.detail || `Segmentation failed with status ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
+  public async listSegmentationReports(): Promise<any[]> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/segmentation/reports`);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async getSegmentationReport(analysisId: string): Promise<SpringerSegmentationReport | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/segmentation/${encodeURIComponent(analysisId)}`);
       if (!resp.ok) return null;
       return await resp.json();
     } catch {

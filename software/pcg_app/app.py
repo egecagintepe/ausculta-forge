@@ -119,6 +119,12 @@ def create_app(
         energy_threshold_db_rel_max: Optional[float] = -30.0
         max_display_points: Optional[int] = 300
 
+    class SegmentationSegmentRequest(BaseModel):
+        session_id: str
+        model_id: Optional[str] = None
+        profile_id: Optional[str] = "SPRINGER_PHYSIONET_REFERENCE_V1"
+        max_display_points: Optional[int] = 600
+
     # REST Endpoints
     @app.get("/api/status")
     def get_status() -> dict[str, Any]:
@@ -314,6 +320,42 @@ def create_app(
             report = analysis.get_system_id_report(analysis_id)
             if not report:
                 raise HTTPException(status_code=404, detail=f"System identification report not found: {analysis_id}")
+            return report
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # =========================================================================
+    # Springer LR-HSMM Segmentation Endpoints
+    # =========================================================================
+
+    @app.get("/api/scientific/segmentation/models")
+    def api_list_segmentation_models() -> list[dict[str, Any]]:
+        return analysis.list_segmentation_models()
+
+    @app.post("/api/scientific/segmentation/segment")
+    def api_segment_session(req: SegmentationSegmentRequest) -> dict[str, Any]:
+        try:
+            return analysis.run_segmentation(
+                session_id=req.session_id,
+                model_id=req.model_id,
+                profile_id=req.profile_id or "SPRINGER_PHYSIONET_REFERENCE_V1",
+                max_display_points=req.max_display_points or 600,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+    @app.get("/api/scientific/segmentation/reports")
+    def api_list_segmentation_reports() -> list[dict[str, Any]]:
+        return analysis.list_segmentation_reports()
+
+    @app.get("/api/scientific/segmentation/{analysis_id}")
+    def api_get_segmentation_report(analysis_id: str) -> dict[str, Any]:
+        try:
+            report = analysis.get_segmentation_report(analysis_id)
+            if not report:
+                raise HTTPException(status_code=404, detail=f"Segmentation report not found: {analysis_id}")
             return report
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
