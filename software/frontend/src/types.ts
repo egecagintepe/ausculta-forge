@@ -255,3 +255,146 @@ export interface AnalysisComparisonResult {
     scipy_version: string;
   };
 }
+
+export interface ScientificSignalQuality {
+  schema_version: string;
+  sample_count: number;
+  duration_s: number;
+  sample_rate_hz: number;
+  mean_dc: number;
+  rms: number;
+  peak_absolute: number;
+  peak_to_peak: number;
+  crest_factor: number;
+  digital_full_scale_utilization: number;
+  digital_saturation_count: number;
+  digital_saturation_fraction: number;
+  zero_crossing_rate: number | null;
+  provenance: Record<string, unknown>;
+}
+
+export interface ScientificSpectralData {
+  schema_version: string;
+  sample_rate_hz: number;
+  frequencies_hz: number[];
+  psd: number[];
+  psd_relative_db: number[];
+  frequency_bin_spacing_hz: number;
+  actual_segments: number;
+  enbw_hz: number;
+  config: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+}
+
+export interface ScientificEnvelopeSeries {
+  algorithm: string;
+  sample_rate_hz: number;
+  time_s: number[];
+  values: number[];
+  parameters: Record<string, unknown>;
+  input_sample_count: number;
+  output_sample_count: number;
+  provenance: Record<string, unknown>;
+}
+
+export interface ScientificEnvelopeLabData {
+  schema_version: string;
+  input_sample_rate_hz: number;
+  input_duration_s: number;
+  envelopes: Record<string, ScientificEnvelopeSeries>;
+  provenance: Record<string, unknown>;
+}
+
+export interface ScientificDisplayData {
+  time_points_s: number[];
+  raw_signal: number[];
+  analysis_signal: number[];
+  envelopes: Record<string, { algorithm: string; time_s: number[]; values: number[] }>;
+  psd: {
+    frequencies_hz: number[];
+    psd_db: number[];
+    delta_f_hz: number;
+    n_segments: number;
+    db_reference: number;
+  };
+}
+
+export interface ScientificSessionAnalysisResult {
+  schema_version: string;
+  session_id: string;
+  sample_rate_hz: number;
+  total_samples: number;
+  duration_s: number;
+  analysis_profile: string;
+  signal_quality: ScientificSignalQuality;
+  spectral: ScientificSpectralData;
+  envelope_lab: ScientificEnvelopeLabData;
+  display: ScientificDisplayData;
+  provenance: {
+    app_version: string;
+    git_commit_sha?: string | null;
+    python_version: string;
+    numpy_version: string;
+    scipy_version: string;
+    metrology_notes?: string[];
+  };
+}
+
+export interface SystemIdentificationCoreData {
+  schema_version: string;
+  sample_rate_hz: number;
+  input_name: string;
+  output_name: string;
+  frequencies_hz: number[];
+  gxx_autospectrum: number[];
+  gyy_autospectrum: number[];
+  coherence: number[];
+  h1_magnitude: number[];
+  h1_magnitude_db: number[];
+  h1_phase_rad: number[];
+  h1_phase_deg: number[];
+  coherent_output_spectrum: number[];
+  residual_output_spectrum: number[];
+  excited_frequency_mask: boolean[];
+  excited_bins_count: number;
+  mean_coherence_over_excited_band: number | null;
+  frequency_bin_spacing_hz: number;
+  notes: string;
+  provenance: Record<string, unknown>;
+}
+
+export interface SystemIdReport {
+  schema_version: string;
+  analysis_id: string;
+  created_at_utc: string;
+  reference: {
+    asset_id: string;
+    filename: string;
+    sha256: string;
+    sample_rate_hz: number;
+    duration_s: number;
+    total_samples: number;
+  };
+  capture: {
+    session_id: string;
+    wav_sha256: string;
+    sample_rate_hz: number;
+    resampled: boolean;
+    duration_s: number;
+    total_samples: number;
+  };
+  system_id: SystemIdentificationCoreData;
+  display: {
+    frequency_hz: number[];
+    h1_magnitude_db: number[];
+    h1_phase_rad: number[];
+    h1_phase_deg: number[];
+    coherence: number[];
+    gxx: number[];
+    gyy: number[];
+    coherent_output_psd: number[];
+    residual_output_psd: number[];
+    excited_energy_mask: boolean[];
+  };
+  provenance: Record<string, unknown>;
+}

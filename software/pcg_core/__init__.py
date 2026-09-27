@@ -37,6 +37,7 @@ from .scientific_config import (
     PHANTOM_VALIDATION_V1,
     PCG_EVENT_FEATURES_V1,
     SPRINGER_SEGMENTATION_RESEARCH_V1,
+    BROADBAND_SYSTEM_ID_V1,
 )
 
 def __getattr__(name: str):

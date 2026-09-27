@@ -38,7 +38,45 @@ from pcg_core.metrics import rms, peak_abs, crest_factor
 from pcg_core.dsp import StreamingBandpass
 from pcg_core.recording import validate_session_id, get_session
 from pcg_core.experiment import get_git_commit_sha
+from pcg_core.scientific import (
+    SignalQualityConfig,
+    SignalCharacterizationResult,
+    compute_signal_quality,
+    WelchConfig,
+    SpectralAnalysisResult,
+    compute_welch_psd,
+    resample_analysis_signal,
+    EnvelopeLabConfig,
+    EnvelopeLabResult,
+    compute_envelope_lab,
+    SystemIdConfig,
+    SystemIdentificationResult,
+    estimate_siso_system_id,
+)
+from pcg_core.scientific_config import (
+    get_analysis_profile,
+    list_analysis_profiles,
+    GENERAL_PCG_V1,
+    RAW_INTEGRITY_V1,
+    BROADBAND_SYSTEM_ID_V1,
+)
 from .display_pipeline import decimate_min_max
+
+
+def subsample_curve(
+    x_vals: np.ndarray | list[float],
+    y_vals: np.ndarray | list[float],
+    max_points: int = 300,
+) -> tuple[list[float], list[float]]:
+    """Subsample an (x, y) continuous curve to at most max_points monotonically."""
+    x_arr = np.asarray(x_vals, dtype=np.float64)
+    y_arr = np.asarray(y_vals, dtype=np.float64)
+    n = len(x_arr)
+    if n <= max_points or max_points < 2:
+        return [round(float(x), 4) for x in x_arr], [round(float(y), 4) for y in y_arr]
+    indices = np.round(np.linspace(0, n - 1, max_points)).astype(int)
+    indices = np.unique(indices)
+    return [round(float(x_arr[i]), 4) for i in indices], [round(float(y_arr[i]), 4) for i in indices]
 
 
 SAFE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
@@ -624,6 +662,326 @@ class AnalysisService:
                         "least_squares_gain": data.get("metrics", {}).get("least_squares_gain"),
                         "delay_ms": data.get("alignment", {}).get("delay_ms"),
                         "signal_to_error_ratio_db": data.get("metrics", {}).get("signal_to_error_ratio_db"),
+                    })
+            except Exception:
+                pass
+
+        reports.sort(key=lambda r: r.get("created_at_utc", ""), reverse=True)
+        return reports
+
+    # =========================================================================
+    # Scientific Signal Characterization & Envelope Lab
+    # =========================================================================
+
+    def analyze_session_scientific(
+        self,
+        session_id: str,
+        profile_id: str = "GENERAL_PCG_V1",
+        welch_nperseg: int = 2048,
+        welch_noverlap: Optional[int] = None,
+        max_display_points: int = 600,
+    ) -> dict[str, Any]:
+        """Perform full-rate scientific signal quality, Welch spectral analysis, and Envelope Lab extraction.
+
+        Strict Separation Rules Enforced:
+        1. All quantitative metrics are computed on complete full-rate NumPy arrays.
+        2. Display arrays are peak-preserved decimated strictly for browser UI rendering.
+        3. Never use decimated display points for scientific conclusions.
+        4. Distinguishes digital full-scale saturation hits from physical acoustic overload.
+        """
+        valid_id = validate_session_id(session_id, self.sessions_dir)
+        sess_dict = get_session(valid_id, self.sessions_dir)
+        if sess_dict is None:
+            raise FileNotFoundError(f"Recorded session not found: {session_id}")
+
+        wav_path = self.sessions_dir / valid_id / "raw.wav"
+        if not wav_path.exists():
+            raise FileNotFoundError(f"Session audio file not found: {wav_path}")
+
+        raw_samples, fs = load_wav_as_float32(wav_path)
+        if len(raw_samples) == 0:
+            raise ValueError(f"Session {session_id} audio contains zero samples.")
+
+        # Determine analysis profile and construct Analysis Signal
+        try:
+            profile = get_analysis_profile(profile_id)
+        except KeyError:
+            profile = GENERAL_PCG_V1
+            profile_id = GENERAL_PCG_V1.profile_id
+
+        if profile_id == "GENERAL_PCG_V1":
+            nyq = fs / 2.0
+            high_cut = min(600.0, nyq - 1.0)
+            low_cut = min(20.0, high_cut * 0.5)
+            sos = scipy.signal.butter(4, [low_cut, high_cut], btype="bandpass", fs=fs, output="sos")
+            analysis_samples = scipy.signal.sosfilt(sos, raw_samples).astype(np.float32)
+        else:
+            # RAW or BROADBAND profiles preserve the full bandwidth
+            analysis_samples = raw_samples.copy()
+
+        # 1. Full-rate Signal Quality Characterization on Acquisition Representation
+        quality_cfg = SignalQualityConfig()
+        quality_result = compute_signal_quality(
+            signal=raw_samples,
+            sample_rate_hz=fs,
+            config=quality_cfg,
+        )
+
+        # 2. Welch Power Spectral Density on Analysis Signal
+        nperseg = min(welch_nperseg, len(analysis_samples))
+        if nperseg < 32:
+            nperseg = max(16, len(analysis_samples))
+        spectral_cfg = WelchConfig(
+            nperseg=nperseg,
+            noverlap=welch_noverlap,
+            window="hann",
+            scaling="density",
+            detrend="constant",
+        )
+        spectral_result = compute_welch_psd(
+            signal=analysis_samples,
+            sample_rate_hz=fs,
+            config=spectral_cfg,
+        )
+
+        # 3. Envelope Lab on Analysis Signal
+        envelope_cfg = EnvelopeLabConfig(
+            rms_window_duration_s=0.025,
+            tkeo_boundary_policy="replicate",
+            psd_band_hz=(40.0, 60.0),
+            psd_window_duration_s=0.05,
+            psd_overlap_fraction=0.5,
+        )
+        envelope_result = compute_envelope_lab(
+            signal=analysis_samples,
+            sample_rate_hz=fs,
+            config=envelope_cfg,
+        )
+
+        # 4. Generate bounded decimated display representations
+        target_pts = max(32, min(max_display_points, 1200))
+        dec_raw = decimate_min_max(raw_samples, target_pts)
+        dec_analysis = decimate_min_max(analysis_samples, target_pts)
+        duration_s = float(len(raw_samples) / fs)
+        time_points_s = [round(float(t), 4) for t in np.linspace(0.0, duration_s, len(dec_raw))]
+
+        disp_envelopes: dict[str, Any] = {}
+        for env in envelope_result.envelopes.values():
+            env_vals = np.array(env.values, dtype=np.float32)
+            if len(env_vals) > target_pts:
+                dec_env = decimate_min_max(env_vals, target_pts)
+                env_t = [round(float(t), 4) for t in np.linspace(0.0, duration_s, len(dec_env))]
+            else:
+                dec_env = env_vals
+                env_t = [round(float(t), 4) for t in env.time_s]
+            disp_envelopes[env.algorithm] = {
+                "algorithm": env.algorithm,
+                "time_s": env_t,
+                "values": [round(float(v), 5) for v in dec_env],
+            }
+
+        # Subsample spectral PSD for responsive SVG plotting (max 256 points)
+        spec_freqs, spec_psd_db = subsample_curve(
+            spectral_result.frequencies_hz,
+            spectral_result.psd_relative_db,
+            max_points=256,
+        )
+
+        return {
+            "schema_version": "1.0.0",
+            "session_id": valid_id,
+            "sample_rate_hz": fs,
+            "total_samples": len(raw_samples),
+            "duration_s": round(duration_s, 4),
+            "analysis_profile": profile_id,
+            "signal_quality": quality_result.to_dict(),
+            "spectral": spectral_result.to_dict(),
+            "envelope_lab": envelope_result.to_dict(),
+            "display": {
+                "time_points_s": time_points_s,
+                "raw_signal": [round(float(v), 5) for v in dec_raw],
+                "analysis_signal": [round(float(v), 5) for v in dec_analysis],
+                "envelopes": disp_envelopes,
+                "psd": {
+                    "frequencies_hz": spec_freqs,
+                    "psd_db": spec_psd_db,
+                    "delta_f_hz": spectral_result.frequency_bin_spacing_hz,
+                    "n_segments": spectral_result.actual_segments,
+                    "db_reference": spectral_result.config.get("relative_db_ref", 1.0),
+                },
+            },
+            "provenance": {
+                "app_version": "1.0.0",
+                "git_commit_sha": get_git_commit_sha(),
+                "python_version": platform.python_version(),
+                "numpy_version": np.__version__,
+                "scipy_version": scipy.__version__,
+                "metrology_notes": [
+                    "Full-rate quantitative analysis performed on complete NumPy arrays.",
+                    "Display curves are peak-preserved decimated strictly for UI rendering and not used for metrics.",
+                    "No clinical diagnosis or acoustic ENOB is inferred.",
+                    "Digital saturation reflects full-scale amplitude hits, not proven physical acoustic microphone overload.",
+                ],
+            },
+        }
+
+    # =========================================================================
+    # System Identification Foundation (SISO H1 & Coherence)
+    # =========================================================================
+
+    def run_system_id(
+        self,
+        asset_id: str,
+        session_id: str,
+        config: Optional[SystemIdConfig] = None,
+        max_display_points: int = 300,
+    ) -> dict[str, Any]:
+        """Perform conservative SISO best-linear system identification.
+
+        Estimates H1 FRF, ordinary magnitude-squared coherence, input/output autospectra,
+        cross-spectrum, and coherent/residual output spectra.
+        """
+        valid_asset_id = validate_identifier(asset_id, "asset_id", self.assets_dir)
+        valid_sess_id = validate_session_id(session_id, self.sessions_dir)
+
+        asset_meta = self.get_reference_asset(valid_asset_id)
+        if asset_meta is None:
+            raise FileNotFoundError(f"Reference asset not found: {asset_id}")
+
+        sess_meta = get_session(valid_sess_id, self.sessions_dir)
+        if sess_meta is None:
+            raise FileNotFoundError(f"Capture session not found: {session_id}")
+
+        ref_path = self.assets_dir / f"{valid_asset_id}.wav"
+        cap_path = self.sessions_dir / valid_sess_id / "raw.wav"
+
+        ref_samples, ref_fs = load_wav_as_float32(ref_path)
+        cap_samples, cap_fs = load_wav_as_float32(cap_path)
+
+        resampled = False
+        working_fs = float(ref_fs)
+        if ref_fs != cap_fs:
+            cap_samples, working_fs = resample_analysis_signal(
+                cap_samples,
+                orig_sample_rate_hz=cap_fs,
+                target_sample_rate_hz=ref_fs,
+            )
+            resampled = True
+
+        if not isinstance(ref_samples, np.ndarray):
+            ref_samples = np.asarray(ref_samples, dtype=np.float64)
+        if not isinstance(cap_samples, np.ndarray):
+            cap_samples = np.asarray(cap_samples, dtype=np.float64)
+
+        cfg = config or SystemIdConfig()
+        sys_result = estimate_siso_system_id(
+            input_signal=ref_samples,
+            output_signal=cap_samples,
+            sample_rate_hz=working_fs,
+            config=cfg,
+        )
+
+        # Generate bounded decimated display curves for UI rendering
+        f_sub, mag_sub = subsample_curve(sys_result.frequencies_hz, sys_result.h1_magnitude_db, max_points=max_display_points)
+        _, phase_sub = subsample_curve(sys_result.frequencies_hz, sys_result.h1_phase_rad, max_points=max_display_points)
+        _, phase_deg_sub = subsample_curve(sys_result.frequencies_hz, sys_result.h1_phase_deg, max_points=max_display_points)
+        _, coh_sub = subsample_curve(sys_result.frequencies_hz, sys_result.coherence, max_points=max_display_points)
+        _, gxx_sub = subsample_curve(sys_result.frequencies_hz, sys_result.gxx_autospectrum, max_points=max_display_points)
+        _, gyy_sub = subsample_curve(sys_result.frequencies_hz, sys_result.gyy_autospectrum, max_points=max_display_points)
+        _, coh_out_sub = subsample_curve(sys_result.frequencies_hz, sys_result.coherent_output_spectrum, max_points=max_display_points)
+        _, res_out_sub = subsample_curve(sys_result.frequencies_hz, sys_result.residual_output_spectrum, max_points=max_display_points)
+        _, mask_sub = subsample_curve(
+            sys_result.frequencies_hz,
+            [1.0 if m else 0.0 for m in sys_result.excited_frequency_mask],
+            max_points=max_display_points,
+        )
+
+        now_utc = datetime.now(timezone.utc)
+        analysis_id = f"sysid_{now_utc.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+
+        report: dict[str, Any] = {
+            "schema_version": "1.0.0",
+            "analysis_id": analysis_id,
+            "created_at_utc": now_utc.isoformat(),
+            "reference": {
+                "asset_id": valid_asset_id,
+                "filename": asset_meta["filename"],
+                "sha256": asset_meta["sha256"],
+                "sample_rate_hz": ref_fs,
+                "duration_s": round(float(len(ref_samples) / ref_fs), 4),
+                "total_samples": len(ref_samples),
+            },
+            "capture": {
+                "session_id": valid_sess_id,
+                "wav_sha256": sess_meta.get("raw_wav_sha256", ""),
+                "sample_rate_hz": cap_fs,
+                "resampled": resampled,
+                "effective_sample_rate_hz": working_fs,
+                "duration_s": sess_meta.get("duration_s", round(float(len(cap_samples) / working_fs), 4)),
+                "total_samples": len(cap_samples),
+            },
+            "system_id": sys_result.to_dict(),
+            "display": {
+                "frequency_hz": f_sub,
+                "h1_magnitude_db": mag_sub,
+                "h1_phase_rad": phase_sub,
+                "h1_phase_deg": phase_deg_sub,
+                "coherence": coh_sub,
+                "gxx": gxx_sub,
+                "gyy": gyy_sub,
+                "coherent_output_psd": coh_out_sub,
+                "residual_output_psd": res_out_sub,
+                "excited_energy_mask": [bool(v > 0.5) for v in mask_sub],
+            },
+            "provenance": {
+                "app_version": "1.0.0",
+                "git_commit_sha": get_git_commit_sha(),
+                "python_version": platform.python_version(),
+                "numpy_version": np.__version__,
+                "scipy_version": scipy.__version__,
+                "analysis_profile_id": "BROADBAND_SYSTEM_ID_V1",
+            },
+        }
+
+        # Persist report
+        report_dir = self.analysis_dir / analysis_id
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report_file = report_dir / "system_id.json"
+        with open(report_file, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+
+        return report
+
+    def get_system_id_report(self, analysis_id: str) -> Optional[dict[str, Any]]:
+        """Load a persisted system identification report safely."""
+        valid_id = validate_identifier(analysis_id, "analysis_id", self.analysis_dir)
+        report_file = self.analysis_dir / valid_id / "system_id.json"
+        if not report_file.exists():
+            return None
+
+        try:
+            with open(report_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+
+    def list_system_id_reports(self) -> list[dict[str, Any]]:
+        """List summary metadata of all persisted system-ID reports sorted newest first."""
+        reports: list[dict[str, Any]] = []
+        for report_file in self.analysis_dir.glob("sysid_*/system_id.json"):
+            try:
+                with open(report_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    sys_dict = data.get("system_id", {})
+                    reports.append({
+                        "analysis_id": data.get("analysis_id", report_file.parent.name),
+                        "created_at_utc": data.get("created_at_utc", ""),
+                        "reference_asset_id": data.get("reference", {}).get("asset_id"),
+                        "reference_filename": data.get("reference", {}).get("filename"),
+                        "capture_session_id": data.get("capture", {}).get("session_id"),
+                        "mean_coherence_over_excited_band": sys_dict.get("mean_coherence_over_excited_band"),
+                        "excited_bins_count": sys_dict.get("excited_bins_count"),
+                        "notes": sys_dict.get("notes", ""),
                     })
             except Exception:
                 pass

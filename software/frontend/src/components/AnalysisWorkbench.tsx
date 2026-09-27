@@ -29,6 +29,7 @@ import {
   AnalysisComparisonResult
 } from '../types';
 import { bridgeClient, SessionItem } from '../api/bridgeClient';
+import { ScientificLab } from './ScientificLab';
 
 interface AnalysisWorkbenchProps {
   initialSessionId?: string | null;
@@ -46,7 +47,7 @@ export const AnalysisWorkbench: React.FC<AnalysisWorkbenchProps> = ({
   addToast
 }) => {
   // Navigation / sub-tabs within Workbench
-  const [activeTab, setActiveTab] = useState<'compare' | 'sessions' | 'references' | 'history'>('compare');
+  const [activeTab, setActiveTab] = useState<'scientific' | 'compare' | 'sessions' | 'references' | 'history'>('scientific');
 
   // Selection state
   const [sessions, setSessions] = useState<SessionItem[]>([]);
