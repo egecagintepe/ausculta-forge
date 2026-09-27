@@ -52,14 +52,21 @@ demo_filtered.wav
 # Datasets and raw data (never commit raw/processed medical datasets to git)
 data/raw/*
 data/processed/*
+data/external/
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 *.dat
 *.hea
 *.mat
+*.tsv
 *.tar.gz
 *.zip
 *.7z
+
+# Segmentation benchmark runs, models, and caches
+experiments/benchmarks/
+experiments/models/benchmark/
+experiments/cache/
 
 # Temporary experiment outputs and logs
 experiments/output/*

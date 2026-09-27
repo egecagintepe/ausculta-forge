@@ -25,6 +25,7 @@ import {
 } from '../types';
 import { bridgeClient, SessionItem } from '../api/bridgeClient';
 import { SegmentationLab } from './SegmentationLab';
+import { ValidationLab } from './ValidationLab';
 
 interface ScientificLabProps {
   isDark: boolean;
@@ -35,7 +36,7 @@ interface ScientificLabProps {
   addToast?: (message: string, type?: 'info' | 'success' | 'warning') => void;
 }
 
-export type ScientificSection = 'signal' | 'spectrum' | 'envelopes' | 'system_id' | 'segmentation';
+export type ScientificSection = 'signal' | 'spectrum' | 'envelopes' | 'system_id' | 'segmentation' | 'validation';
 
 interface MetrologyCardData {
   title: string;
@@ -319,6 +320,7 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
           { id: 'envelopes', label: '3. ENVELOPE LAB', icon: <TrendingUp size={15} /> },
           { id: 'system_id', label: '4. SYSTEM IDENTIFICATION', icon: <Cpu size={15} /> },
           { id: 'segmentation', label: '5. SPRINGER SEGMENTATION', icon: <Layers size={15} /> },
+          { id: 'validation', label: '6. VALIDATION BENCHMARKS', icon: <ShieldCheck size={15} /> },
         ].map(tab => {
           const isActive = activeSection === tab.id;
           return (
@@ -1224,6 +1226,13 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
           onSelectSessionId={onSelectSessionId}
           addToast={addToast}
         />
+      )}
+
+      {/* ===================================================================== */}
+      {/* SECTION 6: REAL PCG SEGMENTATION VALIDATION                           */}
+      {/* ===================================================================== */}
+      {activeSection === 'validation' && (
+        <ValidationLab isDark={isDark} addToast={addToast} />
       )}
     </div>
   );

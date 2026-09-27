@@ -467,3 +467,116 @@ export interface SpringerSegmentationReport {
   };
   provenance: Record<string, unknown>;
 }
+
+export interface ValidationBenchmarkSummary {
+  benchmark_id: string;
+  status: string;
+  dataset_id: string;
+  dataset_version: string;
+  profile_id: string;
+  total_records: number;
+  coverage_rate: number;
+  created_at_utc: string;
+}
+
+export interface EventToleranceMetricItem {
+  tp: number;
+  fp: number;
+  fn: number;
+  precision: number;
+  recall: number;
+  f1: number;
+}
+
+export interface EventEvaluationView {
+  tolerance_ms: number;
+  s1: EventToleranceMetricItem;
+  s2: EventToleranceMetricItem;
+  combined: EventToleranceMetricItem;
+}
+
+export interface TimingErrorStats {
+  count: number;
+  mean_error_ms: number;
+  median_error_ms: number;
+  mean_abs_error_ms: number;
+  median_abs_error_ms: number;
+  p25_abs_error_ms: number;
+  p75_abs_error_ms: number;
+  p95_abs_error_ms: number;
+}
+
+export interface StateMetricsData {
+  confusion_matrix_4x4: number[][];
+  per_state_precision: Record<string, number>;
+  per_state_recall: Record<string, number>;
+  per_state_f1: Record<string, number>;
+  macro_f1: number;
+  annotated_frame_agreement: number;
+  total_annotated_frames: number;
+  ignored_frames_state0: number;
+}
+
+export interface LocationBreakdownItem {
+  location: string;
+  record_count: number;
+  subject_count: number;
+  coverage_rate: number;
+  s1_f1_100ms: number;
+  s2_f1_100ms: number;
+  combined_f1_100ms: number;
+}
+
+export interface FoldSummaryData {
+  fold_idx: number;
+  train_subjects_count: number;
+  eval_subjects_count: number;
+  train_records_count: number;
+  eval_records_count: number;
+  coverage_rate: number;
+  end_to_end_combined_f1_100ms: number;
+  conditional_combined_f1_100ms: number;
+  macro_state_f1: number;
+}
+
+export interface ValidationBenchmarkReport {
+  schema_version: string;
+  benchmark_id: string;
+  status: 'COMPLETE_DATASET' | 'PARTIAL_DATASET' | 'REAL_DATA_PILOT' | 'DATASET_NOT_AVAILABLE' | 'FAILED';
+  config: {
+    dataset_id: string;
+    dataset_version: string;
+    profile_id: string;
+    fold_count: number;
+    random_seed: number;
+    tolerances_ms: number[];
+    primary_event_anchor: string;
+    max_subjects?: number | null;
+    max_records?: number | null;
+  };
+  dataset_summary: Record<string, unknown>;
+  fold_summaries: FoldSummaryData[];
+  coverage: {
+    total_eligible_records: number;
+    successful_segmentations: number;
+    failed_segmentations: number;
+    coverage_rate: number;
+    failure_status_counts: Record<string, number>;
+  };
+  end_to_end_event_metrics: Record<string, EventEvaluationView>;
+  conditional_event_metrics: Record<string, EventEvaluationView>;
+  timing_errors: {
+    s1: TimingErrorStats;
+    s2: TimingErrorStats;
+    combined: TimingErrorStats;
+  };
+  state_metrics?: StateMetricsData | null;
+  location_breakdown: LocationBreakdownItem[];
+  failure_status_counts: Record<string, number>;
+  macro_subject_metrics: Record<string, unknown>;
+  training_summary: Record<string, unknown>;
+  runtime_summary: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+  warnings: string[];
+  limitations: string[];
+}

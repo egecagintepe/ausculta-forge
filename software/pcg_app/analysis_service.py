@@ -197,16 +197,19 @@ class AnalysisService:
         analysis_dir: str | Path = "experiments/analysis",
         sessions_dir: str | Path = "experiments/sessions",
         models_dir: Optional[str | Path] = None,
+        benchmarks_dir: Optional[str | Path] = None,
     ) -> None:
         self.assets_dir = Path(assets_dir)
         self.analysis_dir = Path(analysis_dir)
         self.sessions_dir = Path(sessions_dir)
         self.models_dir = Path(models_dir) if models_dir is not None else self.analysis_dir.parent / "models"
+        self.benchmarks_dir = Path(benchmarks_dir) if benchmarks_dir is not None else self.analysis_dir.parent / "benchmarks"
 
         self.assets_dir.mkdir(parents=True, exist_ok=True)
         self.analysis_dir.mkdir(parents=True, exist_ok=True)
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         self.models_dir.mkdir(parents=True, exist_ok=True)
+        self.benchmarks_dir.mkdir(parents=True, exist_ok=True)
 
     # =========================================================================
     # Reference WAV Asset Management
@@ -1223,3 +1226,41 @@ class AnalysisService:
 
         reports.sort(key=lambda r: r.get("created_at_utc", ""), reverse=True)
         return reports
+
+    def list_validation_benchmarks(self) -> list[dict[str, Any]]:
+        """List summary metadata of all persisted validation benchmarks sorted newest first."""
+        benchmarks: list[dict[str, Any]] = []
+        for json_file in self.benchmarks_dir.glob("*/benchmark.json"):
+            try:
+                with open(json_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    cfg = data.get("config", {})
+                    cov = data.get("coverage", {})
+                    benchmarks.append({
+                        "benchmark_id": data.get("benchmark_id", json_file.parent.name),
+                        "status": data.get("status", ""),
+                        "dataset_id": cfg.get("dataset_id", ""),
+                        "dataset_version": cfg.get("dataset_version", ""),
+                        "profile_id": cfg.get("profile_id", ""),
+                        "total_records": cov.get("total_eligible_records", 0),
+                        "coverage_rate": cov.get("coverage_rate", 0.0),
+                        "created_at_utc": data.get("provenance", {}).get("timestamp_utc", ""),
+                    })
+            except Exception:
+                pass
+
+        benchmarks.sort(key=lambda b: b.get("created_at_utc", ""), reverse=True)
+        return benchmarks
+
+    def get_validation_benchmark(self, benchmark_id: str) -> Optional[dict[str, Any]]:
+        """Load a persisted validation benchmark report safely."""
+        valid_id = validate_identifier(benchmark_id, "benchmark_id", self.benchmarks_dir)
+        report_file = self.benchmarks_dir / valid_id / "benchmark.json"
+        if not report_file.exists():
+            return None
+
+        try:
+            with open(report_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
