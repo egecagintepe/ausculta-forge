@@ -1,6 +1,6 @@
 # Firmware Directory
 ## Smart Digital Stethoscope: Heart Sound Acquisition, Signal Processing and Quality Assessment
-### EEE495 / EEE496 Senior Design Project â€” Module B
+### EEE495 / EEE496 Senior Design Project — Module B
 Software / Platform Codename: `AuscultaForge`
 
 This directory contains the embedded software running on the microcontroller unit (MCU).
@@ -8,7 +8,7 @@ This directory contains the embedded software running on the microcontroller uni
 ---
 
 ## Scope & Responsibility
-- **Primary Module Owner:** Ozan (Module B â€” Embedded Acquisition & Data Path)
+- **Primary Module Owner:** Ozan (Module B — Embedded Acquisition & Data Path)
 - **Hardware Target:** ESP32-S3 development board (Native USB exposed)
 - **Key Responsibilities:**
   - Transducer acquisition interface (ADC / I2S with DMA double-buffering) at nominal 48 kHz continuous baseline

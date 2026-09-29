@@ -1,12 +1,12 @@
-# Module B â†’ Module C Interface Requirements
+# Module B → Module C Interface Requirements
 ## Week-02 Draft v0.1
 
 - **Status:** DRAFT / WEEK-02
 - **Last Updated:** 2026-09-29
 - **Interface Owners:**
-  - Ozan â€” Producer / Module B (Embedded Acquisition & Data Path)
-  - Ege â€” Consumer / Module C (Computer Application & Quality Assessment)
-- **Course Context:** EEE495 Senior Design Project I / Semester I â€” Week 2
+  - Ozan — Producer / Module B (Embedded Acquisition & Data Path)
+  - Ege — Consumer / Module C (Computer Application & Quality Assessment)
+- **Course Context:** EEE495 Senior Design Project I / Semester I — Week 2
 - **Relevant GitHub Issues:**
   - [#2 ([EEE495][W2][B] Embedded acquisition architecture)](https://github.com/egecagintepe/ausculta-forge/issues/2)
   - [#4 ([EEE495][W2][C] Module-C status and B-to-C interface requirements)](https://github.com/egecagintepe/ausculta-forge/issues/4)
@@ -80,14 +80,14 @@ The following engineering decisions must be jointly evaluated and frozen during 
 
 | Decision Item | Primary Owner | Needed By | Current Status | Description & Alternatives Under Review |
 |---|---|---|---|---|
-| **USB Transport Class** | Ozan (Mod B) / Ege (Mod C) | Week 3 | **OPEN â€” WEEK 3** | USB CDC-ACM (virtual COM port) vs USB Vendor Bulk endpoint. CDC-ACM offers simple cross-platform drivers; Vendor Bulk offers lower driver overhead. |
-| **Final Wire Frame Layout** | Ege (Mod C) / Ozan (Mod B) | Week 3 | **OPEN â€” WEEK 3** | Binary byte structure: header field order, byte offsets, sync words, and endianness (little-endian proposed). |
-| **Sample Payload Encoding** | Ozan (Mod B) / Ege (Mod C) | Week 3 | **OPEN â€” WEEK 3** | 24-bit packed integer (3 bytes/sample) vs 24-bit in 32-bit slot (4 bytes/sample). 32-bit simplifies DMA alignment; 24-bit packed saves 25% USB bandwidth. |
-| **Packet Size (Samples/Frame)** | Ozan (Mod B) / Ege (Mod C) | Week 3 | **OPEN â€” WEEK 3** | Block size trade-off: 128, 256, or 512 samples per frame (at 48 kHz: 2.67 ms, 5.33 ms, or 10.67 ms latency per packet). |
-| **Continuity Counter Width** | Ege (Mod C) | Week 3 | **OPEN â€” WEEK 3** | 16-bit vs 32-bit sequence counter. 16-bit at 100 packets/sec rolls over in ~11 minutes; 32-bit avoids rollover ambiguity for multi-hour runs. |
-| **Status / Error Bitmask** | Ozan (Mod B) | Week 3 | **OPEN â€” WEEK 3** | Exact bit definitions for DMA overflow, I2S sync loss, and clipping flags. |
-| **CRC / Integrity Polynomial** | Ege (Mod C) / Ozan (Mod B) | Week 3 | **OPEN â€” WEEK 3** | CRC-16-CCITT vs CRC-32-IEEE. Computational cost on ESP32-S3 vs error detection capability. |
-| **Device Identification Handshake** | Ege (Mod C) | Week 3 | **OPEN â€” WEEK 3** | USB descriptor strings vs dedicated ASCII/JSON handshake command on control endpoint. |
+| **USB Transport Class** | Ozan (Mod B) / Ege (Mod C) | Week 3 | **OPEN — WEEK 3** | USB CDC-ACM (virtual COM port) vs USB Vendor Bulk endpoint. CDC-ACM offers simple cross-platform drivers; Vendor Bulk offers lower driver overhead. |
+| **Final Wire Frame Layout** | Ege (Mod C) / Ozan (Mod B) | Week 3 | **OPEN — WEEK 3** | Binary byte structure: header field order, byte offsets, sync words, and endianness (little-endian proposed). |
+| **Sample Payload Encoding** | Ozan (Mod B) / Ege (Mod C) | Week 3 | **OPEN — WEEK 3** | 24-bit packed integer (3 bytes/sample) vs 24-bit in 32-bit slot (4 bytes/sample). 32-bit simplifies DMA alignment; 24-bit packed saves 25% USB bandwidth. |
+| **Packet Size (Samples/Frame)** | Ozan (Mod B) / Ege (Mod C) | Week 3 | **OPEN — WEEK 3** | Block size trade-off: 128, 256, or 512 samples per frame (at 48 kHz: 2.67 ms, 5.33 ms, or 10.67 ms latency per packet). |
+| **Continuity Counter Width** | Ege (Mod C) | Week 3 | **OPEN — WEEK 3** | 16-bit vs 32-bit sequence counter. 16-bit at 100 packets/sec rolls over in ~11 minutes; 32-bit avoids rollover ambiguity for multi-hour runs. |
+| **Status / Error Bitmask** | Ozan (Mod B) | Week 3 | **OPEN — WEEK 3** | Exact bit definitions for DMA overflow, I2S sync loss, and clipping flags. |
+| **CRC / Integrity Polynomial** | Ege (Mod C) / Ozan (Mod B) | Week 3 | **OPEN — WEEK 3** | CRC-16-CCITT vs CRC-32-IEEE. Computational cost on ESP32-S3 vs error detection capability. |
+| **Device Identification Handshake** | Ege (Mod C) | Week 3 | **OPEN — WEEK 3** | USB descriptor strings vs dedicated ASCII/JSON handshake command on control endpoint. |
 
 ---
 

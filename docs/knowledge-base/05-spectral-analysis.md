@@ -1,59 +1,59 @@
-# 05 â€” Spektral Analiz: FFT, Welch PSD ve Spektrogram
+# 05 — Spektral Analiz: FFT, Welch PSD ve Spektrogram
 
 ## Bu nedir?
 
-Spektral analiz, zaman domeni dalga formundaki (genlik-zaman) PCG sinyalini frekans domenine (gÃ¼Ã§-frekans veya zaman-frekans) dÃ¶nÃ¼ÅŸtÃ¼rerek kalbin akustik titreÅŸimlerinin hangi frekanslarda yoÄŸunlaÅŸtÄ±ÄŸÄ±nÄ± ortaya Ã§Ä±karan matematiksel yÃ¶ntemler bÃ¼tÃ¼nÃ¼dÃ¼r.
+Spektral analiz, zaman domeni dalga formundaki (genlik-zaman) PCG sinyalini frekans domenine (güç-frekans veya zaman-frekans) dönüştürerek kalbin akustik titreşimlerinin hangi frekanslarda yoğunlaştığını ortaya çıkaran matematiksel yöntemler bütünüdür.
 
 ---
 
-## ÃœÃ§ Temel Spektral AraÃ§ ve FarklarÄ±
+## Üç Temel Spektral Araç ve Farkları
 
-AuscultaForge iÃ§inde kullanÄ±lan Ã¼Ã§ spektral temsil biÃ§imi:
+AuscultaForge içinde kullanılan üç spektral temsil biçimi:
 
-| YÃ¶ntem | Ne Yapar? | AvantajÄ± | SÄ±nÄ±rlÄ±lÄ±ÄŸÄ± | AuscultaForge'da Nerede KullanÄ±lÄ±r? |
+| Yöntem | Ne Yapar? | Avantajı | Sınırlılığı | AuscultaForge'da Nerede Kullanılır? |
 |---|---|---|---|---|
-| **Standart FFT (Fast Fourier Transform)** | BloÄŸun veya sinyalin tamamÄ±na doÄŸrudan Fourier dÃ¶nÃ¼ÅŸÃ¼mÃ¼ uygular. | Matematiksel olarak en hÄ±zlÄ± ve yalÄ±n yÃ¶ntemdir. | Rastgele gÃ¼rÃ¼ltÃ¼de varyansÄ± Ã§ok yÃ¼ksektir; sinyal periyodik deÄŸilse spektral sÄ±zÄ±ntÄ± yapar. | Ham spektrum incelemelerinde. |
-| **Welch PSD (GÃ¼Ã§ Spektral YoÄŸunluÄŸu)** | Sinyali Ã¶rtÃ¼ÅŸen pencerelere bÃ¶ler, her parÃ§ayÄ± pencereleyip FFT alÄ±r ve ortalamasÄ±nÄ± Ã§Ä±karÄ±r. | VaryansÄ± dÃ¼ÅŸÃ¼rÃ¼r, gÃ¼rÃ¼ltÃ¼yÃ¼ pÃ¼rÃ¼zsÃ¼zleÅŸtirir; stabil bir gÃ¼Ã§ spektrumu verir. | Zaman bilgisini kaybeder; tÃ¼m pencere iÃ§in tek bir ortalama eÄŸri verir. | CanlÄ± akÄ±ÅŸta [`SpectralFrame`](../../software/pcg_core/streaming.py#L90-L100) (anlÄ±k spektrum gÃ¶stergesi). |
-| **Spektrogram (STFT TabanlÄ±)** | Kayan pencereler boyunca zaman-frekans matrisi ($S_{xx}(f, t)$) Ã¼retir. | Zaman ve frekans bilgisini bir arada sunar; S1, S2 ve Ã¼fÃ¼rÃ¼mlerin zamanlamasÄ±nÄ± gÃ¶sterir. | Zaman ve frekans Ã§Ã¶zÃ¼nÃ¼rlÃ¼ÄŸÃ¼ arasÄ±nda Heisenberg-Gabor belirsizlik Ã¶dÃ¼nÃ¼ vardÄ±r. | Ã‡evrimdÄ±ÅŸÄ± raporda [`SpectrogramData`](../../software/pcg_core/analysis.py#L38-L53) ve kayan tampon gÃ¶rselleÅŸtirmesinde. |
+| **Standart FFT (Fast Fourier Transform)** | Bloğun veya sinyalin tamamına doğrudan Fourier dönüşümü uygular. | Matematiksel olarak en hızlı ve yalın yöntemdir. | Rastgele gürültüde varyansı çok yüksektir; sinyal periyodik değilse spektral sızıntı yapar. | Ham spektrum incelemelerinde. |
+| **Welch PSD (Güç Spektral Yoğunluğu)** | Sinyali örtüşen pencerelere böler, her parçayı pencereleyip FFT alır ve ortalamasını çıkarır. | Varyansı düşürür, gürültüyü pürüzsüzleştirir; stabil bir güç spektrumu verir. | Zaman bilgisini kaybeder; tüm pencere için tek bir ortalama eğri verir. | Canlı akışta [`SpectralFrame`](../../software/pcg_core/streaming.py#L90-L100) (anlık spektrum göstergesi). |
+| **Spektrogram (STFT Tabanlı)** | Kayan pencereler boyunca zaman-frekans matrisi ($S_{xx}(f, t)$) üretir. | Zaman ve frekans bilgisini bir arada sunar; S1, S2 ve üfürümlerin zamanlamasını gösterir. | Zaman ve frekans çözünürlüğü arasında Heisenberg-Gabor belirsizlik ödünü vardır. | Çevrimdışı raporda [`SpectrogramData`](../../software/pcg_core/analysis.py#L38-L53) ve kayan tampon görselleştirmesinde. |
 
 ---
 
-## Spektral SÄ±zÄ±ntÄ± (Spectral Leakage) ve Pencereleme (Windowing)
+## Spektral Sızıntı (Spectral Leakage) ve Pencereleme (Windowing)
 
-Sonsuz bir sinyalin sonlu bir blokla (Ã¶r. 256 Ã¶rnek) kesilmesi, sinyalin dikdÃ¶rtgen bir pencereyle Ã§arpÄ±lmasÄ± anlamÄ±na gelir. Frekans domeninde dikdÃ¶rtgen pencere bir `sinc` fonksiyonudur ve yan kulakÃ§Ä±klarÄ± (side lobes) Ã§ok yÃ¼ksektir; bu durum gerÃ§ekte olmayan yapay frekanslarÄ±n spektrumda belirmesine (spectral leakage) yol aÃ§ar.
+Sonsuz bir sinyalin sonlu bir blokla (ör. 256 örnek) kesilmesi, sinyalin dikdörtgen bir pencereyle çarpılması anlamına gelir. Frekans domeninde dikdörtgen pencere bir `sinc` fonksiyonudur ve yan kulakçıkları (side lobes) çok yüksektir; bu durum gerçekte olmayan yapay frekansların spektrumda belirmesine (spectral leakage) yol açar.
 
-AuscultaForge'da SciPy'Ä±n `welch` ve `spectrogram` fonksiyonlarÄ± kullanÄ±larak Hanning/Hann pencerelemesi uygulanÄ±r. Bu pencereler sinyalin uÃ§ noktalarÄ±nÄ± yumuÅŸatarak yan kulakÃ§Ä±klarÄ± bastÄ±rÄ±r ve frekans doÄŸruluÄŸunu garanti eder.
+AuscultaForge'da SciPy'ın `welch` ve `spectrogram` fonksiyonları kullanılarak Hanning/Hann pencerelemesi uygulanır. Bu pencereler sinyalin uç noktalarını yumuşatarak yan kulakçıkları bastırır ve frekans doğruluğunu garanti eder.
 
 ---
 
-## AuscultaForge Spektral Veri YapÄ±larÄ±
+## AuscultaForge Spektral Veri Yapıları
 
-### 1. CanlÄ± Ã‡erÃ§eve: `SpectralFrame`
+### 1. Canlı Çerçeve: `SpectralFrame`
 [`software/pcg_core/streaming.py`](../../software/pcg_core/streaming.py#L90-L100):
-CanlÄ± akÄ±ÅŸ esnasÄ±nda UI frekans barlarÄ±na hafif bir veri saÄŸlamak iÃ§in tasarlanmÄ±ÅŸtÄ±r:
+Canlı akış esnasında UI frekans barlarına hafif bir veri sağlamak için tasarlanmıştır:
 - `frequencies_hz`: Frekans ekseni (Hz).
-- `power_db`: Desibel (dB) Ã¶lÃ§ekli gÃ¼Ã§ deÄŸerleri ($10 \log_{10}(P)$).
-- `peak_frequency_hz`: En yÃ¼ksek enerjili baskÄ±n tepe frekansÄ±.
-- `dominant_band`: Fizyolojik bant sÄ±nÄ±fÄ± (`sub_audible`, `fundamental_pcg`, `extended_pcg`).
+- `power_db`: Desibel (dB) ölçekli güç değerleri ($10 \log_{10}(P)$).
+- `peak_frequency_hz`: En yüksek enerjili baskın tepe frekansı.
+- `dominant_band`: Fizyolojik bant sınıfı (`sub_audible`, `fundamental_pcg`, `extended_pcg`).
 
-### 2. Ã‡evrimdÄ±ÅŸÄ± Analiz: `SpectrogramData`
+### 2. Çevrimdışı Analiz: `SpectrogramData`
 [`software/pcg_core/analysis.py`](../../software/pcg_core/analysis.py#L38-L53):
-Bir kaydÄ±n tamamÄ±nÄ±n 2B spektral haritasÄ±nÄ± ve enerji daÄŸÄ±lÄ±m oranlarÄ±nÄ± Ã¶zetler:
-- `sub_audible_0_20hz`: 20 Hz altÄ±ndaki dÃ¼ÅŸÃ¼k frekanslÄ± gÃ¶ÄŸÃ¼s/solunum enerjisi oranÄ±.
-- `fundamental_pcg_20_150hz`: S1 ve S2 kalp seslerinin temel enerjisinin toplam enerjiye oranÄ±.
-- `extended_pcg_150_600hz`: ÃœfÃ¼rÃ¼m ve kapak titreÅŸim enerjisi oranÄ±.
-- `high_freq_above_600hz`: FiltrelenmiÅŸ yÃ¼ksek frekans kalÄ±ntÄ±sÄ±.
+Bir kaydın tamamının 2B spektral haritasını ve enerji dağılım oranlarını özetler:
+- `sub_audible_0_20hz`: 20 Hz altındaki düşük frekanslı göğüs/solunum enerjisi oranı.
+- `fundamental_pcg_20_150hz`: S1 ve S2 kalp seslerinin temel enerjisinin toplam enerjiye oranı.
+- `extended_pcg_150_600hz`: Üfürüm ve kapak titreşim enerjisi oranı.
+- `high_freq_above_600hz`: Filtrelenmiş yüksek frekans kalıntısı.
 
 ---
 
-## Ä°lgili Dosyalar ve Testler
+## İlgili Dosyalar ve Testler
 
 - Spektrogram hesaplama: [`software/pcg_core/analysis.py`](../../software/pcg_core/analysis.py#L67-L140)
-- CanlÄ± spektral Ã§erÃ§eve: [`software/pcg_core/streaming.py`](../../software/pcg_core/streaming.py#L102-L167)
+- Canlı spektral çerçeve: [`software/pcg_core/streaming.py`](../../software/pcg_core/streaming.py#L102-L167)
 - Testler: [`software/tests/test_analysis.py`](../../software/tests/test_analysis.py#L29-L60), [`software/tests/test_streaming.py`](../../software/tests/test_streaming.py#L162-L177)
 
 ---
 
-## Sunumda / Savunmada 30 Saniyelik AÃ§Ä±klama
+## Sunumda / Savunmada 30 Saniyelik Açıklama
 
-> *"Kardiyak akustikte yalnÄ±zca zaman dalga formuna bakarak Ã¼fÃ¼rÃ¼mleri ve kapak patolojilerini ayÄ±rt etmek zordur. AuscultaForge iki dÃ¼zeyde spektral analiz sunar: CanlÄ± akÄ±ÅŸta gÃ¼rÃ¼ltÃ¼ varyansÄ±nÄ± azaltan Welch PSD yÃ¶ntemiyle anlÄ±k frekans tepe deÄŸerini ve baskÄ±n fizyolojik bandÄ± takip ediyoruz; Ã§evrimdÄ±ÅŸÄ± raporda ise STFT tabanlÄ± 2B spektrogram Ã¼reterek enerjinin temel kalp sesleri (20â€“150 Hz) ile Ã¼fÃ¼rÃ¼m bÃ¶lgeleri (150â€“600 Hz) arasÄ±ndaki daÄŸÄ±lÄ±mÄ±nÄ± makinece okunabilir yÃ¼zdelerle raporluyoruz."*
+> *"Kardiyak akustikte yalnızca zaman dalga formuna bakarak üfürümleri ve kapak patolojilerini ayırt etmek zordur. AuscultaForge iki düzeyde spektral analiz sunar: Canlı akışta gürültü varyansını azaltan Welch PSD yöntemiyle anlık frekans tepe değerini ve baskın fizyolojik bandı takip ediyoruz; çevrimdışı raporda ise STFT tabanlı 2B spektrogram üreterek enerjinin temel kalp sesleri (20–150 Hz) ile üfürüm bölgeleri (150–600 Hz) arasındaki dağılımını makinece okunabilir yüzdelerle raporluyoruz."*

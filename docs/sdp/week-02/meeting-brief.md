@@ -1,4 +1,4 @@
-# EEE495 â€” Week 02 Team Brief
+# EEE495 — Week 02 Team Brief
 
 - **Status:** DRAFT / WEEK-02
 - **Last Updated:** 2026-09-29
@@ -11,7 +11,7 @@
 
 ## 1. Current Week Context
 
-- **Timeline:** Semester I â€” Week 2
+- **Timeline:** Semester I — Week 2
 - **Primary Objective:** Prepare sufficient technical evidence, architecture models, and verified Turkish component sourcing to make binding component and interface decisions in Week 3, ensuring all Group-A components are ordered before the Week-4 gate.
 
 ---
@@ -30,11 +30,11 @@ Assessment for EEE495/496 includes individual module quality, Git contribution h
 
 ## 3. This Week's Deliverables
 
-### Kaan â€” Module A (Acquisition Hardware & Characterisation)
+### Kaan — Module A (Acquisition Hardware & Characterisation)
 *Relevant Issue:* [#1 ([EEE495][W2][A] Heart-sound acquisition and transducer criteria)](https://github.com/egecagintepe/ausculta-forge/issues/1)
 
 - **Deliverable A-W2-01: Heart-Sound Acquisition Technical Note**
-  - Characterize relevant low-frequency PCG behavior (primary energy 20â€“200 Hz, murmurs/valve clicks up to 500 Hz).
+  - Characterize relevant low-frequency PCG behavior (primary energy 20–200 Hz, murmurs/valve clicks up to 500 Hz).
   - Document major interference and noise sources (ambient acoustic room noise, friction/rubbing against chestpiece, muscle tremor, 50 Hz AC mains hum, sensor self-noise).
   - Detail acoustic/mechanical coupling considerations (bell vs diaphragm behavior, acoustic chamber resonance, compliant skin/tissue interface).
 - **Deliverable A-W2-02: Microphone / Transducer Selection Criteria**
@@ -43,7 +43,7 @@ Assessment for EEE495/496 includes individual module quality, Git contribution h
   - Acoustic sensitivity, Acoustic Overload Point (AOP), and Signal-to-Noise Ratio (SNR) / Equivalent Input Noise (EIN).
   - Interface requirements (analog pre-amplifier needs vs digital I2S), supply voltage, and physical mounting within stethoscope chestpiece.
 - **Deliverable A-W2-03: Acoustic Phantom Technical Requirements**
-  - Small acoustic exciter / transducer specification capable of driving 20â€“500 Hz vibrations.
+  - Small acoustic exciter / transducer specification capable of driving 20–500 Hz vibrations.
   - Small audio power amplifier drive requirements.
   - Compliant silicone or gel coupling layer specification (approximating chest wall acoustic impedance).
   - Rigid, repeatable mounting frame ensuring invariant chestpiece placement and contact pressure across runs.
@@ -53,7 +53,7 @@ Assessment for EEE495/496 includes individual module quality, Git contribution h
 
 ---
 
-### Ozan â€” Module B (Embedded Acquisition & Data Path)
+### Ozan — Module B (Embedded Acquisition & Data Path)
 *Relevant Issues:*
 - [#2 ([EEE495][W2][B] Embedded acquisition architecture)](https://github.com/egecagintepe/ausculta-forge/issues/2)
 - [#3 ([EEE495][W2][B] Turkey sourcing and BOM v0.1)](https://github.com/egecagintepe/ausculta-forge/issues/3)
@@ -97,7 +97,7 @@ Assessment for EEE495/496 includes individual module quality, Git contribution h
 
 ---
 
-### Ege â€” Module C (Computer Application & Quality Assessment)
+### Ege — Module C (Computer Application & Quality Assessment)
 *Relevant Issues:*
 - [#4 ([EEE495][W2][C] Module-C status and B-to-C interface requirements)](https://github.com/egecagintepe/ausculta-forge/issues/4)
 - [#5 ([EEE495][W2][C] Mandatory measurement and quality plan)](https://github.com/egecagintepe/ausculta-forge/issues/5)
@@ -112,7 +112,7 @@ Assessment for EEE495/496 includes individual module quality, Git contribution h
   - Published at [`docs/sdp/week-02/measurement-quality-plan.md`](measurement-quality-plan.md).
   - Formalized protocols for the six advisor-mandated physical measurements (frequency response, SNR, repeatability $\ge 10$ runs, mains interference, latency, dropped packets).
 - **Deliverable C-W2-04: Project Management & Issue Coordination**
-  - Established Week-02 GitHub project tracking, standardized label taxonomy, and issues [#1](https://github.com/egecagintepe/ausculta-forge/issues/1)â€“[#6](https://github.com/egecagintepe/ausculta-forge/issues/6).
+  - Established Week-02 GitHub project tracking, standardized label taxonomy, and issues [#1](https://github.com/egecagintepe/ausculta-forge/issues/1)–[#6](https://github.com/egecagintepe/ausculta-forge/issues/6).
 - **Scope Restriction:**
   - **No new segmentation, AI, or GUI feature development** during Week 02 unless resolving a blocking defect in an existing core path.
 
@@ -138,20 +138,20 @@ Assessment for EEE495/496 includes individual module quality, Git contribution h
 
 ```text
 Week 02 (Current): Technical research, requirements draft, BOM v0.1 sourcing.
-   â”‚
-   â–¼
+   │
+   ▼
 Week 03: Component selection, frame format draft, BOM v1.0 finalization.
-   â”‚
-   â–¼
+   │
+   ▼
 Week 04 GATE: Requirements frozen, components selected, components ordered, tools available.
-   â”‚
-   â–¼
+   │
+   ▼
 Week 05 GATE: Bench setup operational, known test signal captured end-to-end.
-   â”‚
-   â–¼
+   │
+   ▼
 Week 09 FEASIBILITY GATE: Phantom PCG capture with recognisable S1/S2 acoustic structure.
-   â”‚                       (If unrecognisable: fix transducer/coupling before adding features).
-   â–¼
+   │                       (If unrecognisable: fix transducer/coupling before adding features).
+   ▼
 Week 13: Baseline device operational end-to-end (Phantom -> HW -> MCU -> PC App),
          initial characterization complete, interim report underway.
 ```

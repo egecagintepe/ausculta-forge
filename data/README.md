@@ -13,11 +13,11 @@ All binary dataset files (`.wav`, `.dat`, `.hea`, `.mat`, `.zip`, `.tar.gz`, etc
 
 ```text
 data/
-â”œâ”€â”€ raw/               # Pristine, unmodified downloaded datasets
-â”‚   â””â”€â”€ .gitkeep
-â”œâ”€â”€ processed/         # Cleaned, standardized, or resampled records
-â”‚   â””â”€â”€ .gitkeep
-â””â”€â”€ README.md          # Documentation and acquisition guidelines
+├── raw/               # Pristine, unmodified downloaded datasets
+│   └── .gitkeep
+├── processed/         # Cleaned, standardized, or resampled records
+│   └── .gitkeep
+└── README.md          # Documentation and acquisition guidelines
 ```
 
 ## Future Data Sources

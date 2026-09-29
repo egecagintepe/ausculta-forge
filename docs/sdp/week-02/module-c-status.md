@@ -1,10 +1,10 @@
-# Module C â€” Computer Application & Quality Assessment
+# Module C — Computer Application & Quality Assessment
 ## Week 02 Status
 
 - **Status:** DRAFT / WEEK-02
 - **Last Updated:** 2026-09-29
-- **Owner:** Ege (Module C â€” Computer Application & Quality Assessment)
-- **Course Context:** EEE495 Senior Design Project I / Semester I â€” Week 2
+- **Owner:** Ege (Module C — Computer Application & Quality Assessment)
+- **Course Context:** EEE495 Senior Design Project I / Semester I — Week 2
 - **Relevant GitHub Issue:** [#4 ([EEE495][W2][C] Module-C status and B-to-C interface requirements)](https://github.com/egecagintepe/ausculta-forge/issues/4)
 - **Purpose:** Provide a truthful snapshot of Module C relative to the advisor's Semester-I plan and explicitly separate completed core work, work ahead of schedule / supporting research, work waiting on Modules A/B, and later-semester work.
 

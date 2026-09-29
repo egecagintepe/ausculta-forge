@@ -11,8 +11,8 @@ The AuscultaForge desktop software architecture is structured into strictly isol
 | Physical Hardware (Future ESP32-S3) / Simulation Sources   |
 | (I2S MEMS -> DMA -> Wired Native USB / RealtimeWavSource)   |
 +-------------------------------------------------------------+
-                              â”‚
-                              â–¼ (SampleBlock Interface)
+                              │
+                              ▼ (SampleBlock Interface)
 +-------------------------------------------------------------+
 | pcg_core (DSP & Processing Pipeline)                        |
 | - SampleBlock Uniform Data Container                        |
@@ -20,16 +20,16 @@ The AuscultaForge desktop software architecture is structured into strictly isol
 | - LiveStreamingPipeline & StreamQualityMonitor              |
 | - SessionRecorder (raw.wav + session.json sidecar)         |
 +-------------------------------------------------------------+
-                              â”‚
-                              â–¼ (Direct Python Calls)
+                              │
+                              ▼ (Direct Python Calls)
 +-------------------------------------------------------------+
 | pcg_app (Local Desktop Bridge Layer)                        |
 | - FastAPI REST Endpoints (/api/status, /api/sessions, etc.) |
 | - StreamManager Background Async Task                       |
 | - WebSocket Protocol v1.0 Broadcaster & Command Ingestion   |
 +-------------------------------------------------------------+
-                              â”‚
-                              â–¼ (Local WebSocket: ws://127.0.0.1:8000/ws)
+                              │
+                              ▼ (Local WebSocket: ws://127.0.0.1:8000/ws)
 +-------------------------------------------------------------+
 | React / Vite Frontend (Local Desktop Client)                |
 | - Dual-Channel Canvas Oscilloscope (Raw vs Filtered)        |
@@ -152,35 +152,35 @@ A dedicated subsystem (`software/pcg_app/display_pipeline.py`) isolates high-rat
 
 ```text
 48 kHz Physical Acquisition (Hardware Rev-A)
-         â”‚
-         â–¼
+         │
+         ▼
 DeviceSamplePacket (~512 samples / 10.67 ms)
-         â”‚
-         â–¼
+         │
+         ▼
 StreamManager.ingest_device_packet()
-         â”‚
-         â–¼
+         │
+         ▼
 Integrity Validation + SampleBlock Conversion
-         â”‚
-         â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-         â”‚                                         â”‚
-         â–¼                                         â–¼
+         │
+         ├─────────────────────────────────────────┐
+         │                                         │
+         ▼                                         ▼
 FULL-RATE DSP (48 kHz Bandpass)           FULL-RATE SessionRecorder (48 kHz WAV)
-         â”‚                                         â”‚
-         â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                             â”‚
-                             â–¼
+         │                                         │
+         └───────────────────┬─────────────────────┘
+                             │
+                             ▼
                      Display Aggregator (DisplayPipeline)
-                             â”‚ (Peak-Preserving Decimation: decimate_min_max)
-                             â”‚ (Decoupled Spectral Computation: ~5 Hz)
-                             â–¼
+                             │ (Peak-Preserving Decimation: decimate_min_max)
+                             │ (Decoupled Spectral Computation: ~5 Hz)
+                             ▼
                      Bounded Drop-Oldest Queue (ClientSession, maxsize=2)
-                             â”‚ (Display frame drops DO NOT affect recording)
-                             â”‚ (Hardware sequence_gaps NEVER increment on UI drop)
-                             â–¼
+                             │ (Display frame drops DO NOT affect recording)
+                             │ (Hardware sequence_gaps NEVER increment on UI drop)
+                             ▼
                      Lower-Rate WebSocket UI (display_frame @ 25 Hz)
-                             â”‚
-                             â–¼
+                             │
+                             ▼
                      React Desktop Client (LiveWorkspace / Canvas)
 ```
 
@@ -224,39 +224,39 @@ FULL-RATE DSP (48 kHz Bandpass)           FULL-RATE SessionRecorder (48 kHz WAV)
 ## 7. Session Analysis & Reference-vs-Capture Workbench
 
 ```text
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”       â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚ Reference Asset Storage         â”‚       â”‚ Session Recordings              â”‚
-â”‚ experiments/analysis-assets/    â”‚       â”‚ experiments/sessions/           â”‚
-â”‚ (Isolated, traversal-protected) â”‚       â”‚ (WAV + JSON Provenance)         â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜       â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                 â”‚                                         â”‚
-                 â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                                     â”‚
-                                     â–¼
-                     â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-                     â”‚ AnalysisService (pcg_app)     â”‚
-                     â”‚ - Path validation             â”‚
-                     â”‚ - Rational resampling         â”‚
-                     â”‚ - Display decimation (<=600)  â”‚
-                     â”‚ - Report persistence          â”‚
-                     â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                                     â”‚ Reuses DSP & Validation Math
-                                     â–¼
-                     â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-                     â”‚ pcg_core.validation           â”‚
-                     â”‚ - Cross-correlation delay     â”‚
-                     â”‚ - Least-squares gain (g)      â”‚
-                     â”‚ - RMSE, NRMSE, SER (dB)       â”‚
-                     â”‚ - Welch PSD & Coherence       â”‚
-                     â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                                     â”‚
-                                     â–¼
-                     â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-                     â”‚ AnalysisComparisonResult      â”‚
-                     â”‚ experiments/analysis/<id>/    â”‚
-                     â”‚ - Zero machine-specific paths â”‚
-                     â”‚ - Complete provenance metadataâ”‚
-                     â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+┌─────────────────────────────────┐       ┌─────────────────────────────────┐
+│ Reference Asset Storage         │       │ Session Recordings              │
+│ experiments/analysis-assets/    │       │ experiments/sessions/           │
+│ (Isolated, traversal-protected) │       │ (WAV + JSON Provenance)         │
+└────────────────┬────────────────┘       └────────────────┬────────────────┘
+                 │                                         │
+                 └───────────────────┬─────────────────────┘
+                                     │
+                                     ▼
+                     ┌───────────────────────────────┐
+                     │ AnalysisService (pcg_app)     │
+                     │ - Path validation             │
+                     │ - Rational resampling         │
+                     │ - Display decimation (<=600)  │
+                     │ - Report persistence          │
+                     └───────────────┬───────────────┘
+                                     │ Reuses DSP & Validation Math
+                                     ▼
+                     ┌───────────────────────────────┐
+                     │ pcg_core.validation           │
+                     │ - Cross-correlation delay     │
+                     │ - Least-squares gain (g)      │
+                     │ - RMSE, NRMSE, SER (dB)       │
+                     │ - Welch PSD & Coherence       │
+                     └───────────────┬───────────────┘
+                                     │
+                                     ▼
+                     ┌───────────────────────────────┐
+                     │ AnalysisComparisonResult      │
+                     │ experiments/analysis/<id>/    │
+                     │ - Zero machine-specific paths │
+                     │ - Complete provenance metadata│
+                     └───────────────────────────────┘
 ```
 
 ### Architectural Principles:

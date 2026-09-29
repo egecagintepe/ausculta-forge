@@ -1,72 +1,72 @@
-# 03 â€” CanlÄ± AkÄ±ÅŸ Mimarisi ve Kayan Pencere Tamponu (Rolling Buffer)
+# 03 — Canlı Akış Mimarisi ve Kayan Pencere Tamponu (Rolling Buffer)
 
 ## Bu nedir?
 
-CanlÄ± akÄ±ÅŸ mimarisi, sÃ¼rekli gelen ses verisinin parÃ§a parÃ§a (bloklar halinde) sisteme kabul edilmesi ve son $N$ saniyelik geÃ§miÅŸin (Ã¶r. son 5 saniye) analiz ve gÃ¶rselleÅŸtirme iÃ§in bellekte kayan bir pencere (rolling buffer) iÃ§inde canlÄ± tutulmasÄ±dÄ±r.
+Canlı akış mimarisi, sürekli gelen ses verisinin parça parça (bloklar halinde) sisteme kabul edilmesi ve son $N$ saniyelik geçmişin (ör. son 5 saniye) analiz ve görselleştirme için bellekte kayan bir pencere (rolling buffer) içinde canlı tutulmasıdır.
 
 ---
 
-## Blok TabanlÄ± AkÄ±ÅŸ (Block/Chunk-Based Streaming)
+## Blok Tabanlı Akış (Block/Chunk-Based Streaming)
 
-### Neden Tek Tek Ã–rnek (Sample-by-Sample) DeÄŸil?
-Dijital ses iÅŸlemede iki uÃ§ yaklaÅŸÄ±m vardÄ±r:
-1. **Tek Ã–rnek (Sample-by-sample):** Her Ã¶rnek iÃ§in bir kesme veya Python fonksiyon Ã§aÄŸrÄ±sÄ± yapÄ±lÄ±r. Saniyede 2000 kez Ã§aÄŸrÄ± yapmak CPU baÄŸlam deÄŸiÅŸtirme (context-switch) ve yorumlayÄ±cÄ± (interpreter) ek yÃ¼kÃ¼ doÄŸurur.
-2. **Toplu Veri (Batch):** KaydÄ±n tamamÄ± (Ã¶r. 30 saniye) bittikten sonra iÅŸlenir. CanlÄ± izleme ve eÅŸzamanlÄ± gÃ¶rselleÅŸtirme yapÄ±lamaz.
+### Neden Tek Tek Örnek (Sample-by-Sample) Değil?
+Dijital ses işlemede iki uç yaklaşım vardır:
+1. **Tek Örnek (Sample-by-sample):** Her örnek için bir kesme veya Python fonksiyon çağrısı yapılır. Saniyede 2000 kez çağrı yapmak CPU bağlam değiştirme (context-switch) ve yorumlayıcı (interpreter) ek yükü doğurur.
+2. **Toplu Veri (Batch):** Kaydın tamamı (ör. 30 saniye) bittikten sonra işlenir. Canlı izleme ve eşzamanlı görselleştirme yapılamaz.
 
-**AuscultaForge Ã‡Ã¶zÃ¼mÃ¼:** Veriler 256 Ã¶rneklik sabit bloklar halinde akar.
-- $f_s = 2000\text{ Hz}$ iÃ§in blok sÃ¼resi: $\frac{256}{2000} = 128\text{ ms}$.
-- $f_s = 4000\text{ Hz}$ iÃ§in blok sÃ¼resi: $\frac{256}{4000} = 64\text{ ms}$.
+**AuscultaForge Çözümü:** Veriler 256 örneklik sabit bloklar halinde akar.
+- $f_s = 2000\text{ Hz}$ için blok süresi: $\frac{256}{2000} = 128\text{ ms}$.
+- $f_s = 4000\text{ Hz}$ için blok süresi: $\frac{256}{4000} = 64\text{ ms}$.
 
 > [!NOTE]
-> **Gecikme (Latency) Analizi:** 128 ms'lik blok sÃ¼resi uÃ§tan uca gecikmenin tek belirleyicisi deÄŸildir; gecikmeye doÄŸrudan katkÄ± saÄŸlayan temel bileÅŸenlerden biridir. Toplam uÃ§tan uca gecikme; sensÃ¶r edinimi, iletim (transport/UART), tamponlama, DSP filtreleme hesaplama sÃ¼resi ve kullanÄ±cÄ± arayÃ¼zÃ¼ (UI) Ã§izim gecikmelerinin toplamÄ±ndan oluÅŸur. 256 Ã¶rneklik bloklama, Python ve NumPy vektÃ¶rel iÅŸlemlerine yÃ¼ksek hesaplama verimliliÄŸi sunarken gecikmeyi kabul edilebilir sÄ±nÄ±rlar iÃ§inde tutmak iÃ§in seÃ§ilmiÅŸ bir mÃ¼hendislik takasÄ±dÄ±r (trade-off).
+> **Gecikme (Latency) Analizi:** 128 ms'lik blok süresi uçtan uca gecikmenin tek belirleyicisi değildir; gecikmeye doğrudan katkı sağlayan temel bileşenlerden biridir. Toplam uçtan uca gecikme; sensör edinimi, iletim (transport/UART), tamponlama, DSP filtreleme hesaplama süresi ve kullanıcı arayüzü (UI) çizim gecikmelerinin toplamından oluşur. 256 örneklik bloklama, Python ve NumPy vektörel işlemlerine yüksek hesaplama verimliliği sunarken gecikmeyi kabul edilebilir sınırlar içinde tutmak için seçilmiş bir mühendislik takasıdır (trade-off).
 
 ---
 
-## SÄ±ra NumaralarÄ± ve Zaman DamgalarÄ±
+## Sıra Numaraları ve Zaman Damgaları
 
-Her `SampleBlock` iki kritik metaveri taÅŸÄ±r:
-1. **`sequence` (SÄ±ra NumarasÄ±):** $0, 1, 2, \dots$ ÅŸeklinde artan tamsayÄ±dÄ±r. Projemizde akÄ±ÅŸ sÄ±rasÄ±nda kaybolan, yinelenen veya sÄ±rasÄ± bozulan bloklarÄ± tespit etmek iÃ§in kullanÄ±lan birincil aÃ§Ä±k (explicit) denetim mekanizmasÄ±dÄ±r.
-2. **`timestamp_s` (Zaman DamgasÄ±):** BloÄŸun baÅŸlangÄ±Ã§ zamanÄ±dÄ±r. Zaman damgalarÄ± saat kaymasÄ±nÄ± (drift) tek baÅŸÄ±na engellemez; ancak zamanlama analizi yapmayÄ±, donanÄ±m-yazÄ±lÄ±m saat kaymalarÄ±nÄ± tespit etmeyi (drift detection), zamansal hizalamayÄ± ve Ã§oklu modalite (Ã¶r. ileride olasÄ± EKG entegrasyonu) iÃ§in senkronizasyonu mÃ¼mkÃ¼n kÄ±lar.
+Her `SampleBlock` iki kritik metaveri taşır:
+1. **`sequence` (Sıra Numarası):** $0, 1, 2, \dots$ şeklinde artan tamsayıdır. Projemizde akış sırasında kaybolan, yinelenen veya sırası bozulan blokları tespit etmek için kullanılan birincil açık (explicit) denetim mekanizmasıdır.
+2. **`timestamp_s` (Zaman Damgası):** Bloğun başlangıç zamanıdır. Zaman damgaları saat kaymasını (drift) tek başına engellemez; ancak zamanlama analizi yapmayı, donanım-yazılım saat kaymalarını tespit etmeyi (drift detection), zamansal hizalamayı ve çoklu modalite (ör. ileride olası EKG entegrasyonu) için senkronizasyonu mümkün kılar.
 
 ---
 
 ## Kayan Pencere Tamponu: `RollingBuffer`
 
-[`software/pcg_core/buffers.py`](../../software/pcg_core/buffers.py) sÄ±nÄ±fÄ± sabit sÃ¼reli bir FIFO (First-In-First-Out) bellek alanÄ± yÃ¶netir.
+[`software/pcg_core/buffers.py`](../../software/pcg_core/buffers.py) sınıfı sabit süreli bir FIFO (First-In-First-Out) bellek alanı yönetir.
 
 ```text
-Kapasite: 5.0 saniye (fs=2000 Hz => 10,000 Ã¶rnek)
+Kapasite: 5.0 saniye (fs=2000 Hz => 10,000 örnek)
 
-[â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Eski Ã–rnekler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€]
-                       â”‚
-                       â”‚ Yeni blok gelir (+256 Ã¶rnek)
-                       â–¼
-[â”€â”€ En Eski 256 AtÄ±lÄ±r â”€â”€][â”€â”€ KaydÄ±rÄ±lÄ±r â”€â”€][â”€â”€ Yeni 256 Eklenir â”€â”€]
+[──────────────── Eski Örnekler ────────────────]
+                       │
+                       │ Yeni blok gelir (+256 örnek)
+                       ▼
+[── En Eski 256 Atılır ──][── Kaydırılır ──][── Yeni 256 Eklenir ──]
 ```
 
-### Algoritmik Ã–zellikler
-- **BitiÅŸik Bellek ve KaydÄ±rma (Contiguous In-Place Shift):** RollingBuffer, klasik bir dairesel/halka tampon (ring buffer) olarak DEÄÄ°L, yeni bloklar geldikÃ§e veriyi dizi iÃ§inde sola kaydÄ±ran (in-place shift) bitiÅŸik bir tampon olarak uygulanmÄ±ÅŸtÄ±r. TÃ¼keticiler (get_samples() veya get_view()) daima kronolojik sÄ±rada tek parÃ§a bir 1D NumPy dizisi alÄ±r; halka tamponlardaki gibi indeks sarma (wrap-around) veya iki parÃ§alÄ± dilimleme hesaplamalarÄ±na gerek kalmaz.
-- **Dinamik Kapasite BaÅŸlatma:** Tampon yaratÄ±lÄ±rken $f_s$ bilinmiyorsa, gelen ilk `SampleBlock`'un frekansÄ±na gÃ¶re $N = \text{int}(\text{capacity\_seconds} \times f_s)$ olarak boyutlandÄ±rÄ±lÄ±r.
-- **Frekans DeÄŸiÅŸimi UyarlamasÄ±:** AkÄ±ÅŸ ortasÄ±nda mikrodenetleyici Ã¶rnekleme frekansÄ±nÄ± deÄŸiÅŸtirirse `reset_sample_rate()` ile tampon gÃ¼venle yeniden Ã¶lÃ§eklendirilir.
+### Algoritmik Özellikler
+- **Bitişik Bellek ve Kaydırma (Contiguous In-Place Shift):** RollingBuffer, klasik bir dairesel/halka tampon (ring buffer) olarak DEĞİL, yeni bloklar geldikçe veriyi dizi içinde sola kaydıran (in-place shift) bitişik bir tampon olarak uygulanmıştır. Tüketiciler (get_samples() veya get_view()) daima kronolojik sırada tek parça bir 1D NumPy dizisi alır; halka tamponlardaki gibi indeks sarma (wrap-around) veya iki parçalı dilimleme hesaplamalarına gerek kalmaz.
+- **Dinamik Kapasite Başlatma:** Tampon yaratılırken $f_s$ bilinmiyorsa, gelen ilk `SampleBlock`'un frekansına göre $N = \text{int}(\text{capacity\_seconds} \times f_s)$ olarak boyutlandırılır.
+- **Frekans Değişimi Uyarlaması:** Akış ortasında mikrodenetleyici örnekleme frekansını değiştirirse `reset_sample_rate()` ile tampon güvenle yeniden ölçeklendirilir.
 
 ---
 
-## Neden Bu TasarÄ±m SeÃ§ildi? Hangi Problemleri Ã–nlÃ¼yor?
+## Neden Bu Tasarım Seçildi? Hangi Problemleri Önlüyor?
 
-- **Bellek ÅiÅŸmesini (Memory Leak) Ã–nler:** SÃ¼rekli Ã§alÄ±ÅŸan bir canlÄ± sinyal edinim sisteminde ses dizisi sÄ±nÄ±rsÄ±z bÃ¼yÃ¼yemez; `RollingBuffer` bellek kullanÄ±mÄ±nÄ± sabit (birkaÃ§ yÃ¼z kilobayt) tutar.
-- **CanlÄ± Metrik TutarlÄ±lÄ±ÄŸÄ±:** RMS, tepe genlik ve frekans daÄŸÄ±lÄ±mÄ± tÃ¼m kaydÄ±n ortalamasÄ± yerine, incelenen test sinyalinin *son birkaÃ§ saniyelik* anlÄ±k akustik davranÄ±ÅŸÄ±nÄ± yansÄ±tÄ±r.
+- **Bellek Şişmesini (Memory Leak) Önler:** Sürekli çalışan bir canlı sinyal edinim sisteminde ses dizisi sınırsız büyüyemez; `RollingBuffer` bellek kullanımını sabit (birkaç yüz kilobayt) tutar.
+- **Canlı Metrik Tutarlılığı:** RMS, tepe genlik ve frekans dağılımı tüm kaydın ortalaması yerine, incelenen test sinyalinin *son birkaç saniyelik* anlık akustik davranışını yansıtır.
 
 ---
 
-## Ä°lgili Dosyalar ve Testler
+## İlgili Dosyalar ve Testler
 
-- Tampon uygulamasÄ±: [`software/pcg_core/buffers.py`](../../software/pcg_core/buffers.py)
-- AkÄ±ÅŸ motoru: [`software/pcg_core/streaming.py`](../../software/pcg_core/streaming.py#L208-L270)
-- CanlÄ± CLI gÃ¶sterimi: [`software/pcg_core/stream_demo.py`](../../software/pcg_core/stream_demo.py)
+- Tampon uygulaması: [`software/pcg_core/buffers.py`](../../software/pcg_core/buffers.py)
+- Akış motoru: [`software/pcg_core/streaming.py`](../../software/pcg_core/streaming.py#L208-L270)
+- Canlı CLI gösterimi: [`software/pcg_core/stream_demo.py`](../../software/pcg_core/stream_demo.py)
 - Testler: [`software/tests/test_streaming.py`](../../software/tests/test_streaming.py#L56-L95)
 
 ---
 
-## Sunumda / Savunmada 30 Saniyelik AÃ§Ä±klama
+## Sunumda / Savunmada 30 Saniyelik Açıklama
 
-> *"GerÃ§ek zamanlÄ± kalp sesi simÃ¼lasyonunda veriyi 256 Ã¶rneklik bloklar halinde iÅŸliyoruz; bu blok sÃ¼resi (2000 Hz'de 128 ms), uÃ§tan uca gecikmeyi dÃ¼ÅŸÃ¼k tutarken NumPy iÅŸlemlerinde yÃ¼ksek hesaplama verimliliÄŸi saÄŸlar. `RollingBuffer` yapÄ±mÄ±z ise bellekte sinyalin son 5 saniyelik geÃ§miÅŸini kayan bir pencere iÃ§inde tutar. Yeni bloklar geldikÃ§e en eskiler atÄ±lÄ±r; bÃ¶ylece bellek sabit kalÄ±rken sisteme ve gelecekteki kullanÄ±cÄ± arayÃ¼zÃ¼ne anlÄ±k gÃ¼ncellenen RMS ve spektrum bilgisi sunulur."*
+> *"Gerçek zamanlı kalp sesi simülasyonunda veriyi 256 örneklik bloklar halinde işliyoruz; bu blok süresi (2000 Hz'de 128 ms), uçtan uca gecikmeyi düşük tutarken NumPy işlemlerinde yüksek hesaplama verimliliği sağlar. `RollingBuffer` yapımız ise bellekte sinyalin son 5 saniyelik geçmişini kayan bir pencere içinde tutar. Yeni bloklar geldikçe en eskiler atılır; böylece bellek sabit kalırken sisteme ve gelecekteki kullanıcı arayüzüne anlık güncellenen RMS ve spektrum bilgisi sunulur."*
