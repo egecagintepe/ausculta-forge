@@ -1,8 +1,10 @@
-# AuscultaForge — Scientific Research Foundation & Literature Governance
+# Scientific Research Foundation & Literature Governance
+## Smart Digital Stethoscope: Heart Sound Acquisition, Signal Processing and Quality Assessment
+### EEE495 / EEE496 Senior Design Project (Platform / Software Codename: `AuscultaForge`)
 
 ## 1. Purpose & Governance
 
-AuscultaForge is an engineering and scientific research platform for digital phonocardiography (PCG), acoustic phantom validation, and biomedical signal analysis.
+AuscultaForge is the software and engineering research platform for the digital phonocardiography (PCG), acoustic phantom validation, and biomedical signal analysis subcomponents of the Senior Design Project.
 
 To prevent academic dilution, undocumented heuristics, or fabricated medical claims, **all signal-processing and analysis algorithms in AuscultaForge must be grounded in peer-reviewed literature and rigorous discrete-time signal processing theory**.
 
@@ -10,29 +12,29 @@ From this milestone onward, every algorithm follows the **AuscultaForge Traceabi
 
 ```text
 Physical Problem
-       │
-       ▼
+       â”‚
+       â–¼
 Mathematical Model
-       │
-       ▼
+       â”‚
+       â–¼
 Assumptions & Validity Conditions
-       │
-       ▼
+       â”‚
+       â–¼
 Literature Source / Citation
-       │
-       ▼
+       â”‚
+       â–¼
 Algorithm & Parameter Configuration
-       │
-       ▼
+       â”‚
+       â–¼
 Deterministic Software Implementation
-       │
-       ▼
+       â”‚
+       â–¼
 Deterministic Automated Unit Tests
-       │
-       ▼
+       â”‚
+       â–¼
 Versioned Provenance & Metadata
-       │
-       ▼
+       â”‚
+       â–¼
 UI Visual Presentation & Scientific Interpretation
 ```
 
@@ -42,24 +44,24 @@ UI Visual Presentation & Scientific Interpretation
 
 ```text
 docs/research/
-├── README.md                     # This document: governance & research directory map
-├── SOURCE_REGISTRY.md            # Authoritative index of literature sources (R001–R008)
-├── THEORY_MAP.md                 # Physical acoustic chain to mathematical abstractions
-├── ALGORITHM_DECISIONS.md        # Decision records: CORE_NOW, NEXT_DSP, RESEARCH_LATER, REJECTED
-├── SCIENTIFIC_CONVENTIONS.md     # 3-representation model, sampling policies, automatic analysis
-├── MATH_CONVENTIONS.md           # Rigorous mathematical definitions and notation
-├── UNITS_AND_CALIBRATION.md      # Strict units policy (prohibition of uncalibrated Pa/dB SPL)
-├── ANALYSIS_PROFILES.md          # Versioned scientific configurations (RAW, GENERAL, PHANTOM, etc.)
-├── RESEARCH_BACKLOG.md           # Open research gaps requiring formal literature grounding
-└── sources/                      # Individual source dossier cards (R001–R008)
-    ├── R001-rangayyan-biomedical-signal-analysis.md
-    ├── R002-oppenheim-discrete-time-signal-processing.md
-    ├── R003-heinzel-spectrum-estimation.md
-    ├── R004-welch-power-spectrum-estimation.md
-    ├── R005-schmidt-duration-dependent-hmm.md
-    ├── R006-springer-logistic-regression-hsmm.md
-    ├── R007-liu-hsmm-independent-database-evaluation.md
-    └── R008-rangayyan-biomedical-image-analysis.md  (LOW DIRECT RELEVANCE)
+â”œâ”€â”€ README.md                     # This document: governance & research directory map
+â”œâ”€â”€ SOURCE_REGISTRY.md            # Authoritative index of literature sources (R001â€“R008)
+â”œâ”€â”€ THEORY_MAP.md                 # Physical acoustic chain to mathematical abstractions
+â”œâ”€â”€ ALGORITHM_DECISIONS.md        # Decision records: CORE_NOW, NEXT_DSP, RESEARCH_LATER, REJECTED
+â”œâ”€â”€ SCIENTIFIC_CONVENTIONS.md     # 3-representation model, sampling policies, automatic analysis
+â”œâ”€â”€ MATH_CONVENTIONS.md           # Rigorous mathematical definitions and notation
+â”œâ”€â”€ UNITS_AND_CALIBRATION.md      # Strict units policy (prohibition of uncalibrated Pa/dB SPL)
+â”œâ”€â”€ ANALYSIS_PROFILES.md          # Versioned scientific configurations (RAW, GENERAL, PHANTOM, etc.)
+â”œâ”€â”€ RESEARCH_BACKLOG.md           # Open research gaps requiring formal literature grounding
+â””â”€â”€ sources/                      # Individual source dossier cards (R001â€“R008)
+    â”œâ”€â”€ R001-rangayyan-biomedical-signal-analysis.md
+    â”œâ”€â”€ R002-oppenheim-discrete-time-signal-processing.md
+    â”œâ”€â”€ R003-heinzel-spectrum-estimation.md
+    â”œâ”€â”€ R004-welch-power-spectrum-estimation.md
+    â”œâ”€â”€ R005-schmidt-duration-dependent-hmm.md
+    â”œâ”€â”€ R006-springer-logistic-regression-hsmm.md
+    â”œâ”€â”€ R007-liu-hsmm-independent-database-evaluation.md
+    â””â”€â”€ R008-rangayyan-biomedical-image-analysis.md  (LOW DIRECT RELEVANCE)
 ```
 
 ---
@@ -85,7 +87,7 @@ AuscultaForge enforces an absolute architectural separation across three distinc
 1. **ACQUISITION SIGNAL:**
    The master digital stream at the hardware boundary (Hardware Rev-A: 48 kHz, mono, signed 24 transmitted bits in 32-bit container), ingested as normalized full-rate float32 `SampleBlock` sequences on the host and preserved in full-rate float32 WAV session recordings.
 2. **ANALYSIS SIGNAL:**
-   An explicitly processed, filtered, or resampled representation used for a declared engineering task (e.g. 20–600 Hz bandpass, or 1000 Hz downsampled feature stream). Parameterized strictly via versioned `AnalysisProfile` declarations.
+   An explicitly processed, filtered, or resampled representation used for a declared engineering task (e.g. 20â€“600 Hz bandpass, or 1000 Hz downsampled feature stream). Parameterized strictly via versioned `AnalysisProfile` declarations.
 3. **DISPLAY SIGNAL:**
    A bounded, decimated representation ($\le 600$ points) computed via peak-preserving min/max aggregation (`decimate_aligned_traces_shared_time`) strictly used for UI visual rendering. **Display data never enters quantitative metric calculations.**
 

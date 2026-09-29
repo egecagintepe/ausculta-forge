@@ -1,76 +1,176 @@
-# AuscultaForge
+# Smart Digital Stethoscope
 
-**AuscultaForge** is an engineering capstone design project developing a digital phonocardiogram (PCG) stethoscope system aimed at reliable heart sound acquisition, embedded sampling, real-time PC streaming, and digital signal processing. High-fidelity acoustic reproduction and clinical utility are design targets to be experimentally validated.
+**Heart Sound Acquisition, Signal Processing and Quality Assessment**
 
----
-
-## Current Project Status & Milestone
-
-- **Current Status:** Foundation phase. The core software streaming abstraction, mock PCG generator, stateful Butterworth bandpass filtering, and test suite are operational. No GUI, AI, or embedded preprocessing components are implemented yet.
-- **Current Milestone:**
-  $$\text{physical/acoustic source} \longrightarrow \text{microphone/transducer} \longrightarrow \text{MCU/acquisition unit} \longrightarrow \text{PC} \longrightarrow \text{real-time PCG samples}$$
+EEE495 / EEE496 Senior Design Project
+Department of Electrical and Electronics Engineering
+Repository / Software Codename: `AuscultaForge`
 
 ---
 
-## Scientific Traceability & Research Foundation
+## Project Overview
 
-AuscultaForge is an engineering validation and research platform, **not a clinical diagnostic tool**. To ensure scientific integrity, all digital signal processing, spectral estimation, filtering, and phantom validation methods are governed by peer-reviewed literature and formal discrete-time signal processing theory.
+This repository contains the implementation developed for the EEE495/EEE496 Senior Design Project titled **"Smart Digital Stethoscope: Heart Sound Acquisition, Signal Processing and Quality Assessment"** in the Department of Electrical and Electronics Engineering.
 
-Every algorithm in AuscultaForge follows the strict **Traceability Chain**:
-$$\text{Physical Problem} \longrightarrow \text{Mathematical Model} \longrightarrow \text{Assumptions} \longrightarrow \text{Literature Citation} \longrightarrow \text{Implementation} \longrightarrow \text{Deterministic Tests} \longrightarrow \text{Provenance Metadata} \longrightarrow \text{UI Interpretation}$$
+The project investigates a complete digital stethoscope acquisition chainâ€”from the acoustic chestpiece and transducer front-end, through embedded microcontroller acquisition and streaming, to a host computer applicationâ€”supported by repeatable acoustic phantom characterisation and recording-quality assessment.
 
-### Core Architectural Invariants:
-1. **Three Signal Representations:** Absolute separation between **Acquisition Signal** (48 kHz raw hardware stream, normalized to full-rate float32 on the host), **Analysis Signal** (explicitly filtered/resampled for declared engineering tasks), and **Display Signal** (bounded $\le 600$ points peak-preserving representation for UI rendering only).
-2. **Units & Calibration Policy:** Uncalibrated acoustic units ($\text{Pa}$, $\text{dB SPL}$) are strictly prohibited. Allowed units are raw PCM codes, normalized full scale ($\text{FS}$), $\text{FS}^2/\text{Hz}$, and explicit relative $\text{dBFS}$.
-3. **No Unsupported Clinical Claims:** Literature presets (e.g. 20–600 Hz Butterworth) are labeled as development presets, never as universal medical or diagnostic standards.
+The internal repository and software platform codename is **AuscultaForge**.
 
-For detailed documentation, literature citations (R001–R008), mathematical definitions, algorithm decision logs, and open metrology research gaps, refer to the [**Research Foundation Registry**](docs/research/README.md).
+> [!NOTE]
+> **Engineering Prototype Notice:**
+> This project is an undergraduate engineering capstone prototype and experimental research platform. It is **not** a certified medical device, does **not** provide clinical diagnostic interpretations, and does **not** involve human-subject clinical trials. All physical acoustic characterisation is performed on bench acoustic phantoms.
 
 ---
 
+## Formal Project Scope & Boundaries
 
-## High-Level Architecture
+The project scope is strictly governed by the official EEE495/EEE496 design requirements:
 
-The system pipeline is designed with strict layer separation. Input acquisition is abstracted behind a common `SampleBlock` container, allowing identical DSP algorithms and downstream analysis to run seamlessly on synthetic mock signals, offline WAV files, USB-UART serial streams, or future wireless transports.
+### Core Scope
+- **Acoustic Modality:** Cardiac phonocardiography (PCG / heart sounds) only.
+- **Acquisition Hardware:** Team-designed acoustic chestpiece coupling, microphone transducer selection, and analogue signal conditioning.
+- **Embedded Acquisition & Data Path:** Microcontroller audio sampling (nominal 48 kHz continuous acquisition baseline), DMA buffering, sample continuity tracking, and wired transport to host.
+- **Host Computer Application:** Real-time waveform display, spectrogram, session recording with technical metadata sidecars, device status tracking, and recording-quality assessment.
+- **Acoustic Phantom:** Repeatable physical bench test fixture (audio exciter, power amplifier, compliant silicone/gel tissue layer, and rigid mounting frame).
+- **Engineering Characterisation:** Formal measurement of frequency response, signal-to-noise ratio, repeatability, mains interference, end-to-end latency, and stream continuity.
+- **Automated Workflow:** Script-driven, reproducible measurement and verification pipeline.
+
+### Fixed Boundaries & Academic Constraints
+- **No Human Subjects:** All physical acoustic verification is conducted strictly on laboratory acoustic phantoms.
+- **No Diagnostic Claims:** The platform assesses technical signal quality and physical transmission fidelity, not medical pathology.
+- **No Lung Sound Scope:** Restricted strictly to phonocardiographic cardiac acoustics ($20\text{--}500\text{ Hz}$).
+- **Machine Learning is Optional:** Diagnostic machine learning or automated classification is not a primary course success criterion.
+- **Photoplethysmography (PPG) is Excluded:** Focus remains on acoustic PCG.
+- **Custom PCB is Optional:** Initial development uses breadboard and dev-board setups. A soldered prototype (e.g., perfboard / stripboard) is entirely sufficient for course completion unless experimental measurements justify a custom PCB spin.
+
+---
+
+## Module Ownership
+
+The engineering responsibilities are divided into three distinct modules for individual assessment, Git contribution tracking, and capstone defense:
+
+| Module | Scope | Primary Owner | Key Responsibilities |
+|---|---|---|---|
+| **Module A** | Acquisition Hardware & Characterisation | **Kaan** | Transducer evaluation (electret vs MEMS), acoustic chestpiece coupling, analogue front-end conditioning, acoustic phantom design, physical test setup, and experimental characterisation. |
+| **Module B** | Embedded Acquisition & Data Path | **Ozan** | Microcontroller hardware integration, audio sampling, DMA ping-pong buffering, monotonic sample continuity counter, Native USB data transport, error telemetry, and Turkish local component sourcing (BOM). |
+| **Module C** | Computer Application & Quality Assessment | **Ege** | Host PC desktop application (React/TypeScript), FastAPI bridge service, streaming DSP pipeline, recording library with JSON metadata sidecars, recording-quality assessment, and automated test suite. |
+
+*Team members support each other across module boundaries during integration, but each module has one clear primary owner responsible for its engineering rigor and oral defense.*
+
+---
+
+## Expected Course Outputs & Current Status
+
+| Expected Output | Status | Evidence / Repository Location |
+|---|---|---|
+| **Working digital-stethoscope prototype** | IN PROGRESS | Breadboard / bench hardware assembly underway (Target: Week 5). |
+| **Team-designed acquisition electronics** | IN PROGRESS | Analogue front-end and transducer evaluation underway (`hardware/`). |
+| **Embedded firmware & ingestion path** | IN PROGRESS | ESP32-S3 Native USB data-path architecture designed (`firmware/`). |
+| **Documented device-to-computer protocol** | IN PROGRESS | Protocol requirements draft: [`docs/sdp/week-02/bc-interface-requirements.md`](docs/sdp/week-02/bc-interface-requirements.md). |
+| **PC Application â€” Live Waveform Display** | DONE | Bounded peak-preserving decimation pipeline: `software/pcg_app/display_pipeline.py`. |
+| **PC Application â€” Spectrogram Display** | DONE | Time-frequency STFT visualization in frontend and analysis engine (`software/pcg_core/analysis.py`). |
+| **PC Application â€” Session Recording & Metadata** | DONE | Dual persistence (raw audio WAV + JSON sidecar): `software/pcg_core/recording.py`. |
+| **PC Application â€” Device Control & Status** | DONE | Authoritative device lifecycle state machine: `software/pcg_app/device_runtime.py`. |
+| **PC Application â€” Recording-Quality Feedback** | DONE | Real-time and offline scalar metrics: `software/pcg_core/scientific/signal_quality.py`. |
+| **Repeatable acoustic phantom** | PLANNED | Phantom electro-acoustic requirements drafted (Exciter + Amp + Silicone + Frame). |
+| **Automated test suite** | DONE | Central test suite with 274+ automated tests: `software/tests/`. |
+| **Characterisation measurement report** | PLANNED | Protocols and measurement matrix formalized: [`docs/sdp/week-02/measurement-quality-plan.md`](docs/sdp/week-02/measurement-quality-plan.md). |
+| **Comparison of $\ge 2$ transducer candidates** | PLANNED | Technical selection criteria drafted for Week-3 evaluation (Electret vs MEMS). |
+| **Comparison of $\ge 2$ prototyping approaches** | PLANNED | Breadboard vs soldered prototype comparison planned for Semester I / II. |
+| **Quality check against controlled artefacts** | PLANNED | Physical friction, rubbing, and movement artefact testing scheduled for late Semester I. |
+| **Reproducible repository & documentation** | DONE | Comprehensive engineering knowledge base and reproducible experiment CLI runners. |
+
+---
+
+## Mandatory Engineering Measurements
+
+The course advisor mandates **six primary final physical measurements** to characterize the digital stethoscope prototype. These physical measurements cannot be replaced by software simulations or machine learning metrics:
+
+1. **Phantom Frequency Response ($20\text{--}500\text{ Hz}$):** End-to-end magnitude response $|H_1(f)|$ and coherence $\gamma_{xy}^2(f)$ estimated via the SISO best-linear estimator (`software/pcg_core/scientific/system_id.py`).
+2. **Signal-to-Noise Ratio (SNR):** Band-limited ($20\text{--}500\text{ Hz}$) ratio of active phantom PCG acoustic stimulus power to quiescent noise floor in relative dB.
+3. **Measurement Repeatability ($\ge 10$ Runs):** Statistical dispersion (mean, standard deviation, coefficient of variation, and min/max spread) across at least 10 identical, independent phantom measurements.
+4. **Mains Interference Level:** High-resolution spectral quantification of 50 Hz fundamental and harmonic pickup ($100, 150, 200, 250\text{ Hz}$) in dBFS under varied shielding and grounding arrangements.
+5. **End-to-End Latency:** Propagation delay from electrical/acoustic excitation at the phantom exciter to sample buffer ingestion on the host PC.
+6. **Dropped-Packet Rate:** Verification of 100% sample continuity via the monotonic sequence counter during prolonged streaming (including the advisor-mandated $\ge 30$-minute continuous acquisition test in Week 8).
+
+> [!IMPORTANT]
+> All physical measurements are currently marked **NOT YET MEASURED**. No numerical thresholds or fabricated values are applied prior to physical bench experiments.
+
+---
+
+## Academic Roadmap & Semester Milestones
 
 ```text
-[ Acoustic Head / Sensor ]
-          │
-          ▼
- [ Microphone / Transducer ]
-          │  (Analog / Digital interface)
-          ▼
-[ MCU / Acquisition Unit ]
- (Candidate: ESP32 family)
-          │  (Serial / Wire Stream)
-          ▼
-   [ Host PC Ingestion ]
-          │
-          ▼
-    SampleBlock  ───────────► Common streaming interface
-          │                   (sequence, timestamp, fs, samples)
-          ▼
-    DSP Pipeline
- (Streaming Bandpass)
-          │
-    ┌─────┴─────────────────────────┐
-    ▼                               ▼
-Metrics / Verification         Future UI & Logging
-(RMS, Peak, Crest Factor)
-```
+Semester I (EEE495) â€” Foundation & Feasibility
+â”œâ”€â”€ Week 02 (Current): Technical research, requirements draft, Turkish sourcing BOM v0.1.
+â”œâ”€â”€ Week 03: Component selection, frame format draft, purchase-ready BOM v1.0.
+â”œâ”€â”€ Week 04 GATE: Requirements specification frozen, components ordered, lab tools secured.
+â”œâ”€â”€ Week 05 GATE: Bench setup operational, known test signal captured end-to-end.
+â”œâ”€â”€ Week 08: 30-minute continuous streaming stability test.
+â”œâ”€â”€ Week 09 FEASIBILITY GATE: Phantom PCG capture with recognisable S1/S2 acoustic structure.
+â”‚                           (If unrecognisable: revise transducer/coupling before adding features).
+â””â”€â”€ Week 13: Baseline device works end-to-end (Phantom -> HW -> MCU -> PC App),
+             initial characterisation complete, interim report submitted.
 
-### Core Abstraction: `SampleBlock`
-The PC software does not couple directly to wire-level protocols or specific hardware peripherals. Any source produces uniform chunks of normalized 1D float32 audio data wrapped in `SampleBlock`, insulating the signal processing pipeline from sensor changes or protocol adjustments.
+Semester II (EEE496) â€” Hardening, Characterisation & Defense
+â”œâ”€â”€ Hardware hardening onto a soldered prototype (where justified by bench measurements).
+â”œâ”€â”€ Recording-quality evaluation validated against controlled physical artefacts.
+â”œâ”€â”€ Full characterisation campaign across all six mandatory measurements.
+â”œâ”€â”€ Microcontroller power consumption and host processing-load profiling.
+â””â”€â”€ Final engineering report, project demonstration, and capstone oral defense.
+```
 
 ---
 
-## Team Responsibility Areas
+## Advanced Existing Work (Supporting Research)
 
-| Team Member | Area of Responsibility | Key Focus Areas |
-|---|---|---|
-| **Ozan** | Hardware Component Selection, Schematics & PCB | Hardware component selection, Altium schematic & digital hardware skeleton, Native USB hardware routing, I2S routing & configurable ~6-pin header, LDO regulation, PCB layout, dev-board/breadboard integration. |
-| **Kaan** | Power Architecture & Acoustic Phantom Physical System | MCP73831 + PFET + Schottky power-path reference design & integration support, acoustic phantom physical system/chamber, speaker/exciter setup, acoustic/mechanical coupling, reference PCG playback setup, phantom test procedure. |
-| **Ege** | ESP32 Firmware, Transport Protocol, PC DSP & Integration | ESP32 firmware development, I2S + DMA acquisition, Native USB firmware & PC transport, MCU-to-PC packet/protocol design, PC software backend & DSP, UI integration, CRC/data integrity logic, repository management. |
+The repository contains advanced software and signal-processing implementations developed during early prototyping:
+
+- **Springer LR-HSMM Heart-Sound Segmentation:** Machine-learning-assisted segmentation (`software/pcg_core/segmentation/`) predicting cardiac states ($S_1$, systole, $S_2$, diastole) via duration-dependent Hidden Semi-Markov Models.
+- **CirCor Real-PCG Validation Infrastructure:** Automated benchmarking suite (`software/pcg_core/segmentation/validation/`) evaluating segmentation tolerance on open-access pediatric PCG records.
+- **Envelope Extraction Lab:** Stage-A analytical Hilbert, moving RMS, and Teager-Kaiser Energy Operator (TKEO) extractors (`software/pcg_core/scientific/envelopes.py`).
+- **SISO System Identification Workbench:** Cross-spectral transfer function and coherence estimation tools (`software/pcg_core/scientific/system_id.py`).
+
+> [!NOTE]
+> **Academic Scope Distinction:**
+> These capabilities represent **ADVANCED / SUPPORTING RESEARCH**. They provide valuable scientific insight and offline verification tools, but they do **NOT** fulfill or substitute for the mandatory physical acquisition hardware, acoustic phantom experiments, and hardware characterisation required by the course.
+
+---
+
+## High-Level System Architecture
+
+The AuscultaForge software pipeline enforces strict layer separation. Input acquisition is abstracted behind a common `SampleBlock` container, allowing identical DSP algorithms, filtering, and downstream analysis to run seamlessly on physical hardware streams, offline WAV files, or synthetic mock sources.
+
+```text
+[ Acoustic Phantom / Test Exciter ]
+                â”‚
+                â–¼
+[ Stethoscope Chestpiece & Microphone ]
+  (Electret Condenser or MEMS Transducer)
+                â”‚  (Analogue / I2S Interface)
+                â–¼
+[ Microcontroller Acquisition Unit ]
+  (ESP32-S3: Sampling, DMA Double-Buffering, Continuity Counter)
+                â”‚  (Wired Native USB Stream)
+                â–¼
+      [ Host PC Ingestion ]
+                â”‚
+                â–¼
+           SampleBlock  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–º Common Streaming Interface
+                â”‚                    (sequence, timestamp, fs, samples)
+                â–¼
+          DSP Pipeline
+       (Stateful Bandpass)
+                â”‚
+        â”Œâ”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+        â–¼                                â–¼
+   Live Metrics                 Display Pipeline
+(RMS, Peak, Crest)            (Peak-Preserving Decimation)
+        â”‚                                â”‚
+        â–¼                                â–¼
+Session Recording Sidecar          React Desktop UI
+ (WAV + JSON Metadata)         (Waveform & Spectrogram)
+```
 
 ---
 
@@ -78,160 +178,104 @@ The PC software does not couple directly to wire-level protocols or specific har
 
 ```text
 ausculta-forge/
-├── software/
-│   ├── pcg_core/           # PCG streaming abstractions, sources, DSP, metrics
-│   │   ├── __init__.py
-│   │   ├── models.py       # SampleBlock data structure
-│   │   ├── sources.py      # MockPCGSource, WavSource, and RealtimeWavSource
-│   │   ├── dsp.py          # StreamingBandpass filter (stateful sosfilt)
-│   │   ├── buffers.py      # RollingBuffer audio sliding window
-│   │   ├── streaming.py    # StreamQualityMonitor and LiveStreamingPipeline
-│   │   ├── metrics.py      # RMS, peak, crest factor calculations
-│   │   ├── analysis.py     # Offline PCG metrics and spectrogram computation
-│   │   ├── experiment.py   # Reproducible experiment runner & JSON reporter
-│   │   ├── validation.py   # Reference-vs-capture alignment and quantitative metrics
-│   │   ├── demo.py         # Standalone synthetic PCG pipeline demonstration
-│   │   ├── analyze.py      # CLI for real PCG WAV analysis
-│   │   ├── stream_demo.py  # CLI for live PCG streaming simulation
-│   │   └── validate_capture.py # CLI for reference-vs-capture validation & simulation
-│   ├── tests/              # Automated unit tests
-│   │   ├── test_core.py
-│   │   ├── test_analysis.py
-│   │   ├── test_streaming.py
-│   │   ├── test_experiment.py
-│   │   └── test_validation.py
-│   ├── pyproject.toml      # Packaging metadata for editable installation
-│   └── requirements.txt    # Python dependencies (numpy, scipy, pytest)
-├── firmware/               # Microcontroller firmware and communication drivers
-├── hardware/               # Schematics, PCB layouts, mechanical CAD, acoustic models
-├── experiments/            # Reproducible experiment configurations and runner
-│   ├── configs/            # Tracked experiment configuration files (e.g. baseline.json)
-│   └── output/             # (Ignored by git) Generated experiment JSON reports
-├── docs/                   # Architectural specs, protocols, and meeting notes
-│   ├── architecture/       # Detailed system design documents
-│   ├── knowledge-base/     # AuscultaForge Engineering Knowledge Base (study & capstone defense)
-│   ├── protocol/           # Draft MCU-to-PC communication specifications
-│   │   └── PROTOCOL_DRAFT.md
-│   └── meeting-notes/      # Engineering sprint & advisor meeting minutes
-├── data/                   # Dataset documentation & guidelines
-│   ├── raw/                # (Ignored by git) Untracked local raw datasets
-│   ├── processed/          # (Ignored by git) Untracked processed data
-│   └── README.md           # Dataset sources and acquisition policies
-├── .gitignore              # Ignores venvs, cache, audio, IDE, datasets, and logs
-├── pytest.ini              # Central pytest configuration
-└── README.md               # Project overview, setup, and architecture
+â”œâ”€â”€ software/
+â”‚   â”œâ”€â”€ pcg_app/            # FastAPI desktop bridge, device runtime, and display decimation
+â”‚   â”‚   â”œâ”€â”€ app.py          # REST & WebSocket server
+â”‚   â”‚   â”œâ”€â”€ device_runtime.py # Authoritative hardware lifecycle state machine
+â”‚   â”‚   â”œâ”€â”€ display_pipeline.py # Peak-preserving UI decimation (<= 600 points)
+â”‚   â”‚   â”œâ”€â”€ protocol.py     # Local WebSocket bridge protocol
+â”‚   â”‚   â””â”€â”€ state.py        # StreamManager and client session management
+â”‚   â”œâ”€â”€ pcg_core/           # Core signal processing, streaming, and scientific engines
+â”‚   â”‚   â”œâ”€â”€ models.py       # SampleBlock container dataclass
+â”‚   â”‚   â”œâ”€â”€ sources.py      # MockPCGSource, WavSource, RealtimeWavSource
+â”‚   â”‚   â”œâ”€â”€ dsp.py          # Stateful StreamingBandpass filter (sosfilt)
+â”‚   â”‚   â”œâ”€â”€ buffers.py      # RollingBuffer circular FIFO window
+â”‚   â”‚   â”œâ”€â”€ streaming.py    # StreamQualityMonitor continuity tracking
+â”‚   â”‚   â”œâ”€â”€ recording.py    # Dual persistence (raw WAV + JSON sidecar)
+â”‚   â”‚   â”œâ”€â”€ scientific/     # Full-rate spectral, envelope, and system ID engines
+â”‚   â”‚   â””â”€â”€ segmentation/   # Advanced research: Springer LR-HSMM & CirCor validation
+â”‚   â”œâ”€â”€ frontend/           # React / TypeScript / Vite local desktop UI
+â”‚   â”œâ”€â”€ tests/              # Automated pytest suite (37 test modules)
+â”‚   â”œâ”€â”€ pyproject.toml      # Packaging metadata for editable install
+â”‚   â””â”€â”€ requirements.txt    # Python dependencies (numpy, scipy, fastapi, pytest)
+â”œâ”€â”€ firmware/               # Microcontroller firmware and USB transport drivers
+â”œâ”€â”€ hardware/               # Analogue schematics, CAD, component evaluation, and BOM
+â”œâ”€â”€ experiments/            # Reproducible experiment configurations and runner scripts
+â”‚   â”œâ”€â”€ configs/            # Tracked configuration files (e.g. baseline.json)
+â”‚   â””â”€â”€ output/             # (Ignored by git) Local measurement outputs and reports
+â”œâ”€â”€ docs/                   # Engineering documentation and course deliverables
+â”‚   â”œâ”€â”€ sdp/week-02/        # Official Week-02 project-management pack
+â”‚   â”‚   â”œâ”€â”€ module-c-status.md
+â”‚   â”‚   â”œâ”€â”€ bc-interface-requirements.md
+â”‚   â”‚   â”œâ”€â”€ measurement-quality-plan.md
+â”‚   â”‚   â””â”€â”€ meeting-brief.md
+â”‚   â”œâ”€â”€ architecture/       # System design specifications
+â”‚   â”œâ”€â”€ knowledge-base/     # Comprehensive engineering knowledge base
+â”‚   â”œâ”€â”€ protocol/           # Wire-level MCU-to-PC protocol specifications
+â”‚   â””â”€â”€ research/           # Literature registry (R001â€“R008) and scientific conventions
+â”œâ”€â”€ data/                   # Dataset documentation & guidelines
+â”‚   â”œâ”€â”€ raw/                # (Ignored by git) Local raw audio recordings
+â”‚   â””â”€â”€ processed/          # (Ignored by git) Local processed datasets
+â”œâ”€â”€ .gitignore              # Ignores venvs, cache, audio data, and build artifacts
+â”œâ”€â”€ pytest.ini              # Pytest configuration
+â””â”€â”€ README.md               # Main project overview (this document)
 ```
 
 ---
 
-## Engineering Knowledge Base
-
-Comprehensive engineering explanations, design rationale, mathematical formulations, and capstone defense summaries for all AuscultaForge subsystems are maintained in the [Engineering Knowledge Base](docs/knowledge-base/README.md).
-
-The knowledge base covers:
-- [00. Proje Genel Bakışı & Ekip Rolleri](docs/knowledge-base/00-project-overview.md)
-- [01. PCG Temelleri & Örnekleme Prensipleri](docs/knowledge-base/01-pcg-fundamentals.md)
-- [02. SampleBlock ve Veri Kaynağı Soyutlaması](docs/knowledge-base/02-sampleblock-and-sources.md)
-- [03. Blok Tabanlı Akış ve Kayan Tampon](docs/knowledge-base/03-streaming-and-rolling-buffer.md)
-- [04. Sayısal İşaret İşleme (DSP) ve Durumlu Filtreleme](docs/knowledge-base/04-dsp-and-filtering.md)
-- [05. Spektral Analiz: FFT, Welch PSD ve Spektrogram](docs/knowledge-base/05-spectral-analysis.md)
-- [06. Akış Kalitesi İzleme (Stream Quality Monitoring)](docs/knowledge-base/06-stream-quality-monitoring.md)
-- [07. Test Stratejisi ve Doğrulama](docs/knowledge-base/07-testing-and-validation.md)
-- [08. Referans ve Yakalanan Sinyal Doğrulama](docs/knowledge-base/08-reference-vs-capture-validation.md)
-- [Mühendislik Terimleri Sözlüğü (Glossary)](docs/knowledge-base/GLOSSARY.md)
-
----
-
-## Software Setup Instructions
+## Software Setup & Verification
 
 ### Prerequisites
-- Python 3.11+ (Python 3.13 tested)
+- Python 3.11+ (Python 3.11â€“3.13 tested)
+- Node.js 18+ (for frontend desktop UI)
 - Git
 
 ### 1. Environment Setup
-
-Create and activate a virtual environment:
-
 ```bash
 # Clone the repository
 git clone https://github.com/egecagintepe/ausculta-forge.git
 cd ausculta-forge
 
-# Create virtual environment
+# Create and activate virtual environment
 python -m venv .venv
-
-# Activate on Windows:
+# On Windows:
 .venv\Scripts\activate
-# Activate on Linux/macOS:
+# On Linux/macOS:
 source .venv/bin/activate
-```
 
-### 2. Install Package & Dependencies
-
-Install dependencies and the `software/` package in editable mode:
-
-```bash
+# Install Python dependencies and package in editable mode
 pip install -r software/requirements.txt
 pip install -e ./software
 ```
 
-### 3. Run Automated Tests
-
-Tests can be executed directly from the repository root:
-
+### 2. Run Automated Tests
 ```bash
+# Execute central test suite from repository root
 pytest
 ```
 
-### 4. Run Demonstration & Analysis CLIs
-
-Run the synthetic demo:
-
+### 3. Run Demonstration & Simulation CLIs
 ```bash
+# Run synthetic PCG streaming pipeline demonstration
 python -m pcg_core.demo
-```
 
-Run offline analysis on a real PCG recording:
+# Run offline analysis on a real PCG WAV file
+python -m pcg_core.analyze data/raw/sample.wav
 
-```bash
-python -m pcg_core.analyze data/raw/a0001.wav
-```
+# Simulate live paced streaming playback
+python -m pcg_core.stream_demo data/raw/sample.wav
 
-Simulate live MCU streaming playback from a PCG recording:
+# Run reproducible experiment and generate JSON report
+python -m pcg_core.experiment --input data/raw/sample.wav --config experiments/configs/baseline.json
 
-```bash
-# Live playback at wall-clock speed:
-python -m pcg_core.stream_demo data/raw/a0001.wav
-
-# Or fast unpaced mode for quick benchmarks:
-python -m pcg_core.stream_demo data/raw/a0001.wav --fast
-```
-
-Run reproducible experiment and generate verifiable JSON report:
-
-```bash
-# Single file analysis:
-python -m pcg_core.experiment --input data/raw/a0001.wav --config experiments/configs/baseline.json
-
-# Batch processing over a directory:
-python -m pcg_core.experiment --input data/raw --config experiments/configs/baseline.json
-```
-
-Validate reference PCG against captured recording (or distorted simulation):
-
-```bash
-# Synthetic distorted bench simulation:
-python -m pcg_core.validate_capture --reference data/raw/a0001.wav --simulate --delay-ms 45 --gain 0.8 --noise-std 0.01 --save-report
-
-# Physical recording vs. reference validation:
-python -m pcg_core.validate_capture --reference data/raw/a0001.wav --capture data/raw/phantom_recording.wav --save-report
+# Run reference-vs-capture alignment validation
+python -m pcg_core.validate_capture --reference data/raw/ref.wav --simulate --delay-ms 45 --save-report
 ```
 
 ---
 
-## Design Principles & Project Constraints
-
-- **No Premature GUI / AI:** Focus strictly on clean signal acquisition, deterministic streaming, and filter verification before introducing GUI frameworks or machine learning.
-- **Protocol Flexibility:** The byte-level wire protocol between MCU and PC is currently in draft status (`docs/protocol/PROTOCOL_DRAFT.md`) and will be finalized iteratively between Kaan and Ege.
-- **Microphone Agnostic:** No assumption is made that the INMP441 or any particular sensor is final; the software ingest layer remains abstracted.
-- **Data Privacy:** Raw clinical recordings and medical datasets are never committed to Git.
+## References & Documentation Links
+- **Week-02 Project Planning Pack:** [`docs/sdp/week-02/`](docs/sdp/week-02/)
+- **Engineering Knowledge Base:** [`docs/knowledge-base/README.md`](docs/knowledge-base/README.md)
+- **Literature & Research Governance:** [`docs/research/README.md`](docs/research/README.md)
+- **System Architecture:** [`docs/architecture/README.md`](docs/architecture/README.md)
