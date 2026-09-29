@@ -68,7 +68,7 @@ Although the software foundation is substantially advanced, the following tasks 
 6. **Controlled Physical Artefact Tests:** Measurement and characterization of real physical friction, skin rubbing, hand tremor, ambient room speech, and acoustic leakage.
 7. **Physical Frequency Response Measurements:** Execution of swept-sine or multitone test sequences through the physical phantom transducer chain to measure real end-to-end transmission $H_1(f)$ from 20 to 500 Hz.
 8. **Physical SNR / Noise / Interference Measurements:** Measurement of quiescent acoustic/electrical noise floor and quantification of 50 Hz power-line mains hum in a physical bench environment.
-9. **Physical End-to-End Latency:** Experimental measurement of propagation time from physical transducer excitation to host application display frame delivery.
+9. **Physical End-to-End Latency:** Experimental measurement of propagation time from physical transducer excitation to host sample ingestion / sample availability in the acquisition pipeline (decoupled from GUI render timing).
 
 ---
 

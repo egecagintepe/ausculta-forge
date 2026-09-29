@@ -26,15 +26,15 @@ PC yazılımının güvenilir sinyal akışı ve tanılama için ihtiyaç duydu�
 | **Timestamp** | Zamanlama, jitter ve gecikme analizi | Kavramsal taslak |
 | **Sample Payload** | Sayısallaştırılmış PCG ses örnekleri bloğu | Kavramsal taslak (~4 kHz, 16/24-bit aday) |
 | **Status / Error Flags** | DMA taşması (overflow), donanım ve tampon durum bayrakları | Kavramsal taslak |
-| **CRC** | İletim hattı veri bütünlüğü ve bozulma tespiti | Kavramsal taslak |
+| **Bütünlük / Checksum (CRC)** | İletim hattı veri bütünlüğü ve bozulma tespiti (seçilirse) | Açık Karar (Aday: CRC-16 / CRC-32 / USB yerel kontrolü) |
 
-> **Önemli Kısıtlama:** Byte genişlikleri, endianness (byte sırası), paket boyutu, CRC polinomu, framing sınırlandırma karakterleri ve USB endpoint tipi henüz uydurulmamış/kilitlenmemiştir. Bu parametreler ilk dummy stream bench testlerinde Ege tarafından deneysel olarak belirlenecektir.
+> **Önemli Kısıtlama:** Byte genişlikleri, endianness (byte sırası), paket boyutu, CRC/checksum politikası ve polinomu, framing sınırlandırma karakterleri ve USB endpoint tipi henüz kilitlenmemiştir (Açık — Week 3). USB'nin kendi alt katman bütünlük mekanizmaları bulunduğundan, uygulama düzeyinde ek bir CRC gerekip gerekmediği Week 3 entegrasyon toplantısında kararlaştırılacaktır.
 
 ---
 
 ## 3. Temel Mimari Prensipler
 
 1. **Katman İzolasyonu:** UI ve veri görselleştirme katmanı asla USB, seri port veya donanım sürücüsü kodunu doğrudan bilmez.
-2. **`SampleBlock` Dönüşümü:** Donanımdan gelen her paket, PC tarafındaki sürücü katmanında doğrulanıp (CRC kontrolü yapılarak) doğrudan `SampleBlock` nesnesine dönüştürülür.
+2. **`SampleBlock` Dönüşümü:** Donanımdan gelen her paket, PC tarafındaki sürücü katmanında doğrulanıp doğrudan `SampleBlock` nesnesine dönüştürülür.
 3. **DSP Değişmezliği:** Aynı filtreleme, spektral analiz ve metrik hesaplama kodu `MockPCGSource`, `RealtimeWavSource` ve gelecekteki `NativeUsbSource` üzerinde sıfır değişiklikle çalışır.
-4. **Veri Bütünlüğü:** CRC hatası veya sıra numarası atlaması `StreamQualityMonitor` tarafından yakalanarak UI ve tanılama ekranına (Diagnostics Drawer) raporlanır.
+4. **Veri Bütünlüğü:** Bütünlük/CRC hatası veya sıra numarası atlaması `StreamQualityMonitor` tarafından yakalanarak UI ve tanılama ekranına (Diagnostics Drawer) raporlanır.
