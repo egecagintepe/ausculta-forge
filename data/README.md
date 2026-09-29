@@ -1,6 +1,8 @@
 # Data Directory
+## Smart Digital Stethoscope: Heart Sound Acquisition, Signal Processing and Quality Assessment
+### EEE495 / EEE496 Senior Design Project (Platform / Software Codename: `AuscultaForge`)
 
-This directory stores datasets, audio recordings, and benchmark data for the AuscultaForge project.
+This directory stores benchmark dataset guidelines and local recordings for the Smart Digital Stethoscope project.
 
 ## Policy: No Medical or Audio Data in Git
 
@@ -11,11 +13,11 @@ All binary dataset files (`.wav`, `.dat`, `.hea`, `.mat`, `.zip`, `.tar.gz`, etc
 
 ```text
 data/
-├── raw/               # Pristine, unmodified downloaded datasets
-│   └── .gitkeep
-├── processed/         # Cleaned, standardized, or resampled records
-│   └── .gitkeep
-└── README.md          # Documentation and acquisition guidelines
+â”œâ”€â”€ raw/               # Pristine, unmodified downloaded datasets
+â”‚   â””â”€â”€ .gitkeep
+â”œâ”€â”€ processed/         # Cleaned, standardized, or resampled records
+â”‚   â””â”€â”€ .gitkeep
+â””â”€â”€ README.md          # Documentation and acquisition guidelines
 ```
 
 ## Future Data Sources
@@ -34,8 +36,8 @@ When validating the DSP pipeline and heart sound segmentation offline, use bench
    - *Link:* [CirCor Heart Sound on PhysioNet](https://physionet.org/content/circor-heart-sound/1.0.3/)
 
 3. **In-house Test Recordings**
-   - Acquired using the prototype stethoscope (Ozan) and MCU digital stream (Kaan).
-   - Place in-house exploratory samples locally in `data/raw/prototype_recordings/` for DSP testing without tracking them in Git.
+   - Acquired using the prototype stethoscope front-end (Module A, Kaan) and MCU digital stream (Module B, Ozan).
+   - Place in-house exploratory samples locally in `data/raw/prototype_recordings/` for bench verification without tracking them in Git.
 
 ## Usage in Software
 

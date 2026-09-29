@@ -1,12 +1,17 @@
-# AuscultaForge — Firmware Directory
+# Firmware Directory
+## Smart Digital Stethoscope: Heart Sound Acquisition, Signal Processing and Quality Assessment
+### EEE495 / EEE496 Senior Design Project â€” Module B
+Software / Platform Codename: `AuscultaForge`
 
-This directory contains the embedded software running on the microcontroller (MCU).
+This directory contains the embedded software running on the microcontroller unit (MCU).
+
+---
 
 ## Scope & Responsibility
-- **Owner:** Ege
-- **Hardware Target:** ESP32-S3-WROOM development board (finalized Phase-1 platform)
+- **Primary Module Owner:** Ozan (Module B â€” Embedded Acquisition & Data Path)
+- **Hardware Target:** ESP32-S3 development board (Native USB exposed)
 - **Key Responsibilities:**
-  - I2S MEMS microphone acquisition (DMA double-buffering) at target ~4 kHz
+  - Transducer acquisition interface (ADC / I2S with DMA double-buffering) at nominal 48 kHz continuous baseline
   - Hardware transport: Wired Native USB (ESP32-S3 USB OTG / TinyUSB)
-  - Packet framing, sequence counting, timestamping, and CRC generation
-  - Status monitoring, packet loss indicators, and hardware health flags
+  - Monotonic sample continuity counter, timestamping, status flags, and CRC integrity generation
+  - Hardware overflow detection (DMA FIFO overrun flags) and stream lifecycle management

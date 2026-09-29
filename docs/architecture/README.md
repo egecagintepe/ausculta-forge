@@ -1,14 +1,16 @@
-# AuscultaForge — System Architecture & DSP Pipeline
+# System Architecture & DSP Pipeline
+## Smart Digital Stethoscope: Heart Sound Acquisition, Signal Processing and Quality Assessment
+### EEE495 / EEE496 Senior Design Project (Platform / Software Codename: `AuscultaForge`)
 
 ## Overview
 
-The AuscultaForge digital stethoscope system acquires cardiac acoustic signals via an acoustic head and microphone/transducer, streams digital audio to an MCU/acquisition unit, and transfers the data to a host PC for digital signal processing (DSP), visualization, and metrics analysis.
+The digital stethoscope system acquires cardiac acoustic signals via an acoustic chestpiece and microphone/transducer front-end, streams digital audio to an MCU/acquisition unit, and transfers the data to a host PC for digital signal processing (DSP), visualization, and quality analysis.
 
 ```text
 +------------------------+        +--------------------------+        +--------------------+
 | Reference PCG / Phantom| -----> | ESP32-S3 Dev Board       | -----> |      Host PC       |
-| I2S Mic (Ozan / Kaan)  | (I2S)  | Sampling & Packet Native | (USB)  | Ingestion, DSP, UI |
-|   (INMP441/ICS-43434)  |        |     USB Driver (Ege)     |        |       (Ege)        |
+| Transducer (Module A)  | (I2S)  | Sampling & Continuity    | (USB)  | Ingestion, DSP, UI |
+|   (Kaan)               |        |   Driver (Module B, Ozan)|        |   (Module C, Ege)  |
 +------------------------+        +--------------------------+        +--------------------+
                                                                       |
                                                                       v
@@ -44,43 +46,46 @@ class SampleBlock:
 ```
 
 ### Architectural Guarantees:
-- **Decoupled Sources:** The DSP pipeline, metrics calculation, and future visualizer consume only `SampleBlock` streams.
+- **Decoupled Sources:** The DSP pipeline, metrics calculation, and UI decimation pipeline consume only `SampleBlock` streams.
 - **Interchangeable Input Streams:**
   - `MockPCGSource`: Synthetic S1/S2 heart sound generator for off-hardware testing.
   - `WavSource`: Reads benchmark WAV recordings in batch blocks (e.g. PhysioNet CinC 2016).
   - `RealtimeWavSource`: Replays WAV recordings paced to wall-clock time (or unpaced with `--fast`). **Note:** This is a software development and testing adapter, not production acquisition; it exists to simulate future live MCU digital streams before hardware is finalized.
-  - *Future* `SerialSource`: USB-UART / Serial streaming from MCU acquisition unit.
-  - *Future* `NetworkSource`: Network / socket stream.
-- **Wire Protocol Independence:** The byte format on the wire (serial packets, framing, headers) is translated by a driver into `SampleBlock` instances. The wire format can change without touching DSP or consumer code.
+  - *Future* `NativeUsbSource`: Hardware stream from MCU acquisition unit.
+- **Wire Protocol Independence:** The byte format on the wire (USB packets, framing, headers) is translated by a driver into `SampleBlock` instances. The wire format can change without touching DSP or consumer code.
 
 ## Streaming Ingestion Pipeline
 
 ```text
-Real PCG WAV / Mock Source / Future MCU
-                   │
-                   ▼
+Real PCG WAV / Mock Source / Hardware Stream
+                   â”‚
+                   â–¼
   Source Adapter (e.g. RealtimeWavSource)
-                   │
-                   ▼
+                   â”‚
+                   â–¼
           SampleBlock Stream
-                   │
-                   ▼
+                   â”‚
+                   â–¼
        StreamQualityMonitor
      (Discontinuities, drops, fs)
-                   │
-                   ▼
+                   â”‚
+                   â–¼
      StreamingBandpass (DSP Filter)
-                   │
-                   ▼
+                   â”‚
+                   â–¼
              RollingBuffer
    (Configurable FIFO window, e.g. 5s)
-                   │
-        ┌──────────┴──────────┐
-        ▼                     ▼
-   Live Metrics         Spectral Frame
-(RMS, Peak, Crest)   (Welch PSD, Bands)
-        │                     │
-        └──────────┬──────────┘
-                   ▼
-               Future UI
+                   â”‚
+        â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+        â–¼                     â–¼
+   Live Metrics          Spectral Frame
+(RMS, Peak, Crest)    (Welch PSD, Bands)
+        â”‚                     â”‚
+        â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                   â–¼
+       Display Decimation Pipeline
+       (Peak-Preserving <= 600 pts)
+                   â”‚
+                   â–¼
+       React Desktop Client UI
 ```
