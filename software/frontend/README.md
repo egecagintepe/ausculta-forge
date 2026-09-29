@@ -1,4 +1,4 @@
-# Smart Digital Stethoscope â€” Desktop Client UI
+# Smart Digital Stethoscope — Desktop Client UI
 ## Module C (Computer Application & Quality Assessment)
 Software Platform Codename: `AuscultaForge`
 
@@ -9,7 +9,7 @@ This directory contains the React / TypeScript / Vite local desktop frontend for
 ## Capabilities
 - **Live Dual-Trace Oscilloscope:** Real-time visualization of raw vs filtered PCG streams.
 - **Spectrogram & Spectral Display:** Live frequency analysis and spectral frames.
-- **Filter Controls:** Dynamic passband selection (e.g. recommended 20â€“200 Hz, bell, diaphragm).
+- **Filter Controls:** Dynamic passband selection (e.g. recommended 20–200 Hz, bell, diaphragm).
 - **Session Management:** Start/stop recording and session metadata inspection.
 - **Device Health & Telemetry:** Connection status, stream continuity, and recording quality feedback.
 

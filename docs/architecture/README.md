@@ -58,34 +58,34 @@ class SampleBlock:
 
 ```text
 Real PCG WAV / Mock Source / Hardware Stream
-                   â”‚
-                   â–¼
+                   │
+                   ▼
   Source Adapter (e.g. RealtimeWavSource)
-                   â”‚
-                   â–¼
+                   │
+                   ▼
           SampleBlock Stream
-                   â”‚
-                   â–¼
+                   │
+                   ▼
        StreamQualityMonitor
      (Discontinuities, drops, fs)
-                   â”‚
-                   â–¼
+                   │
+                   ▼
      StreamingBandpass (DSP Filter)
-                   â”‚
-                   â–¼
+                   │
+                   ▼
              RollingBuffer
    (Configurable FIFO window, e.g. 5s)
-                   â”‚
-        â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-        â–¼                     â–¼
+                   │
+        ┌──────────┴──────────┐
+        ▼                     ▼
    Live Metrics          Spectral Frame
 (RMS, Peak, Crest)    (Welch PSD, Bands)
-        â”‚                     â”‚
-        â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                   â–¼
+        │                     │
+        └──────────┬──────────┘
+                   ▼
        Display Decimation Pipeline
        (Peak-Preserving <= 600 pts)
-                   â”‚
-                   â–¼
+                   │
+                   ▼
        React Desktop Client UI
 ```

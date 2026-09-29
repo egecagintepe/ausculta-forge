@@ -1,77 +1,77 @@
-# 00 â€” Proje Genel BakÄ±ÅŸÄ± ve MÃ¼hendislik Stratejisi
+# 00 — Proje Genel Bakışı ve Mühendislik Stratejisi
 ## Smart Digital Stethoscope: Heart Sound Acquisition, Signal Processing and Quality Assessment
-### EEE495 / EEE496 Bitirme Projesi (Platform / YazÄ±lÄ±m Kod AdÄ±: `AuscultaForge`)
+### EEE495 / EEE496 Bitirme Projesi (Platform / Yazılım Kod Adı: `AuscultaForge`)
 
 ---
 
 ## Bu nedir?
 
-Bu proje, EEE495/EEE496 bitirme projesi kapsamÄ±nda geliÅŸtirilen **"Smart Digital Stethoscope: Heart Sound Acquisition, Signal Processing and Quality Assessment"** Ã§alÄ±ÅŸmasÄ±dÄ±r.
+Bu proje, EEE495/EEE496 bitirme projesi kapsamında geliştirilen **"Smart Digital Stethoscope: Heart Sound Acquisition, Signal Processing and Quality Assessment"** çalışmasıdır.
 
-Temel mÃ¼hendislik hedefi; kalp seslerini (PCG) gÃ¶ÄŸÃ¼s parÃ§asÄ± ve mikrofon dÃ¶nÃ¼ÅŸtÃ¼rÃ¼cÃ¼ Ã¼zerinden gÃ¼venilir biÃ§imde edinmek, gÃ¶mÃ¼lÃ¼ mikrodenetleyici (ESP32-S3) ile 48 kHz hÄ±zÄ±nda sayÄ±sallaÅŸtÄ±rÄ±p USB Ã¼zerinden ana bilgisayara (Host PC) kayÄ±psÄ±z aktarmak, sayÄ±sal bant geÃ§iren filtreleme uygulamak ve tekrarlanabilir akustik fantom testleriyle sistemin frekans cevabÄ±nÄ±, gÃ¼rÃ¼ltÃ¼ tabanÄ±nÄ± ve sinyal kalitesini karakterize etmektir.
+Temel mühendislik hedefi; kalp seslerini (PCG) göğüs parçası ve mikrofon dönüştürücü üzerinden güvenilir biçimde edinmek, gömülü mikrodenetleyici (ESP32-S3) ile 48 kHz hızında sayısallaştırıp USB üzerinden ana bilgisayara (Host PC) kayıpsız aktarmak, sayısal bant geçiren filtreleme uygulamak ve tekrarlanabilir akustik fantom testleriyle sistemin frekans cevabını, gürültü tabanını ve sinyal kalitesini karakterize etmektir.
 
-Platformun ve yazÄ±lÄ±m omurgasÄ±nÄ±n dahili kod adÄ± **AuscultaForge**'dur.
-
----
-
-## Neden Bu Mimari SeÃ§ildi?
-
-Geleneksel akustik stetoskoplar kullanÄ±cÄ±nÄ±n anlÄ±k iÅŸitsel algÄ±sÄ±na baÄŸÄ±mlÄ±dÄ±r; sinyali kaydedemez, spektral bileÅŸenlerini ayrÄ±ÅŸtÄ±ramaz ve objektif metrikler (RMS, tepe deÄŸeri, tepe faktÃ¶rÃ¼, frekans cevabÄ±) Ã¼retemez. Sistemimiz, akustik titreÅŸimi sayÄ±sal sinyal bloklarÄ±na (`SampleBlock`) dÃ¶nÃ¼ÅŸtÃ¼rerek tekrarlanabilir bir analiz ve laboratuvar doÄŸrulama ortamÄ± sunar.
+Platformun ve yazılım omurgasının dahili kod adı **AuscultaForge**'dur.
 
 ---
 
-## Mevcut Kilometre TaÅŸÄ± (Current Milestone)
+## Neden Bu Mimari Seçildi?
 
-Projenin temel sinyal edinim omurgasÄ±:
-$$\text{Fiziksel/akustik kaynak} \longrightarrow \text{Mikrofon/DÃ¶nÃ¼ÅŸtÃ¼rÃ¼cÃ¼} \longrightarrow \text{MCU/Edinim Birimi} \longrightarrow \text{PC} \longrightarrow \text{GerÃ§ek ZamanlÄ± PCG Ã–rnek BloklarÄ±}$$
-
-Sistem bir medikal tanÄ± cihazÄ± deÄŸil, mÃ¼hendislik araÅŸtÄ±rma ve karakterizasyon platformudur. Ä°nsan deneyi iÃ§ermez; tÃ¼m akustik Ã¶lÃ§Ã¼mler laboratuvar fantomu Ã¼zerinde yÃ¼rÃ¼tÃ¼lÃ¼r.
+Geleneksel akustik stetoskoplar kullanıcının anlık işitsel algısına bağımlıdır; sinyali kaydedemez, spektral bileşenlerini ayrıştıramaz ve objektif metrikler (RMS, tepe değeri, tepe faktörü, frekans cevabı) üretemez. Sistemimiz, akustik titreşimi sayısal sinyal bloklarına (`SampleBlock`) dönüştürerek tekrarlanabilir bir analiz ve laboratuvar doğrulama ortamı sunar.
 
 ---
 
-## Ekip ModÃ¼l SorumluluklarÄ±
+## Mevcut Kilometre Taşı (Current Milestone)
+
+Projenin temel sinyal edinim omurgası:
+$$\text{Fiziksel/akustik kaynak} \longrightarrow \text{Mikrofon/Dönüştürücü} \longrightarrow \text{MCU/Edinim Birimi} \longrightarrow \text{PC} \longrightarrow \text{Gerçek Zamanlı PCG Örnek Blokları}$$
+
+Sistem bir medikal tanı cihazı değil, mühendislik araştırma ve karakterizasyon platformudur. İnsan deneyi içermez; tüm akustik ölçümler laboratuvar fantomu üzerinde yürütülür.
+
+---
+
+## Ekip Modül Sorumlulukları
 
 Danışman yönergelerine göre üç kişilik bir ekipte her modülün (Modül A, B, C) bireysel değerlendirme, Git katkı geçmişi ve sözlü savunma için bir birincil öğrenci sorumlusu bulunur. Aşağıdaki tablo mevcut ekip çalışma dağılımını (danışman onayına tabi) yansıtmaktadır:
 
 | Modül | Kapsam | Ekip Çalışma Dağılımı (Danışman Onayına Tabi) | Temel Odak Noktaları |
 |---|---|---|---|
-| **ModÃ¼l A** | Edinim DonanÄ±mÄ± & Karakterizasyon | **Kaan** | Mikrofon/dÃ¶nÃ¼ÅŸtÃ¼rÃ¼cÃ¼ seÃ§imi (Elektret vs MEMS), gÃ¶ÄŸÃ¼s parÃ§asÄ± akustik kuplajÄ±, analog Ã¶n yÃ¼z, akustik fantom test dÃ¼zeneÄŸi (uyarÄ±cÄ±/hoparlÃ¶r mekanik kuplajÄ±, silikon katman, rijit iskelet) ve fiziksel karakterizasyon testleri. |
-| **ModÃ¼l B** | GÃ¶mÃ¼lÃ¼ Edinim & Veri Yolu | **Ozan** | Mikrodenetleyici (ESP32-S3) donanÄ±m entegrasyonu, I2S/ADC edinimi, DMA Ã§ift tamponlama, monotonik Ã¶rnek sÃ¼reklilik sayacÄ±, Native USB veri aktarÄ±mÄ±, telemetri bayraklarÄ± ve yerel TÃ¼rkiye komponent temini (BOM). |
-| **ModÃ¼l C** | Bilgisayar UygulamasÄ± & Kalite DeÄŸerlendirmesi | **Ege** | Host PC masaÃ¼stÃ¼ uygulamasÄ± (React/TypeScript), yerel FastAPI kÃ¶prÃ¼ servisi, durumsal DSP filtreleme, JSON yan metadata ile oturum kaydÄ±, sinyal kalite telemetrisi ve otomatik test paketi. |
+| **Modül A** | Edinim Donanımı & Karakterizasyon | **Kaan** | Mikrofon/dönüştürücü seçimi (Elektret vs MEMS), göğüs parçası akustik kuplajı, analog ön yüz, akustik fantom test düzeneği (uyarıcı/hoparlör mekanik kuplajı, silikon katman, rijit iskelet) ve fiziksel karakterizasyon testleri. |
+| **Modül B** | Gömülü Edinim & Veri Yolu | **Ozan** | Mikrodenetleyici (ESP32-S3) donanım entegrasyonu, I2S/ADC edinimi, DMA çift tamponlama, monotonik örnek süreklilik sayacı, Native USB veri aktarımı, telemetri bayrakları ve yerel Türkiye komponent temini (BOM). |
+| **Modül C** | Bilgisayar Uygulaması & Kalite Değerlendirmesi | **Ege** | Host PC masaüstü uygulaması (React/TypeScript), yerel FastAPI köprü servisi, durumsal DSP filtreleme, JSON yan metadata ile oturum kaydı, sinyal kalite telemetrisi ve otomatik test paketi. |
 
-*Ekip Ã¼yeleri entegrasyon safhalarÄ±nda birbirlerine destek verir; ancak her modÃ¼lÃ¼n bireysel savunmadan sorumlu tek bir birincil sahibi vardÄ±r.*
-
----
-
-## DonanÄ±mdan BaÄŸÄ±msÄ±z GeliÅŸtirme Stratejisi (Hardware-Independent Development)
-
-### Neden bu tasarÄ±m seÃ§ildi?
-GÃ¶mÃ¼lÃ¼ sistem projelerinde en sÄ±k karÅŸÄ±laÅŸÄ±lan hata, PC yazÄ±lÄ±mÄ±nÄ±n donanÄ±m prototipine doÄŸrudan baÄŸÄ±mlÄ± geliÅŸtirilmesidir. Bu durumda PCB Ã¼retimi, sensÃ¶r temini veya mikrodenetleyici kodundaki bir gecikme yazÄ±lÄ±m ekibini tamamen kilitler.
-
-AuscultaForge ÅŸu prensiple tasarlanmÄ±ÅŸtÄ±r:
-1. DonanÄ±m fiziksel bir `SampleBlock` Ã¼reticisi olarak kabul edilir.
-2. PCG algoritmalarÄ±, filtreler, metrikler ve gÃ¶rselleÅŸtirme araÃ§larÄ± `MockPCGSource` ve `RealtimeWavSource` ile donanÄ±m henÃ¼z masada yokken eksiksiz geliÅŸtirilir ve test edilir.
-3. DonanÄ±m hazÄ±r olduÄŸunda tek yapÄ±lmasÄ± gereken, USB portundan gelen baytlarÄ± ayrÄ±ÅŸtÄ±rÄ±p bir `SampleBlock` nesnesine sarmalayan kÃ¼Ã§Ã¼k bir sÃ¼rÃ¼cÃ¼ yazmaktÄ±r. Downstream DSP hattÄ±nÄ±n tek bir satÄ±rÄ± dahi deÄŸiÅŸmez.
-
-### Hangi problemleri Ã¶nlÃ¼yor?
-- **Erken donanÄ±m kilidi (Premature hardware lock-in):** SensÃ¶r seÃ§imi (analog elektret veya dijital MEMS) deÄŸiÅŸse bile PC analiz Ã§ekirdeÄŸi etkilenmez.
-- **Entegrasyon ÅŸoku:** DonanÄ±m ile yazÄ±lÄ±m ilk kez birleÅŸtiÄŸinde algoritma hatalarÄ± ile donanÄ±m hatalarÄ± birbirine karÄ±ÅŸmaz; yazÄ±lÄ±m hattÄ±nÄ±n Ã¶nceden doÄŸrulandÄ±ÄŸÄ± bilinir.
+*Ekip üyeleri entegrasyon safhalarında birbirlerine destek verir; ancak her modülün bireysel savunmadan sorumlu tek bir birincil sahibi vardır.*
 
 ---
 
-## Kararlar ve AÃ§Ä±k TasarÄ±m Maddeleri
+## Donanımdan Bağımsız Geliştirme Stratejisi (Hardware-Independent Development)
 
-- **Mikrodenetleyici:** ESP32-S3 olarak kesinleÅŸti (kablolu Native USB). Wi-Fi ve BLE Faz 1 iÃ§in kapsam dÄ±ÅŸÄ±dÄ±r.
-- **TransdÃ¼ser DeÄŸerlendirmesi:** Elektret kondansatÃ¶r mikrofon ve I2S MEMS mikrofonlar akustik fantom Ã¼zerinde Week 3â€“5 arasÄ±nda deneysel olarak karÅŸÄ±laÅŸtÄ±rÄ±lacaktÄ±r.
-- **Protokol:** Monotonik sÃ¼reklilik sayacÄ±, zaman damgasÄ±, ham Ã¶rnek yÃ¼kÃ¼, hata bayraklarÄ± ve CRC gereksinimleri belirlendi; tel seviyesi paket formatÄ± Week 3'te netleÅŸtirilecektir.
-- **Filtreleme:** 20â€“500 Hz bant geÃ§iren filtreleme nominal PCG aralÄ±ÄŸÄ±dÄ±r.
+### Neden bu tasarım seçildi?
+Gömülü sistem projelerinde en sık karşılaşılan hata, PC yazılımının donanım prototipine doğrudan bağımlı geliştirilmesidir. Bu durumda PCB üretimi, sensör temini veya mikrodenetleyici kodundaki bir gecikme yazılım ekibini tamamen kilitler.
+
+AuscultaForge şu prensiple tasarlanmıştır:
+1. Donanım fiziksel bir `SampleBlock` üreticisi olarak kabul edilir.
+2. PCG algoritmaları, filtreler, metrikler ve görselleştirme araçları `MockPCGSource` ve `RealtimeWavSource` ile donanım henüz masada yokken eksiksiz geliştirilir ve test edilir.
+3. Donanım hazır olduğunda tek yapılması gereken, USB portundan gelen baytları ayrıştırıp bir `SampleBlock` nesnesine sarmalayan küçük bir sürücü yazmaktır. Downstream DSP hattının tek bir satırı dahi değişmez.
+
+### Hangi problemleri önlüyor?
+- **Erken donanım kilidi (Premature hardware lock-in):** Sensör seçimi (analog elektret veya dijital MEMS) değişse bile PC analiz çekirdeği etkilenmez.
+- **Entegrasyon şoku:** Donanım ile yazılım ilk kez birleştiğinde algoritma hataları ile donanım hataları birbirine karışmaz; yazılım hattının önceden doğrulandığı bilinir.
 
 ---
 
-## Ä°lgili DokÃ¼manlar
+## Kararlar ve Açık Tasarım Maddeleri
+
+- **Mikrodenetleyici:** ESP32-S3 olarak kesinleşti (kablolu Native USB). Wi-Fi ve BLE Faz 1 için kapsam dışıdır.
+- **Transdüser Değerlendirmesi:** Elektret kondansatör mikrofon ve I2S MEMS mikrofonlar akustik fantom üzerinde Week 3–5 arasında deneysel olarak karşılaştırılacaktır.
+- **Protokol:** Monotonik süreklilik sayacı, zaman damgası, ham örnek yükü, hata bayrakları ve CRC gereksinimleri belirlendi; tel seviyesi paket formatı Week 3'te netleştirilecektir.
+- **Filtreleme:** 20–500 Hz bant geçiren filtreleme nominal PCG aralığıdır.
+
+---
+
+## İlgili Dokümanlar
 
 - Sistem Mimarisi: [`docs/architecture/README.md`](../architecture/README.md)
 - Hafta 2 Planlama Paketi: [`docs/sdp/week-02/`](../sdp/week-02/)
-- Protokol TaslaÄŸÄ±: [`docs/protocol/PROTOCOL_DRAFT.md`](../protocol/PROTOCOL_DRAFT.md)
-- Firmware KapsamÄ±: [`firmware/README.md`](../../firmware/README.md)
-- DonanÄ±m KapsamÄ±: [`hardware/README.md`](../../hardware/README.md)
+- Protokol Taslağı: [`docs/protocol/PROTOCOL_DRAFT.md`](../protocol/PROTOCOL_DRAFT.md)
+- Firmware Kapsamı: [`firmware/README.md`](../../firmware/README.md)
+- Donanım Kapsamı: [`hardware/README.md`](../../hardware/README.md)

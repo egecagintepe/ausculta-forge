@@ -7,32 +7,32 @@
 To prevent confusion between hardware reality, mathematical analysis, and user-interface constraints, AuscultaForge enforces an absolute separation across three signal representations:
 
 ```text
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚ 1. ACQUISITION SIGNAL                                  â”‚
-â”‚ - Hardware boundary: 24 transmitted bits in 32-bit slotâ”‚
-â”‚ - Host ingestion: normalized to full-rate float32      â”‚
-â”‚ - SessionRecorder: full-rate float32 WAV master        â”‚
-â”‚ - Truthful: zero decimation, zero artificial smoothing â”‚
-â”‚ - Note: Bit-exact integer archival tracked in backlog  â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                            â”‚
-                            â–¼
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚ 2. ANALYSIS SIGNAL                                     â”‚
-â”‚ - Explicitly processed stream for a declared task      â”‚
-â”‚ - Resampled to task rate with anti-aliasing (e.g. 1k)  â”‚
-â”‚ - Evaluated on full-rate arrays via pcg_core           â”‚
-â”‚ - Never altered by browser rendering constraints       â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                            â”‚
-                            â–¼
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚ 3. DISPLAY SIGNAL                                      â”‚
-â”‚ - Bounded, decimated stream (<= 600 points per window) â”‚
-â”‚ - Peak-preserving shared-time decimation               â”‚
-â”‚ - Strictly visualization-only in React / Canvas / SVG  â”‚
-â”‚ - INVARIANT: NEVER becomes input to quantitative math  â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+┌────────────────────────────────────────────────────────┐
+│ 1. ACQUISITION SIGNAL                                  │
+│ - Hardware boundary: 24 transmitted bits in 32-bit slot│
+│ - Host ingestion: normalized to full-rate float32      │
+│ - SessionRecorder: full-rate float32 WAV master        │
+│ - Truthful: zero decimation, zero artificial smoothing │
+│ - Note: Bit-exact integer archival tracked in backlog  │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│ 2. ANALYSIS SIGNAL                                     │
+│ - Explicitly processed stream for a declared task      │
+│ - Resampled to task rate with anti-aliasing (e.g. 1k)  │
+│ - Evaluated on full-rate arrays via pcg_core           │
+│ - Never altered by browser rendering constraints       │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│ 3. DISPLAY SIGNAL                                      │
+│ - Bounded, decimated stream (<= 600 points per window) │
+│ - Peak-preserving shared-time decimation               │
+│ - Strictly visualization-only in React / Canvas / SVG  │
+│ - INVARIANT: NEVER becomes input to quantitative math  │
+└────────────────────────────────────────────────────────┘
 ```
 
 ### Invariant Rules:
@@ -62,22 +62,22 @@ Downsampling for specific PCG algorithms is explicitly supported through a decla
 
 ```text
 48 kHz Raw Acquisition Master
-        â”‚
-        â”œâ”€â”€ Full-Rate Normalized Host Stream (float32 SampleBlock)
-        â”‚       â”‚
-        â”‚       â”œâ”€â”€ Full-Rate Session Recording (float32 WAV)
-        â”‚       â”œâ”€â”€ Packet Ingestion & Stream Integrity Audit
-        â”‚       â””â”€â”€ Wideband Acoustic Phantom Validation (20â€“1000 Hz)
-        â”‚
-        â””â”€â”€ PCG Segmentation Research Branch
-                â”‚
-                â–¼ (Scipy resample_poly: rational polyphase anti-aliasing)
+        │
+        ├── Full-Rate Normalized Host Stream (float32 SampleBlock)
+        │       │
+        │       ├── Full-Rate Session Recording (float32 WAV)
+        │       ├── Packet Ingestion & Stream Integrity Audit
+        │       └── Wideband Acoustic Phantom Validation (20–1000 Hz)
+        │
+        └── PCG Segmentation Research Branch
+                │
+                ▼ (Scipy resample_poly: rational polyphase anti-aliasing)
             1,000 Hz Downsampled Acoustic Stream
-                â”‚
-                â–¼ (Envelope extraction: Hilbert, Homomorphic, Wavelet, PSD)
+                │
+                ▼ (Envelope extraction: Hilbert, Homomorphic, Wavelet, PSD)
             50 Hz Downsampled Feature Stream (Springer et al., 2016)
-                â”‚
-                â–¼
+                │
+                ▼
             LR-HSMM Viterbi State Decoding
 ```
 
