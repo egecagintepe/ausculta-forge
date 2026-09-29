@@ -31,9 +31,9 @@ Sistem bir medikal tanÄ± cihazÄ± deÄŸil, mÃ¼hendislik araÅŸtÄ±rma ve
 
 ## Ekip ModÃ¼l SorumluluklarÄ±
 
-Akademik deÄŸerlendirme, bireysel katkÄ± takibi ve sÃ¶zlÃ¼ savunma iÃ§in modÃ¼l sahiplikleri net olarak tanÄ±mlanmÄ±ÅŸtÄ±r:
+Danışman yönergelerine göre üç kişilik bir ekipte her modülün (Modül A, B, C) bireysel değerlendirme, Git katkı geçmişi ve sözlü savunma için bir birincil öğrenci sorumlusu bulunur. Aşağıdaki tablo mevcut ekip çalışma dağılımını (danışman onayına tabi) yansıtmaktadır:
 
-| ModÃ¼l | Kapsam | Sorumlu | Temel Odak NoktalarÄ± |
+| Modül | Kapsam | Ekip Çalışma Dağılımı (Danışman Onayına Tabi) | Temel Odak Noktaları |
 |---|---|---|---|
 | **ModÃ¼l A** | Edinim DonanÄ±mÄ± & Karakterizasyon | **Kaan** | Mikrofon/dÃ¶nÃ¼ÅŸtÃ¼rÃ¼cÃ¼ seÃ§imi (Elektret vs MEMS), gÃ¶ÄŸÃ¼s parÃ§asÄ± akustik kuplajÄ±, analog Ã¶n yÃ¼z, akustik fantom test dÃ¼zeneÄŸi (uyarÄ±cÄ±/hoparlÃ¶r mekanik kuplajÄ±, silikon katman, rijit iskelet) ve fiziksel karakterizasyon testleri. |
 | **ModÃ¼l B** | GÃ¶mÃ¼lÃ¼ Edinim & Veri Yolu | **Ozan** | Mikrodenetleyici (ESP32-S3) donanÄ±m entegrasyonu, I2S/ADC edinimi, DMA Ã§ift tamponlama, monotonik Ã¶rnek sÃ¼reklilik sayacÄ±, Native USB veri aktarÄ±mÄ±, telemetri bayraklarÄ± ve yerel TÃ¼rkiye komponent temini (BOM). |

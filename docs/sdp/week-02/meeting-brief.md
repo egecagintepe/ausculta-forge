@@ -18,9 +18,9 @@
 
 ## 2. Module Ownership & Division of Responsibility
 
-Assessment for EEE495/496 includes individual module quality, Git contribution history, and the ability to defend one's own module during oral defenses. Each module has one distinct owner:
+Assessment for EEE495/496 includes individual module quality, Git contribution history, and the ability to defend one's own module during oral defenses. The advisor requires one primary student owner per Module (A/B/C). The table below reflects the **current team working allocation (pending formal advisor confirmation)**:
 
-| Module | Scope | Owner |
+| Module | Scope | Team Working Allocation (Pending Advisor Confirmation) |
 |---|---|---|
 | **Module A** | Acquisition Hardware & Characterisation | **Kaan** |
 | **Module B** | Embedded Acquisition & Data Path | **Ozan** |

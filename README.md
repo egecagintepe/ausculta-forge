@@ -38,18 +38,18 @@ The project scope is strictly governed by the official EEE495/EEE496 design requ
 ### Fixed Boundaries & Academic Constraints
 - **No Human Subjects:** All physical acoustic verification is conducted strictly on laboratory acoustic phantoms.
 - **No Diagnostic Claims:** The platform assesses technical signal quality and physical transmission fidelity, not medical pathology.
-- **No Lung Sound Scope:** Restricted strictly to phonocardiographic cardiac acoustics ($20\text{--}500\text{ Hz}$).
+- **No Lung Sound Scope:** Lung sounds are strictly out of scope; focused entirely on phonocardiographic cardiac acoustics ($20\text{--}500\text{ Hz}$).
 - **Machine Learning is Optional:** Diagnostic machine learning or automated classification is not a primary course success criterion.
-- **Photoplethysmography (PPG) is Excluded:** Focus remains on acoustic PCG.
+- **Photoplethysmography (PPG) is an Optional Extension:** PPG is an optional Semester-II extension outside the assessed core scope. It is not required for project success and is not a current core deliverable.
 - **Custom PCB is Optional:** Initial development uses breadboard and dev-board setups. A soldered prototype (e.g., perfboard / stripboard) is entirely sufficient for course completion unless experimental measurements justify a custom PCB spin.
 
 ---
 
 ## Module Ownership
 
-The engineering responsibilities are divided into three distinct modules for individual assessment, Git contribution tracking, and capstone defense:
+The advisor-defined structural rule requires one primary student owner per Module (A, B, C) for a three-student team to enable individual assessment, Git contribution tracking, and capstone defense. The table below reflects the **current team working allocation (pending formal advisor confirmation)**:
 
-| Module | Scope | Primary Owner | Key Responsibilities |
+| Module | Scope | Working Allocation (Pending Advisor Confirmation) | Key Responsibilities |
 |---|---|---|---|
 | **Module A** | Acquisition Hardware & Characterisation | **Kaan** | Transducer evaluation (electret vs MEMS), acoustic chestpiece coupling, analogue front-end conditioning, acoustic phantom design, physical test setup, and experimental characterisation. |
 | **Module B** | Embedded Acquisition & Data Path | **Ozan** | Microcontroller hardware integration, audio sampling, DMA ping-pong buffering, monotonic sample continuity counter, Native USB data transport, error telemetry, and Turkish local component sourcing (BOM). |
