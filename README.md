@@ -70,8 +70,8 @@ The advisor-defined structural rule requires one primary student owner per Modul
 | **PC Application — Live Waveform Display** | DONE | Bounded peak-preserving decimation pipeline: `software/pcg_app/display_pipeline.py`. |
 | **PC Application — Spectrogram Display** | DONE | Time-frequency STFT visualization in frontend and analysis engine (`software/pcg_core/analysis.py`). |
 | **PC Application — Session Recording & Metadata** | DONE | Dual persistence (raw audio WAV + JSON sidecar): `software/pcg_core/recording.py`. |
-| **PC Application — Device Control & Status** | DONE | Authoritative device lifecycle state machine: `software/pcg_app/device_runtime.py`. |
-| **PC Application — Recording-Quality Feedback** | DONE | Real-time and offline scalar metrics: `software/pcg_core/scientific/signal_quality.py`. |
+| **PC Application — Device Control & Status** | SOFTWARE FOUNDATION DONE / HARDWARE INTEGRATION PENDING | Host lifecycle state machine / handshake architecture implemented (`software/pcg_app/device_runtime.py`); physical ESP32 device integration pending. |
+| **PC Application — Recording-Quality Feedback** | SOFTWARE FOUNDATION DONE / HARDWARE INTEGRATION PENDING | Real-time & offline metric framework implemented (`software/pcg_core/scientific/signal_quality.py`); thresholds & controlled-artefact validation require physical phantom data. |
 | **Repeatable acoustic phantom** | PLANNED | Phantom electro-acoustic requirements drafted (Exciter + Amp + Silicone + Frame). |
 | **Automated test suite** | DONE | Central test suite with 274+ automated tests: `software/tests/`. |
 | **Characterisation measurement report** | PLANNED | Protocols and measurement matrix formalized: [`docs/sdp/week-02/measurement-quality-plan.md`](docs/sdp/week-02/measurement-quality-plan.md). |

@@ -26,6 +26,8 @@ Assessment for EEE495/496 includes individual module quality, Git contribution h
 | **Module B** | Embedded Acquisition & Data Path | **Ozan** |
 | **Module C** | Computer Application & Quality Assessment | **Ege** |
 
+*Team Coordinator (team-selected): Ege. (Note: This coordination role is an internal team arrangement for operational alignment and does NOT change the primary A/B/C module ownership, individual assessment responsibilities, or oral defense boundaries).*
+
 ---
 
 ## 3. This Week's Deliverables
