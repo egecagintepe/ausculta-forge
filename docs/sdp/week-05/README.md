@@ -1,0 +1,21 @@
+# EEE495 -- Week 5 -- First Hardware Bench and Synthetic Tests
+
+**Theme:** First Hardware Bench and Synthetic Tests
+
+## Submission Structure
+
+| Folder | Owner | Module |
+|---|---|---|
+| `submissions/module-a-kaan/` | Kaan | A -- Acquisition Hardware and Characterisation |
+| `submissions/module-b-ozan/` | Ozan | B -- Embedded Acquisition and Data Path |
+| `submissions/module-c-ege/` | Ege | C -- Computer Application and Quality Assessment |
+
+## Decisions
+
+See [decisions.md](decisions.md) for open and resolved decisions for this week.
+
+## Notes
+
+- Commit evidence files from your own GitHub account where possible.
+- Do not fabricate measurements or results.
+- Update task placeholder status fields as work progresses.
