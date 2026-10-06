@@ -20,3 +20,8 @@ The following files in `docs/sdp/week-02/` serve as Module C Week-02 deliverable
 - `meeting-brief.md`
 
 Do not copy, move, or create duplicate versions of these files under `submissions/`.
+
+### Module B (Özgür Ozan Yıldız)
+- [Module B Directory](./module-b-ozan/)
+- [System Design & Technical Specification](./module-b-ozan/W02_B_system-design-technical-specification_REV01.docx)
+- [Procurement, BOM & Test Matrix](./module-b-ozan/W02_B_procurement-bom-test_REV01.xlsx)
