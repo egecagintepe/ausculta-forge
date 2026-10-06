@@ -1,30 +1,43 @@
-# Module B -- Embedded Acquisition and Data Path
-## Submission Folder -- Week 2
+# Module B — Week 02 Submission
 
-| Field | Value |
-|---|---|
-| **Owner** | Ozan |
-| **Module** | B -- Embedded Acquisition and Data Path |
-| **Week** | 2 |
-| **Purpose** | Collect all Week-2 deliverables for Module B |
+Owner: Özgür Ozan Yıldız
+Module: B — Embedded Acquisition & Data Path
+Week: 02
 
-## Naming Convention
+## Deliverables
 
-All files in this folder must follow the canonical naming pattern:
+Link to both:
+- [W02_B_system-design-technical-specification_REV01.docx](./W02_B_system-design-technical-specification_REV01.docx)
+- [W02_B_procurement-bom-test_REV01.xlsx](./W02_B_procurement-bom-test_REV01.xlsx)
 
-`W02_B_<short-description>_vNN.<ext>`
+## Scope
 
-**Examples:**
-- `W02_B_example-task_v01.pdf`
-- `W02_B_example-task_v01.md`
-
-## Instructions
-
-- Original PDF, DOCX, and XLSX deliverables may be placed in this folder alongside Markdown summaries.
-- **Do not fabricate measurements, results, or component decisions.** Record only what has actually been performed.
-- **Preserve original source files** when uploading (do not replace earlier versions; increment the version suffix instead).
-- Where possible, commit evidence files from your own GitHub account so the contribution history reflects your individual work.
+Briefly describe the actual Week-02 work:
+- embedded acquisition architecture research,
+- MCU / I2S / ADC / DMA / buffering considerations,
+- continuity and timestamp requirements,
+- device-to-host communication architecture preparation,
+- Turkey procurement/BOM research,
+- test and verification matrix preparation.
 
 ## Status
 
-All tasks for Week 2 are initially **NOT STARTED**. Update status fields as work progresses.
+Week-02 Module-B engineering draft and procurement research submitted.
+
+## Open / Future Decisions
+
+Mention that later technical freeze still includes items such as:
+- final USB device class,
+- final frame format,
+- application-level CRC/integrity policy,
+- final sample representation,
+- final selected acquisition-chain details,
+as applicable to the repository's current Week-03 decisions.
+
+## Next Handoff
+
+Week-03:
+- device-to-host frame/transport draft,
+- MCU/dev-board confirmation,
+- purchase-ready BOM preparation,
+- Week-04 order readiness.
