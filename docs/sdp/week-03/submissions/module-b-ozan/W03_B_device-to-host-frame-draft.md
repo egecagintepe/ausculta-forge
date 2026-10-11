@@ -164,7 +164,7 @@ Do not let open ADC or USB-class decisions silently become FINAL through a BOM r
 
 - [Week-02 B-to-C interface requirements](../../week-02/bc-interface-requirements.md) — baseline 48 kHz mono, conceptual frame information and Module C ingestion requirements.
 - [Week-02 meeting brief](../../week-02/meeting-brief.md) — Module B ownership, hardware-to-host path, sourcing and lab-audit expectations.
-- [Week-03 decisions](../decisions.md) — authoritative record for DW03-03 and DW03-08 through DW03-14.
+- [Week-03 decisions](../decisions.md) — authoritative record for DW03-03 and DW03-08 through DW03-15.
 - [Week-03 Module A candidate-selection note](../module-a-kaan/W03_A_transducer-candidate-selection.md) — current ECM/MEMS/exciter proposals.
 - [Week-04 Module B embedded-requirements freeze placeholder](../../week-04/submissions/module-b-ozan/W04_B_embedded-requirements-freeze.md) — next handoff deliverable.
 
