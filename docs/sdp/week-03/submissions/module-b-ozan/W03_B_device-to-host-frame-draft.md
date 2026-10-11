@@ -51,7 +51,7 @@ The ADC question is open because the project has not yet approved the exact digi
 
 1. ESP32-S3 internal SAR ADC1 as a **bench candidate only**. Its PCG noise, linearity, usable dynamic range, sampling behavior and repeatability must be measured; audio-grade characterization is not assumed.
 2. An external I²S audio ADC such as **PCM1808 (candidate only)**. Before purchase, inspect the exact breakout/module schematic and verify its MCLK source, analog and digital supplies, input coupling, full-scale input compatibility, I²S format and local availability. Advisor/team approval is required before treating it as the selected architecture.
-3. Department USB audio interface (C-05) as a separate reference/measurement route if available. Unless the advisor explicitly accepts that architecture, a PC sound-card recording does not replace the requested ECM → ADC → ESP32-S3 → USB → PC path.
+3. Department USB audio interface (C-05) as a separate reference/measurement route is not available in the lab per Ozan's audit. Ozan's personal 3.5 mm-to-USB dongle may be checked for exploratory recording, but its analogue input capability and signal path are unverified. Unless the advisor explicitly accepts that architecture, a PC sound-card recording does not replace the requested ECM → ADC → ESP32-S3 → USB → PC path.
 
 No ADC has been declared FINAL.
 
@@ -109,8 +109,9 @@ Current architecture direction:
 | DW03-09 — application integrity/CRC | OPEN | Joint Module B/Module C decision; do not close without owners' agreement. |
 | DW03-10 — sample representation | OPEN | 48 kHz mono baseline retained; signed 24-bit-in-32-bit is a proposal, not final agreement. |
 | DW03-12 — USB device class | OPEN | CDC-ACM vs vendor-specific Bulk. |
-| DW03-13 — ECM external ADC path | OPEN | Internal ADC1 bench candidate vs externally clocked I²S ADC candidate vs C-05 reference route; advisor decision and hardware evidence required. |
-| DW03-14 — lab equipment audit | OPEN | All not-yet-physically-verified instruments remain PENDING LAB CONFIRMATION. |
+| DW03-13 — ECM external ADC path | OPEN | Internal ADC1 bench candidate vs externally clocked I²S ADC candidate; C-05 is unavailable in the department lab. Advisor decision and hardware evidence required. |
+| DW03-14 — lab equipment audit | CLOSED (availability status only) | Scope, function generator, DMM, soldering station and reusable breadboards/dev-boards reported available by Ozan; C-05 unavailable in the department lab. This is not a calibration claim. |
+| DW03-15 — personal 3.5 mm-to-USB dongle suitability | OPEN | Exact model and input capability need inspection; not assumed to be a calibrated C-05 equivalent. |
 
 ## 8. BOM / Week-4 Order Readiness Snapshot
 
@@ -123,27 +124,28 @@ This is a readiness snapshot, not purchase authorization. Current component cand
 | MEMS evaluation boards | PUI DMM-4026-B-I2S-EB-R × 2 planned | Evaluation-board MPN identified. Confirm current price/stock/delivery and actual pad mapping; no six-pin fitted header assumed. |
 | MEMS sensor identity | PUI DMM-4026-B-I2S-R (sensor mounted on EB-R) | Keep distinct from the purchased EB-R carrier in BOM/documentation. |
 | ECM AFE / op-amp | MCP6022-I/P is a breadboard candidate; Group-A op-amp quantity requirement is 5 | Confirm exact package/footprint and datasheet suitability. Bias, gain and filter values remain measurement/design decisions; do not claim finalized AFE. |
-| ECM ADC | ESP32-S3 SAR ADC1 bench candidate; PCM1808 external I²S ADC candidate; C-05 USB audio interface as possible separate reference instrument | **OPEN.** Do not purchase PCM1808 until the module, clock/power/interface details and advisor acceptance are confirmed. C-05 availability is pending audit. |
+| ECM ADC | ESP32-S3 SAR ADC1 bench candidate; PCM1808 external I²S ADC candidate; C-05 or an input-capable USB sound dongle as possible separate exploratory/reference route | **OPEN.** Do not purchase PCM1808 until the exact module, clock/power/interface details and advisor acceptance are confirmed. C-05 is not available in the department lab; personal dongle suitability remains OPEN under DW03-15. |
+| Dedicated low-noise LDO | Not included as a mandatory Group-A/core purchase. The supplied `SDP4_Component_Requirements_EN.docx` places a low-noise regulator in Group B (can wait until Semester II). | First measure rail noise and acquisition SNR. A purpose-built low-noise module (e.g. LP5907-based, with exact breakout MPN/schematic verified) may be an optional bench aid if justified; do not describe AMS1117 as a low-noise substitute. Do not add a regulator without checking output voltage/current, input/output headroom and powering arrangement. |
 | Phantom exciter | Motorobit 30 mm / 12 Ω vibration speaker proposal | Kaan to confirm compatibility and useable 20–500 Hz phantom excitation; consider alternate only if justified. |
 | Phantom amplifier | PAM8403 mini-amplifier module proposal | Confirm exact module schematic, power source, proposed-load compatibility, input coupling and cable arrangement. |
 | Silicone / coupling | Transparent silicone sheet; nominal 3 mm is only a starting proposal | Kaan to confirm hardness, contact geometry, compression and quantity. |
 | Rigid frame | Acrylic, nominal 3 mm / 20 × 30 cm starting stock proposal | Kaan to freeze geometry, mounting repeatability and clamp arrangement. |
 | Breadboards / jumpers | Required Group-A prototype consumables | Confirm quantity; also provide compatible headers and hookup wire for solder-pad evaluation-board connections. |
 | Shielded cable / connectors | Exact cable and connector types not fully frozen | Confirm ECM two-wire interface and required audio/bench connectors. Do not infer an XLR cable is directly suitable for the ECM. |
-| USB data cables | One cable for Native USB and one for UART/logging port | **PENDING PHYSICAL BOARD REVISION CHECK.** Use data-capable cables; connector types follow actual board ports. |
+| USB data cables | Two data-capable cables planned: one for Native USB, one for USB-to-UART/logging | Espressif's ESP32-S3-DevKitC-1 v1.1 guide specifies a USB 2.0 Standard-A-to-Micro-B cable and warns against charge-only cables. Plan two data-capable cables for the two-port workflow; inspect the delivered board's revision and both physical port connectors before placing the cable order. [Espressif DevKitC-1 v1.1 guide](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-devkitc-1/user_guide_v1.1.html). |
 
 ### 8.1 Department lab equipment audit
 
-The following are **PENDING LAB CONFIRMATION** until Ozan physically confirms with the department/lab or records a response from staff:
+**Audit status: availability reported by Ozan on 2026-10-12.** The entries below record availability only; they do not certify calibration, bandwidth, noise floor, or measurement performance.
 
-- Oscilloscope / DSO — **PENDING LAB CONFIRMATION**
-- Function generator / waveform generator — **PENDING LAB CONFIRMATION**
-- Digital multimeter — **PENDING LAB CONFIRMATION**
-- Soldering station — **PENDING LAB CONFIRMATION**
-- USB audio interface / sound card — **PENDING LAB CONFIRMATION**
-- Reusable breadboards / lab development boards — **PENDING LAB CONFIRMATION**
+- Oscilloscope / DSO — **REPORTED AVAILABLE IN DEPARTMENT**
+- Function generator / waveform generator — **REPORTED AVAILABLE IN DEPARTMENT**
+- Digital multimeter — **REPORTED AVAILABLE IN DEPARTMENT**
+- Soldering station — **REPORTED AVAILABLE IN DEPARTMENT**
+- Reusable breadboards / lab development boards — **REPORTED AVAILABLE IN DEPARTMENT**
+- USB audio interface / sound card — **NOT AVAILABLE IN DEPARTMENT LAB**
 
-No equipment is represented as present merely because it appears in the proposed component/laboratory requirements.
+Ozan reports having a small personal 3.5 mm-to-USB audio adapter. Its exact model and direction of conversion are not yet inspected. Confirm that it has an analogue **input** (not only USB-to-headphone/DAC output) and inspect input range/coupling, microphone bias, gain/AGC and supported sampling formats before considering it for exploratory recording. Until then it is **NOT VERIFIED as a substitute for C-05 or as a calibrated reference instrument**. See DW03-15 in the [Week-3 decisions](../decisions.md).
 
 ### 8.2 Week-4 order gate blockers
 
@@ -154,7 +156,7 @@ Before calling BOM v1.0 purchase-ready:
 3. Resolve or obtain advisor disposition for the ECM ADC architecture; decide whether C-05 is available as a reference route.
 4. Confirm the candidate AFE/op-amp package and the first breadboard topology, while leaving untested gain/filter values explicitly TBD.
 5. Kaan to confirm exciter/amplifier compatibility, silicone/coupling and rigid-frame details.
-6. Obtain a physical lab equipment audit and recheck all live supplier price/stock/delivery data.
+6. Lab availability audit has been recorded from Ozan's report: scope, function generator, DMM, soldering station and reusable breadboards/dev-boards reported available; department USB audio interface unavailable. Recheck live supplier price/stock/delivery data, and inspect the personal audio dongle only if the team wants to use it for exploratory capture (DW03-15).
 
 Do not let open ADC or USB-class decisions silently become FINAL through a BOM row. Any approved deviation from the instructor's list must be recorded in the Week-3/Week-4 decision log.
 
@@ -162,7 +164,7 @@ Do not let open ADC or USB-class decisions silently become FINAL through a BOM r
 
 - [Week-02 B-to-C interface requirements](../../week-02/bc-interface-requirements.md) — baseline 48 kHz mono, conceptual frame information and Module C ingestion requirements.
 - [Week-02 meeting brief](../../week-02/meeting-brief.md) — Module B ownership, hardware-to-host path, sourcing and lab-audit expectations.
-- [Week-03 decisions](../decisions.md) — authoritative record for DW03-03 and DW03-08 through DW03-14.
+- [Week-03 decisions](../decisions.md) — authoritative record for DW03-03 and DW03-08 through DW03-15.
 - [Week-03 Module A candidate-selection note](../module-a-kaan/W03_A_transducer-candidate-selection.md) — current ECM/MEMS/exciter proposals.
 - [Week-04 Module B embedded-requirements freeze placeholder](../../week-04/submissions/module-b-ozan/W04_B_embedded-requirements-freeze.md) — next handoff deliverable.
 
