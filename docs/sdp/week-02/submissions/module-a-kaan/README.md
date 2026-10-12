@@ -1,30 +1,22 @@
-# Module A -- Acquisition Hardware and Characterisation
-## Submission Folder -- Week 2
+# Module A — Week 02 Submission
 
-| Field | Value |
-|---|---|
-| **Owner** | Kaan |
-| **Module** | A -- Acquisition Hardware and Characterisation |
-| **Week** | 2 |
-| **Purpose** | Collect all Week-2 deliverables for Module A |
+**Owner:** Ünal Kaan Öztürk  
+**Module:** A — Acquisition Hardware & Characterisation  
+**Week:** 02  
+**Status:** SUBMITTED — research / document evidence only
 
-## Naming Convention
+## Deliverables
 
-All files in this folder must follow the canonical naming pattern:
+- [Heart-sound characteristics](W02_A_heart-sound-characteristics_v01.pdf) — characteristics and interference considerations.
+- [Technical selection criteria](W02_A_technical-selection-criteria_v01.pdf) — preliminary ECM/MEMS, low-frequency response and phantom selection considerations.
 
-`W02_A_<short-description>_vNN.<ext>`
+Both PDFs were originally uploaded by Kaan in `docs/sdp/week-02/` and reorganized here without altering their binary contents. The original commits remain in Git history as Kaan's contribution evidence.
 
-**Examples:**
-- `W02_A_example-task_v01.pdf`
-- `W02_A_example-task_v01.md`
+## Scope and boundaries
 
-## Instructions
+Week-02 documentation concerns heart-sound characteristics, possible interference, selection criteria for ECM and MEMS microphones, mechanical/acoustic coupling and a reproducible acoustic-phantom concept. It is not evidence of completed bench construction or measurement. Candidate selection and hardware decisions are tracked in Week 03.
 
-- Original PDF, DOCX, and XLSX deliverables may be placed in this folder alongside Markdown summaries.
-- **Do not fabricate measurements, results, or component decisions.** Record only what has actually been performed.
-- **Preserve original source files** when uploading (do not replace earlier versions; increment the version suffix instead).
-- Where possible, commit evidence files from your own GitHub account so the contribution history reflects your individual work.
+## Next handoff
 
-## Status
-
-All tasks for Week 2 are initially **NOT STARTED**. Update status fields as work progresses.
+- [Week-03 Module A candidate selection](../../../week-03/submissions/module-a-kaan/W03_A_transducer-candidate-selection.md)
+- Week-04 acquisition requirements: gain, bandwidth, noise floor, clipping margin and purchase approval
