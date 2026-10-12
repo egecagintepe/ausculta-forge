@@ -1,30 +1,19 @@
-# Module A -- Acquisition Hardware and Characterisation
-## Submission Folder -- Week 3
+# Module A — Week 03 Submission
 
-| Field | Value |
-|---|---|
-| **Owner** | Kaan |
-| **Module** | A -- Acquisition Hardware and Characterisation |
-| **Week** | 3 |
-| **Purpose** | Collect all Week-3 deliverables for Module A |
+**Owner:** Ünal Kaan Öztürk  
+**Module:** A — Acquisition Hardware & Characterisation  
+**Week:** 03  
+**Status:** RESEARCH DELIVERED — procurement and physical verification remain OPEN
 
-## Naming Convention
+## Deliverables
 
-All files in this folder must follow the canonical naming pattern:
+- [W03 candidate-selection closeout](W03_A_transducer-candidate-selection.md)
+- [Original Week-03 candidate-selection report](W03_A_candidate-selection-report_v01.pdf)
 
-`W03_A_<short-description>_vNN.<ext>`
+## Decision status
 
-**Examples:**
-- `W03_A_example-task_v01.pdf`
-- `W03_A_example-task_v01.md`
+Kingstate KECG2740PBJ and PUI DMM-4026-B-I2S-R (bench carrier DMM-4026-B-I2S-EB-R) are **comparison candidates**, not a measured final transducer choice. Phantom exciter, amplifier, coupling material and frame remain OPEN in [Week-03 team decisions](../../decisions.md). Low-frequency cutoff, procurement readiness and physical measurements are unresolved.
 
-## Instructions
+## Next handoff
 
-- Original PDF, DOCX, and XLSX deliverables may be placed in this folder alongside Markdown summaries.
-- **Do not fabricate measurements, results, or component decisions.** Record only what has actually been performed.
-- **Preserve original source files** when uploading (do not replace earlier versions; increment the version suffix instead).
-- Where possible, commit evidence files from your own GitHub account so the contribution history reflects your individual work.
-
-## Status
-
-All tasks for Week 3 are initially **NOT STARTED**. Update status fields as work progresses.
+Week-04 Module A requirements, technical BOM approval and first breadboard/phantom preparation. No completed physical measurements are claimed.
