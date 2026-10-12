@@ -1,30 +1,22 @@
-# Module C -- Computer Application and Quality Assessment
-## Submission Folder -- Week 4
+# Module C — Week 04 Submission
 
-| Field | Value |
-|---|---|
-| **Owner** | Ege |
-| **Module** | C -- Computer Application and Quality Assessment |
-| **Week** | 4 |
-| **Purpose** | Collect all Week-4 deliverables for Module C |
+**Owner:** Ege Çağın Tepe  
+**Module:** C — Computer Application & Quality Assessment  
+**Week:** 04  
+**Status:** APPLICATION REQUIREMENTS DRAFT DELIVERED — JOINT B→C REVIEW OPEN
 
-## Naming Convention
+## Deliverables
 
-All files in this folder must follow the canonical naming pattern:
+- [W04 application requirements and Week-05 acceptance plan](W04_C_application-requirements-freeze.md)
 
-`W04_C_<short-description>_vNN.<ext>`
+## Scope and evidence
 
-**Examples:**
-- `W04_C_example-task_v01.pdf`
-- `W04_C_example-task_v01.md`
+Defines measurable requirements for waveform/spectral display, full-rate recording, provenance metadata, deterministic digital quality feedback, physical device lifecycle and future known-signal MCU-to-PC acceptance. Reuses documented Week-03 software validation without claiming new test execution or any measured acoustic/USB performance.
 
-## Instructions
+## Dependencies
 
-- Original PDF, DOCX, and XLSX deliverables may be placed in this folder alongside Markdown summaries.
-- **Do not fabricate measurements, results, or component decisions.** Record only what has actually been performed.
-- **Preserve original source files** when uploading (do not replace earlier versions; increment the version suffix instead).
-- Where possible, commit evidence files from your own GitHub account so the contribution history reflects your individual work.
+The wire-level protocol, CDC-ACM vs Vendor Bulk choice, sample packing/counter semantics, application CRC policy and hardware ADC decisions remain open to appropriate owners. See [Week-03 shared decisions](../../../week-03/decisions.md) and the linked Week-04 document.
 
-## Status
+## Next handoff
 
-All tasks for Week 4 are initially **NOT STARTED**. Update status fields as work progresses.
+Ozan/Ege joint interface review, then Week-05 known-signal MCU→host capture and recording with retained evidence.
