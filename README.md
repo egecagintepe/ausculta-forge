@@ -66,7 +66,7 @@ The advisor-defined structural rule requires one primary student owner per Modul
 | **Working digital-stethoscope prototype** | IN PROGRESS | Breadboard / bench hardware assembly underway (Target: Week 5). |
 | **Team-designed acquisition electronics** | IN PROGRESS | Analogue front-end and transducer evaluation underway (`hardware/`). |
 | **Embedded firmware & ingestion path** | IN PROGRESS | ESP32-S3 Native USB data-path architecture designed (`firmware/`). |
-| **Documented device-to-computer protocol** | IN PROGRESS | Protocol requirements draft: [`docs/sdp/week-02/bc-interface-requirements.md`](docs/sdp/week-02/bc-interface-requirements.md). |
+| **Documented device-to-computer protocol** | CONCEPTUAL DRAFT COMPLETE / JOINT FREEZE OPEN | [Week-02 B-to-C requirements](docs/sdp/week-02/bc-interface-requirements.md) plus [Week-03 Module B frame draft](docs/sdp/week-03/submissions/module-b-ozan/W03_B_device-to-host-frame-draft.md). Exact sample packing, USB class, CRC policy and acquisition settings remain open for Week-04 agreement. |
 | **PC Application — Live Waveform Display** | DONE | Bounded peak-preserving decimation pipeline: `software/pcg_app/display_pipeline.py`. |
 | **PC Application — Spectrogram Display** | DONE | Time-frequency STFT visualization in frontend and analysis engine (`software/pcg_core/analysis.py`). |
 | **PC Application — Session Recording & Metadata** | DONE | Dual persistence (raw audio WAV + JSON sidecar): `software/pcg_core/recording.py`. |
@@ -103,7 +103,7 @@ The course advisor mandates **six primary final physical measurements** to chara
 ```text
 Semester I (EEE495) — Foundation & Feasibility
 ├── Week 02 (Current): Technical research, requirements draft, Turkish sourcing BOM v0.1.
-├── Week 03: Component selection, frame format draft, purchase-ready BOM v1.0.
+├── Week 03: Candidate/interface review, conceptual frame draft and BOM v1.0 review; item-level purchase blockers remain in Week-03 decisions.
 ├── Week 04 GATE: Requirements specification frozen, components ordered, lab tools secured.
 ├── Week 05 GATE: Bench setup operational, known test signal captured end-to-end.
 ├── Week 08: 30-minute continuous streaming stability test.
