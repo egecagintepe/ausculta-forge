@@ -3,7 +3,7 @@
 **Week:** 3  
 **Module:** B — Embedded Acquisition & Data Path  
 **Owner:** Ozan  
-**Status:** DRAFT COMPLETE — Week-3 closeout; wire format and acquisition settings are NOT FROZEN  
+**Status:** WEEK-3 DOCUMENTATION DELIVERABLE COMPLETE — wire format, acquisition profile and hardware interfaces remain OPEN / NOT FROZEN  
 **Scope:** Documentation and interface draft only. No runtime firmware changes or physical measurements are claimed.
 
 ## 1. Objective
@@ -16,7 +16,7 @@ Record the Week-3 embedded acquisition architecture and conceptual Module B → 
 - **Physical transport baseline:** wired ESP32-S3 Native USB.
 - **Nominal acquisition baseline:** 48,000 samples/s, one PCG channel (mono).
 - **Acquisition implementation direction:** sensor interface → peripheral acquisition (I²S or ADC) → DMA-backed buffering → continuity and acquisition-time metadata → USB device transport → PC ingestion.
-- **Status:** board candidate identity is recorded in DW03-03. Supplier stock, exact shipped board revision and connector/cable type must be verified before order/at receipt. Firmware pin assignment and clock settings are Week-4 freeze items.
+- **Status:** candidate identity is recorded in DW03-03. Confirm live stock and exact shipped board revision. Plan two data-capable Standard-A→Micro-B USB 2.0 cables (Native USB and USB-UART/log); verify both board ports and any cables already owned before ordering. Firmware pins and clock settings remain Week-4 freeze items.
 
 ## 3. Embedded Data Paths
 
@@ -35,7 +35,9 @@ The raw sensor MPN and the purchased evaluation-board MPN have different roles:
 - **Sensor under evaluation:** PUI DMM-4026-B-I2S-R.
 - **Proposed bench carrier to purchase:** PUI DMM-4026-B-I2S-EB-R.
 
-The evaluation board is documented as a solder-pad interface. Do not assume a fitted six-pin header or assign pin numbers from the draft Week-2 interface map until the actual pad functions and physical connections are confirmed from PUI documentation or inspection of the received board. A custom MEMS daughterboard is not a Week-3 requirement.
+The evaluation board is documented as a solder-pad interface. Do not assume a fitted six-pin header or assign pin numbers from the draft Week-2 interface map until the actual pad functions and physical connections are confirmed from PUI documentation/CAD or inspection of the received board. A custom MEMS daughterboard/carrier PCB is not part of the Week-3 baseline.
+
+**Power and logic safety:** USB 5 V powers the DevKit/MCU board input only; it must not be connected directly to MEMS VCC or an AFE rail. PUI product information lists 1.8 V standard VCC and 3.6 V maximum. The DevKit 3V3 → local series-R + C/decoupling MEMS branch may be tried only after PUI confirms 3.3 V is permitted at the real EB-R power pad and its onboard rail topology. RC is filtering/decoupling, not a regulator. If 3.3 V is not approved, design a suitable regulated 1.8 V path. Separately verify MCU→MEMS BCLK/WS/config input levels and MEMS DOUT HIGH against the ESP32-S3 VIH; use level translation if required. Do not connect power or strap pads from an assumed pinout.
 
 ### 3.2 Analog ECM path
 
@@ -50,10 +52,10 @@ The evaluation board is documented as a solder-pad interface. Do not assume a fi
 The ADC question is open because the project has not yet approved the exact digitization architecture. Options to evaluate:
 
 1. ESP32-S3 internal SAR ADC1 as a **bench candidate only**. Its PCG noise, linearity, usable dynamic range, sampling behavior and repeatability must be measured; audio-grade characterization is not assumed.
-2. An external I²S audio ADC such as **PCM1808 (candidate only)**. Before purchase, inspect the exact breakout/module schematic and verify its MCLK source, analog and digital supplies, input coupling, full-scale input compatibility, I²S format and local availability. Advisor/team approval is required before treating it as the selected architecture.
+2. An external I²S audio ADC such as **PCM1808 (candidate only)**. Before purchase, inspect the exact breakout/module schematic and verify its MCLK source, analog and digital supplies, input coupling, full-scale input compatibility, I²S format and local availability. Advisor approval and the exact breakout module's schematic, MCLK access, rails, input coupling/full-scale, data format and availability are required before selection or purchase. **This purchase hold applies only to the PCM1808 module; other Group-A items may be ordered independently once their own readiness checks pass.**
 3. Department USB audio interface (C-05) as a separate reference/measurement route is not available in the lab per Ozan's audit. Ozan's personal 3.5 mm-to-USB dongle may be checked for exploratory recording, but its analogue input capability and signal path are unverified. Unless the advisor explicitly accepts that architecture, a PC sound-card recording does not replace the requested ECM → ADC → ESP32-S3 → USB → PC path.
 
-No ADC has been declared FINAL.
+No ADC has been declared FINAL. For T-AUD-06, measure the ADC/AFE-only electronic noise floor separately from the microphone signal using a documented, electrically safe test configuration (for example, AFE disabled or an approved input termination from the actual schematic); do not short an unknown input arbitrarily. This helps separate electronics-path noise from the ECM-versus-MEMS transducer comparison.
 
 ## 4. Conceptual B-to-C Frame Information
 
@@ -119,20 +121,20 @@ This is a readiness snapshot, not purchase authorization. Current component cand
 
 | Item | Current candidate / planned quantity | Readiness / action |
 |---|---|---|
-| MCU development boards | ESP32-S3-DevKitC-1-N8R8 × 2 planned (Group-A requirement) | Candidate identified. Confirm current stock, exact shipped board revision, Native USB/UART connector types and cable compatibility. |
+| MCU development boards | ESP32-S3-DevKitC-1-N8R8 × 2 planned (Group-A requirement) | Candidate identified. Confirm stock/revision; have two data-capable Standard-A→Micro-B USB 2.0 cables ready before first flash (Native USB and USB-UART/log). Check owned cables first; charge-only cables are not acceptable. |
 | ECM microphones | Kingstate KECG2740PBJ × 4 proposed (two needed signal-carrying units plus two spares) | Candidate identified. Confirm current price, stock, delivery and order quantity at checkout. |
-| MEMS evaluation boards | PUI DMM-4026-B-I2S-EB-R × 2 planned | Evaluation-board MPN identified. Confirm current price/stock/delivery and actual pad mapping; no six-pin fitted header assumed. |
+| MEMS evaluation boards | PUI DMM-4026-B-I2S-EB-R × 3 planned (2 bench use + 1 spare) | Prioritise the first W4 order because the 12-Oct-2026 Farnell snapshot showed 14 stock / 22-week standard manufacturer lead time. This is a historical snapshot, not a delivery promise; reconfirm the regional/Türkiye basket. Price discrepancy versus EUR public listing remains open. Do not cable before PUI pad/power-map confirmation. |
 | MEMS sensor identity | PUI DMM-4026-B-I2S-R (sensor mounted on EB-R) | Keep distinct from the purchased EB-R carrier in BOM/documentation. |
 | ECM AFE / op-amp | MCP6022-I/P is a breadboard candidate; Group-A op-amp quantity requirement is 5 | Confirm exact package/footprint and datasheet suitability. Bias, gain and filter values remain measurement/design decisions; do not claim finalized AFE. |
 | ECM ADC | ESP32-S3 SAR ADC1 bench candidate; PCM1808 external I²S ADC candidate; C-05 or an input-capable USB sound dongle as possible separate exploratory/reference route | **OPEN.** Do not purchase PCM1808 until the exact module, clock/power/interface details and advisor acceptance are confirmed. C-05 is not available in the department lab; personal dongle suitability remains OPEN under DW03-15. |
 | Dedicated low-noise LDO | Not included as a mandatory Group-A/core purchase. The supplied `SDP4_Component_Requirements_EN.docx` places a low-noise regulator in Group B (can wait until Semester II). | First measure rail noise and acquisition SNR. A purpose-built low-noise module (e.g. LP5907-based, with exact breakout MPN/schematic verified) may be an optional bench aid if justified; do not describe AMS1117 as a low-noise substitute. Do not add a regulator without checking output voltage/current, input/output headroom and powering arrangement. |
 | Phantom exciter | Motorobit 30 mm / 12 Ω vibration speaker proposal | Kaan to confirm compatibility and useable 20–500 Hz phantom excitation; consider alternate only if justified. |
-| Phantom amplifier | PAM8403 mini-amplifier module proposal | Confirm exact module schematic, power source, proposed-load compatibility, input coupling and cable arrangement. |
+| Phantom amplifier | PAM8403 mini-amplifier module × 2 (1 use + 1 spare) | Short-term bench candidate only. Supplier UI observation on 13-Oct-2026 was 21.65 TL inc. VAT + “out of stock”, while a page view showed 19.72 TL and Add to Cart; live stock/checkout is unresolved. Manufacturer marks the IC NRND/EOL; do not treat as long-life baseline. Check output/load/input coupling with the proposed 12 Ω exciter; never tie BTL outputs to ground or each other. |
 | Silicone / coupling | Transparent silicone sheet; nominal 3 mm is only a starting proposal | Kaan to confirm hardness, contact geometry, compression and quantity. |
 | Rigid frame | Acrylic, nominal 3 mm / 20 × 30 cm starting stock proposal | Kaan to freeze geometry, mounting repeatability and clamp arrangement. |
 | Breadboards / jumpers | Required Group-A prototype consumables | Confirm quantity; also provide compatible headers and hookup wire for solder-pad evaluation-board connections. |
 | Shielded cable / connectors | Exact cable and connector types not fully frozen | Confirm ECM two-wire interface and required audio/bench connectors. Do not infer an XLR cable is directly suitable for the ECM. |
-| USB data cables | Two data-capable cables planned: one for Native USB, one for USB-to-UART/logging | Espressif's ESP32-S3-DevKitC-1 v1.1 guide specifies a USB 2.0 Standard-A-to-Micro-B cable and warns against charge-only cables. Plan two data-capable cables for the two-port workflow; inspect the delivered board's revision and both physical port connectors before placing the cable order. [Espressif DevKitC-1 v1.1 guide](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-devkitc-1/user_guide_v1.1.html). |
+| USB data cables | 2 × Standard-A→Micro-B USB 2.0 data cables planned | First-day requirement for Native USB flashing/stream and separate USB-UART/log. Check existing cable stock now; if two suitable data cables are not available, order before the board arrives. Espressif warns against charge-only cables; verify board revision/port shape and cable data capability. [Espressif DevKitC-1 v1.1 guide](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-devkitc-1/user_guide_v1.1.html). |
 
 ### 8.1 Department lab equipment audit
 
@@ -149,16 +151,18 @@ Ozan reports having a small personal 3.5 mm-to-USB audio adapter. Its exact mode
 
 ### 8.2 Week-4 order gate blockers
 
-Before calling BOM v1.0 purchase-ready:
+Before calling BOM v1.0 fully purchase-ready:
 
-1. Confirm the exact MCU board SKU, revision-sensitive connector/cable set, stock and delivery.
-2. Confirm the PUI EB-R sourcing and real pad/interface mapping.
-3. Resolve or obtain advisor disposition for the ECM ADC architecture; decide whether C-05 is available as a reference route.
-4. Confirm the candidate AFE/op-amp package and the first breadboard topology, while leaving untested gain/filter values explicitly TBD.
-5. Kaan to confirm exciter/amplifier compatibility, silicone/coupling and rigid-frame details.
-6. Lab availability audit has been recorded from Ozan's report: scope, function generator, DMM, soldering station and reusable breadboards/dev-boards reported available; department USB audio interface unavailable. Recheck live supplier price/stock/delivery data, and inspect the personal audio dongle only if the team wants to use it for exploratory capture (DW03-15).
+1. Confirm exact MCU board stock/revision and have two data-capable Standard-A→Micro-B cables on day one.
+2. Prioritise 3 × PUI EB-R (2 bench + 1 spare), but do not cable before the real pad/power map and permitted rail are confirmed.
+3. Keep the PCM1808 module purchase on hold pending advisor approval and exact board schematic/clock/power/format review. This hold does not block unrelated Group-A purchases that pass their own checks.
+4. Confirm MCP6022-I/P DIP-8 and draft the ECM bias/AFE topology; gain/filter values still require design and test.
+5. Kaan to approve the exciter/amplifier compatibility, silicone/coupling, frame dimensions and needed quantity. PAM8403 × 2 remains a conditional short-term bench candidate with unresolved live stock/price and NRND/EOL risk.
+6. Count existing breadboards/jumpers/wire/headers; buy only deficits. Confirm exact cable/connectors for the ECM/AFE.
+7. Lab availability audit is recorded from Ozan's report: scope, function generator, DMM, soldering station and reusable breadboards/dev-boards reported available; USB audio interface not available in the department. Inspect the personal audio dongle only if exploratory capture is desired (DW03-15).
+8. Recheck supplier stock, price, tax and delivery from the live basket; the workbook's 6,543.96 TL is a listed-price snapshot subtotal, not a ready-to-checkout total.
 
-Do not let open ADC or USB-class decisions silently become FINAL through a BOM row. Any approved deviation from the instructor's list must be recorded in the Week-3/Week-4 decision log.
+Do not allow unresolved ADC, pad-map, power, USB-class, CRC or sample-representation decisions to become FINAL through a BOM row. Record any deviation in the Week-3/Week-4 decision log.
 
 ## 9. Evidence and References
 
