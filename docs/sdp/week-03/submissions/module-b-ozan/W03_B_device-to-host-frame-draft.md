@@ -33,7 +33,7 @@ Record the Week-3 embedded acquisition architecture and conceptual Module B → 
 The raw sensor MPN and the purchased evaluation-board MPN have different roles:
 
 - **Sensor under evaluation:** PUI DMM-4026-B-I2S-R.
-- **Proposed bench carrier to purchase:** PUI DMM-4026-B-I2S-EB-R.
+- **Evaluation board to purchase:** PUI DMM-4026-B-I2S-EB-R. The separate custom J3/carrier PCB is not part of the Week-3 baseline.
 
 The evaluation board is documented as a solder-pad interface. Do not assume a fitted six-pin header or assign pin numbers from the draft Week-2 interface map until the actual pad functions and physical connections are confirmed from PUI documentation/CAD or inspection of the received board. A custom MEMS daughterboard/carrier PCB is not part of the Week-3 baseline.
 
