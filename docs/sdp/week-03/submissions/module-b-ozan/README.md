@@ -48,4 +48,4 @@ All files in this folder must follow the canonical naming pattern:
 - **W5 G1:** planned end-to-end synthetic/known signal capture; not yet performed.
 - **W9 G2:** planned independent known PCG signal through acoustic phantom; not yet performed.
 
-The Week-3 decision source of truth is [../decisions.md](../../decisions.md).
+The Week-3 decision source of truth is [Week-3 decisions](../../decisions.md).
