@@ -21,6 +21,13 @@ See [decisions.md](decisions.md) for open and resolved decisions for this week.
 - The decision log remains authoritative for DW03-03, DW03-08 through DW03-15. In particular, DW03-09 CRC and DW03-10 sample representation remain open joint B/C decisions; the ECM ADC path remains open.
 - The BOM is an item-by-item readiness review, not a claim that every Group-A item is ready for checkout. The PCM1808 purchase hold applies only to that optional module; other Group-A items can proceed if their own checks pass.
 
+## Module B Source Office Deliverables (Rev02)
+
+- [Procurement, BOM and test matrix (XLSX)](submissions/module-b-ozan/W03_B_procurement-bom-test_v02.xlsx)
+- [System design and technical specification (DOCX)](submissions/module-b-ozan/W03_B_system-design-technical-specification_v02.docx)
+
+These are the submitted source documents for Module B's Week-3 closeout. They retain procurement/interface gates and do not claim physical bench validation. See the [Module B submission index](submissions/module-b-ozan/README.md).
+
 ## Notes
 
 - Commit evidence files from each owner's account where possible.
