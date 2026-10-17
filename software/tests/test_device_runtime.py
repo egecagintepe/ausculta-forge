@@ -48,6 +48,10 @@ from pcg_app.device_runtime import (
 )
 from pcg_app.state import StreamManager
 from pcg_app.display_pipeline import DisplayPipelineConfig
+from scipy.io import wavfile
+from scipy.signal import welch
+from pcg_core.experiment import compute_file_sha256
+from pcg_core.recording import get_session
 
 
 # ==============================================================================
@@ -831,3 +835,437 @@ class TestDeviceEventLog:
         # Oldest entries rotate out
         assert recent[-1]["code"] == "CODE_9"
         assert recent[0]["code"] == "CODE_5"
+
+
+# ==============================================================================
+# Host Preflight Known-Answer Verification Tests (Sprint 1 Preflight)
+# Labeled strictly as SOFTWARE_KNOWN_ANSWER (no physical MCU or USB claimed)
+# ==============================================================================
+
+class TestHostPreflightVerification:
+    """Deterministic host integration preflight verification suite.
+
+    All tests in this class verify host-side ingestion readiness using
+    deterministic synthetic signals and semantic DeviceSamplePacket structures.
+    Results are strictly labeled SOFTWARE_KNOWN_ANSWER and decoupled from
+    physical MCU hardware measurements.
+    """
+
+    def test_known_48khz_mono_synthetic_signal_preservation(self, tmp_path: Path):
+        """Priority 1: Verify 48 kHz mono synthetic signal preservation and spectral fidelity."""
+        runtime = DeviceRuntime()
+        manager = StreamManager(sessions_dir=tmp_path, device_runtime=runtime)
+
+        # Connect candidate with Rev-A 48 kHz mono signed PCM capabilities
+        candidate = DeviceCandidate("ESP32S3-HW", "USB Rev-A", "now")
+        runtime.attach_candidate(candidate)
+        runtime.attach_transport(InMemoryFakeTransport())
+        runtime.complete_handshake(
+            DeviceCapabilities(
+                protocol_version="1.0",
+                firmware_version="v1.0",
+                device_id="ESP32S3-HW",
+                sample_rate_hz=48000,
+                sample_format="signed_pcm",
+                channels=1,
+                sample_container_bits=32,
+                meaningful_data_bits=24,
+                max_block_size=512,
+            )
+        )
+        assert runtime.state == DeviceState.READY
+
+        # Select hardware source and initiate recording
+        manager.select_source("hardware")
+        assert manager.is_streaming is True
+        assert runtime.state == DeviceState.STREAMING
+
+        sid = manager.start_recording()
+        assert manager.recorder.is_recording is True
+
+        # Generate 10 blocks (512 samples each = 5120 samples) of pure 100 Hz sine
+        fs = 48000
+        f0 = 100.0
+        n_blocks = 10
+        block_size = 512
+        total_samples = n_blocks * block_size
+        t = np.arange(total_samples, dtype=np.float64) / fs
+        expected_float = (0.5 * np.sin(2.0 * np.pi * f0 * t)).astype(np.float32)
+
+        # Scale into 24-bit signed integers in 32-bit container
+        scale = float(1 << 23)
+        raw_ints = np.round(expected_float * scale).astype(np.int32)
+
+        for i in range(n_blocks):
+            chunk = raw_ints[i * block_size : (i + 1) * block_size]
+            pkt = DeviceSamplePacket(
+                sequence=i,
+                timestamp_s=float(i * block_size / fs),
+                raw_samples=chunk,
+                meaningful_bits=24,
+                sample_rate_hz=fs,
+            )
+            asyncio.run(manager.ingest_device_packet(pkt))
+
+        meta = manager.stop_recording()
+        assert meta.total_samples == total_samples
+        assert meta.sample_rate_hz == fs
+        assert meta.acquisition_mode == "hardware"
+
+        # Read back WAV and verify exact numerical preservation
+        wav_path = tmp_path / sid / "raw.wav"
+        wav_fs, wav_data = wavfile.read(str(wav_path))
+        assert wav_fs == fs
+        assert len(wav_data) == total_samples
+        assert wav_data.dtype == np.float32
+
+        # Maximum deviation between original float and recorded float32
+        max_err = float(np.max(np.abs(wav_data - expected_float)))
+        assert max_err < 1e-4, f"SOFTWARE_KNOWN_ANSWER: Signal preservation error {max_err}"
+
+        # Spectral verification: dominant frequency must be exactly 100 Hz (using nfft=fs for 1.0 Hz bin resolution)
+        freqs, psd = welch(wav_data, fs=fs, nperseg=1024, nfft=fs)
+        peak_freq = float(freqs[np.argmax(psd)])
+        assert abs(peak_freq - f0) < 1.0, f"SOFTWARE_KNOWN_ANSWER: Peak frequency {peak_freq} != {f0}"
+
+    def test_signed_integer_conversion_and_normalization_ranges(self):
+        """Priority 2: Verify signed integer conversion across 24-bit and 16-bit depths."""
+        # 24-bit in 32-bit container (Rev-A baseline)
+        raw_24 = np.array([
+            -8388608,   # Min legal (-1.0)
+            -4194304,   # Half-scale negative (-0.5)
+            0,          # Zero (0.0)
+            2097152,    # Quarter-scale positive (0.25)
+            4194304,    # Half-scale positive (+0.5)
+            8388607,    # Max legal (~ +1.0)
+        ], dtype=np.int32)
+        pkt_24 = DeviceSamplePacket(0, 0.0, raw_24, meaningful_bits=24, sample_rate_hz=48000)
+        block_24 = packet_to_sample_block(pkt_24, profile=REV_A_BASELINE_PROFILE)
+
+        assert block_24.samples[0] == -1.0
+        assert block_24.samples[1] == -0.5
+        assert block_24.samples[2] == 0.0
+        assert block_24.samples[3] == 0.25
+        assert block_24.samples[4] == 0.5
+        assert pytest.approx(block_24.samples[5], rel=1e-5) == 1.0
+
+        # 16-bit signed PCM (Legacy dev profile)
+        raw_16 = np.array([
+            -32768,     # Min legal (-1.0)
+            0,          # Zero (0.0)
+            16384,      # Half-scale positive (+0.5)
+            32767,      # Max legal (~ +1.0)
+        ], dtype=np.int32)
+        pkt_16 = DeviceSamplePacket(0, 0.0, raw_16, meaningful_bits=16, sample_rate_hz=4000)
+        block_16 = packet_to_sample_block(pkt_16, profile=DEV_LEGACY_PROFILE)
+
+        assert block_16.samples[0] == -1.0
+        assert block_16.samples[1] == 0.0
+        assert block_16.samples[2] == 0.5
+        assert pytest.approx(block_16.samples[3], rel=1e-4) == 1.0
+
+        # Out of range 16-bit integer rejection
+        bad_16 = DeviceSamplePacket(0, 0.0, np.array([32768], dtype=np.int32), meaningful_bits=16, sample_rate_hz=4000)
+        with pytest.raises(ValueError, match="out of legal 16-bit signed range"):
+            packet_to_sample_block(bad_16, profile=DEV_LEGACY_PROFILE)
+
+    def test_multi_block_sample_ordering_and_continuity_across_boundaries(self, tmp_path: Path):
+        """Priority 3: Verify sample count and strict ordering across multi-block boundaries."""
+        runtime = DeviceRuntime()
+        manager = StreamManager(sessions_dir=tmp_path, device_runtime=runtime)
+
+        candidate = DeviceCandidate("ESP32S3-HW", "USB Rev-A", "now")
+        runtime.attach_candidate(candidate)
+        runtime.attach_transport(InMemoryFakeTransport())
+        runtime.complete_handshake(
+            DeviceCapabilities(
+                protocol_version="1.0",
+                firmware_version="v1.0",
+                device_id="ESP32S3-HW",
+                sample_rate_hz=48000,
+                sample_format="signed_pcm",
+                channels=1,
+                sample_container_bits=32,
+                meaningful_data_bits=24,
+                max_block_size=512,
+            )
+        )
+        manager.select_source("hardware")
+        sid = manager.start_recording()
+
+        # Ingest 8 sequential blocks of 512 samples with continuous sequential counter
+        n_blocks = 8
+        block_size = 512
+        total_samples = n_blocks * block_size
+        raw_counter = np.arange(total_samples, dtype=np.int32)
+
+        for i in range(n_blocks):
+            chunk = raw_counter[i * block_size : (i + 1) * block_size]
+            pkt = DeviceSamplePacket(
+                sequence=i,
+                timestamp_s=float(i * block_size / 48000),
+                raw_samples=chunk,
+                meaningful_bits=24,
+                sample_rate_hz=48000,
+            )
+            asyncio.run(manager.ingest_device_packet(pkt))
+
+        meta = manager.stop_recording()
+        assert meta.total_samples == total_samples
+        assert meta.first_sequence == 0
+        assert meta.last_sequence == n_blocks - 1
+
+        # Check recorded audio for exact monotonic order across block seams
+        wav_path = tmp_path / sid / "raw.wav"
+        _, wav_data = wavfile.read(str(wav_path))
+        expected_normalized = (raw_counter.astype(np.float32) / float(1 << 23)).astype(np.float32)
+
+        np.testing.assert_allclose(wav_data, expected_normalized, atol=1e-7)
+
+        # Explicitly verify block transitions: e.g. sample 511 to 512, 1023 to 1024
+        for b in range(1, n_blocks):
+            idx = b * block_size
+            diff = wav_data[idx] - wav_data[idx - 1]
+            expected_diff = expected_normalized[idx] - expected_normalized[idx - 1]
+            assert pytest.approx(diff, rel=1e-5) == expected_diff
+
+    def test_stream_ingest_duplicate_and_gap_telemetry_detection(self, tmp_path: Path):
+        """Priority 4: Verify push ingestion duplicate and sequence gap telemetry detection."""
+        runtime = DeviceRuntime()
+        manager = StreamManager(sessions_dir=tmp_path, device_runtime=runtime)
+
+        candidate = DeviceCandidate("ESP32S3-HW", "USB Rev-A", "now")
+        runtime.attach_candidate(candidate)
+        runtime.attach_transport(InMemoryFakeTransport())
+        runtime.complete_handshake(
+            DeviceCapabilities(
+                protocol_version="1.0",
+                firmware_version="v1.0",
+                device_id="ESP32S3-HW",
+                sample_rate_hz=48000,
+                sample_format="signed_pcm",
+                channels=1,
+                sample_container_bits=32,
+                meaningful_data_bits=24,
+                max_block_size=512,
+            )
+        )
+        manager.select_source("hardware")
+
+        raw_chunk = np.zeros(512, dtype=np.int32)
+
+        # 1. Packet 0
+        p0 = DeviceSamplePacket(sequence=0, timestamp_s=0.0, raw_samples=raw_chunk, meaningful_bits=24, sample_rate_hz=48000)
+        asyncio.run(manager.ingest_device_packet(p0))
+
+        # 2. Duplicate Packet 0
+        p0_dup = DeviceSamplePacket(sequence=0, timestamp_s=0.0, raw_samples=raw_chunk, meaningful_bits=24, sample_rate_hz=48000)
+        asyncio.run(manager.ingest_device_packet(p0_dup))
+
+        # 3. Packet 1
+        p1 = DeviceSamplePacket(sequence=1, timestamp_s=0.01067, raw_samples=raw_chunk, meaningful_bits=24, sample_rate_hz=48000)
+        asyncio.run(manager.ingest_device_packet(p1))
+
+        # 4. Packet 4 (skipping sequence 2 and 3 -> gap of 2)
+        p4 = DeviceSamplePacket(sequence=4, timestamp_s=0.04267, raw_samples=raw_chunk, meaningful_bits=24, sample_rate_hz=48000)
+        asyncio.run(manager.ingest_device_packet(p4))
+
+        # Telemetry verification on DeviceRuntime
+        stats = runtime.stats
+        assert stats.packets_received == 4  # All 4 frames with valid CRC were received (including duplicate)
+        assert stats.repeated_packets == 1
+        assert stats.sequence_gaps == 2
+
+        # Telemetry verification on StreamQualityMonitor
+        q_rep = manager.pipeline.quality_monitor.report
+        assert q_rep.repeated_sequences == 1
+        assert q_rep.dropped_blocks == 2
+        assert q_rep.sequence_discontinuities == 2
+        assert q_rep.is_healthy is False
+
+    def test_wav_json_integrity_and_sha256_verification(self, tmp_path: Path):
+        """Priority 5: Verify WAV and session.json consistency including SHA-256 hash."""
+        runtime = DeviceRuntime()
+        manager = StreamManager(sessions_dir=tmp_path, device_runtime=runtime)
+
+        candidate = DeviceCandidate("ESP32S3-HW", "USB Rev-A", "now")
+        runtime.attach_candidate(candidate)
+        runtime.attach_transport(InMemoryFakeTransport())
+        runtime.complete_handshake(
+            DeviceCapabilities(
+                protocol_version="1.0",
+                firmware_version="v1.0",
+                device_id="ESP32S3-HW",
+                sample_rate_hz=48000,
+                sample_format="signed_pcm",
+                channels=1,
+                sample_container_bits=32,
+                meaningful_data_bits=24,
+                max_block_size=512,
+            )
+        )
+        manager.select_source("hardware")
+        sid = manager.start_recording()
+
+        # Ingest 3 blocks (1536 samples)
+        for seq in range(3):
+            raw = np.full(512, 123456 * (seq + 1), dtype=np.int32)
+            pkt = DeviceSamplePacket(
+                sequence=seq,
+                timestamp_s=float(seq * 512 / 48000),
+                raw_samples=raw,
+                meaningful_bits=24,
+                sample_rate_hz=48000,
+            )
+            asyncio.run(manager.ingest_device_packet(pkt))
+
+        meta = manager.stop_recording()
+        session_dir = tmp_path / sid
+        wav_path = session_dir / "raw.wav"
+        json_path = session_dir / "session.json"
+
+        assert wav_path.exists()
+        assert json_path.exists()
+
+        # Independently compute SHA-256 of the raw.wav file
+        computed_sha256 = compute_file_sha256(wav_path)
+        assert meta.raw_wav_sha256 == computed_sha256
+
+        # Sidecar JSON verification
+        sidecar = get_session(sid, sessions_dir=tmp_path)
+        assert sidecar is not None
+        assert sidecar["session_id"] == sid
+        assert sidecar["sample_rate_hz"] == 48000
+        assert sidecar["total_samples"] == 1536
+        assert sidecar["total_blocks"] == 3
+        assert sidecar["raw_wav_sha256"] == computed_sha256
+        assert sidecar["acquisition_mode"] == "hardware"
+        assert sidecar["termination_reason"] == "completed"
+        assert sidecar["device_info"]["device_id"] == "ESP32S3-HW"
+        assert sidecar["device_info"]["sample_rate_hz"] == 48000
+
+    def test_safe_recording_finalization_after_device_interruption(self, tmp_path: Path):
+        """Priority 6: Verify safe recording finalization when device disconnects mid-stream."""
+        runtime = DeviceRuntime()
+        manager = StreamManager(sessions_dir=tmp_path, device_runtime=runtime)
+
+        candidate = DeviceCandidate("ESP32S3-HW", "USB Rev-A", "now")
+        runtime.attach_candidate(candidate)
+        runtime.attach_transport(InMemoryFakeTransport())
+        runtime.complete_handshake(
+            DeviceCapabilities(
+                protocol_version="1.0",
+                firmware_version="v1.0",
+                device_id="ESP32S3-HW",
+                sample_rate_hz=48000,
+                sample_format="signed_pcm",
+                channels=1,
+                sample_container_bits=32,
+                meaningful_data_bits=24,
+                max_block_size=512,
+            )
+        )
+        manager.select_source("hardware")
+        sid = manager.start_recording()
+
+        # Ingest 2 blocks (1024 samples)
+        for seq in range(2):
+            raw = np.full(512, 50000, dtype=np.int32)
+            pkt = DeviceSamplePacket(
+                sequence=seq,
+                timestamp_s=float(seq * 512 / 48000),
+                raw_samples=raw,
+                meaningful_bits=24,
+                sample_rate_hz=48000,
+            )
+            asyncio.run(manager.ingest_device_packet(pkt))
+
+        # Abrupt physical disconnect mid-session
+        manager.handle_device_disconnect("Native USB unplugged mid-stream")
+
+        assert manager.recorder.is_recording is False
+        assert manager.is_streaming is False
+        assert runtime.state == DeviceState.INTERRUPTED
+        assert runtime.stats.disconnect_count == 1
+
+        # Check saved session on disk
+        sidecar = get_session(sid, sessions_dir=tmp_path)
+        assert sidecar is not None
+        assert sidecar["termination_reason"] == "device_disconnected"
+        assert sidecar["total_samples"] == 1024
+        assert sidecar["total_blocks"] == 2
+
+        # Verify WAV file is intact and valid
+        wav_path = tmp_path / sid / "raw.wav"
+        assert wav_path.exists()
+        wav_fs, wav_data = wavfile.read(str(wav_path))
+        assert wav_fs == 48000
+        assert len(wav_data) == 1024
+        assert compute_file_sha256(wav_path) == sidecar["raw_wav_sha256"]
+
+        # Check structured event audit trail
+        events = runtime.event_log.get_recent(limit=10)
+        codes = [e["code"] for e in events]
+        assert "RECORDING_ABORTED" in codes
+
+    def test_unsupported_acquisition_profile_rejection_at_handshake(self):
+        """Priority 7: Verify runtime transitions to INCOMPATIBLE and logs rejection."""
+        runtime = DeviceRuntime(acquisition_profile=REV_A_BASELINE_PROFILE)
+
+        # 1. Unsupported protocol version
+        runtime.attach_candidate(DeviceCandidate("BAD_DEV_1", "USB", "now"))
+        runtime.attach_transport(InMemoryFakeTransport())
+        assert runtime.state == DeviceState.HANDSHAKING
+
+        bad_proto_caps = DeviceCapabilities(
+            protocol_version="9.9",
+            firmware_version="v1.0",
+            device_id="BAD_DEV_1",
+            sample_rate_hz=48000,
+            sample_container_bits=32,
+            meaningful_data_bits=24,
+        )
+        with pytest.raises(ValueError, match="Unsupported protocol version"):
+            runtime.complete_handshake(bad_proto_caps)
+
+        assert runtime.state == DeviceState.INCOMPATIBLE
+        recent = runtime.event_log.get_recent(limit=5)
+        assert recent[-1]["code"] == "HANDSHAKE_REJECTED"
+
+        # Disconnecting resets from INCOMPATIBLE to ABSENT
+        runtime.handle_disconnect()
+        assert runtime.state == DeviceState.ABSENT
+
+        # 2. Unsupported sample rate (44100 Hz vs 48000 Hz)
+        runtime.attach_candidate(DeviceCandidate("BAD_DEV_2", "USB", "now"))
+        runtime.attach_transport(InMemoryFakeTransport())
+        bad_rate_caps = DeviceCapabilities(
+            protocol_version="1.0",
+            firmware_version="v1.0",
+            device_id="BAD_DEV_2",
+            sample_rate_hz=44100,
+            sample_container_bits=32,
+            meaningful_data_bits=24,
+        )
+        with pytest.raises(ValueError, match="Sample rate mismatch"):
+            runtime.complete_handshake(bad_rate_caps)
+
+        assert runtime.state == DeviceState.INCOMPATIBLE
+        runtime.handle_disconnect()
+        assert runtime.state == DeviceState.ABSENT
+
+        # 3. Unsupported container width (16-bit instead of 32-bit)
+        runtime.attach_candidate(DeviceCandidate("BAD_DEV_3", "USB", "now"))
+        runtime.attach_transport(InMemoryFakeTransport())
+        bad_container_caps = DeviceCapabilities(
+            protocol_version="1.0",
+            firmware_version="v1.0",
+            device_id="BAD_DEV_3",
+            sample_rate_hz=48000,
+            sample_container_bits=16,
+            meaningful_data_bits=24,
+        )
+        with pytest.raises(ValueError, match="Container bit width mismatch"):
+            runtime.complete_handshake(bad_container_caps)
+
+        assert runtime.state == DeviceState.INCOMPATIBLE
