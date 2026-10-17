@@ -468,6 +468,7 @@ class StreamManager:
 
     def resume_stream(self) -> None:
         if self.source_type != "none":
+            self.display_aggregator.reset()
             self.is_paused = False
 
     def stop_stream(self) -> None:
