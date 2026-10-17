@@ -97,3 +97,9 @@ experiments/analysis-assets/*
 !experiments/analysis-assets/.gitkeep
 experiments/analysis/*
 !experiments/analysis/.gitkeep
+
+# Compiled binaries and object files
+*.exe
+*.o
+*.obj
+
