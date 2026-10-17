@@ -115,13 +115,20 @@ While the arithmetic sums cleanly to 16 bytes, compiler structure padding on 32-
 
 ### 2.5 Sequence Tracking vs. First-Sample Index (PROPOSED / NOT APPROVED)
 
-- Host telemetry requires monotonic sample accounting to detect packet drops and buffer slips.
-- **Limitation of Sequence Multiplication:**  
-  The formula $\text{sample\_index} = \text{sequence} \times N_{samples}$ is a simplified approximation that is **strictly valid only** when every packet contains an identical fixed sample count, packets start at sequence 0, and no partial frames occur.
-  - *Variable-Length Frames / Final Flushes:* If the final packet before session stop or buffer flush contains fewer than $N_{samples}$ (e.g. 128 instead of 512), sequence multiplication produces an erroneous cumulative count.
-  - *Dropped Packets:* If packet sequence $k$ is dropped by USB buffer overflow, multiplying $(k+1) \times N_{samples}$ incorrectly assumes the lost samples were ingested or skews sample alignment.
-  - *Session Resets & Rollover:* Restarts without sequence reset break cumulative sample counting.
-- **Module C Recommendation:** We recommend evaluating an **explicit cumulative first-sample index** (`uint32` or `uint64` `first_sample_index`) in the header alongside or in place of the frame sequence number. This provides unambiguous sample tracking regardless of packet size variations or partial flushes.
+- Host telemetry requires monotonic sample accounting to detect packet drops, buffer slips, and timeline gaps.
+- **Fixed-Size Frames vs. Variable-Size Frames:**
+  - **Fixed-Size Frames with Continuous Sequence Numbering:**  
+    Under strict fixed packet sizes ($N_{samples}$ constant per frame) and continuous sequence numbering starting at 0, a dropped frame does **not** invalidate the mathematical formula for the transmitted first sample position:
+    $$\text{Transmitted First Sample Index} = \text{Sequence} \times N_{samples}$$
+    If packet sequence $k$ is dropped by the transport, the subsequent arrival of packet $k+1$ correctly identifies that its first sample belongs at hardware timeline position $(k+1) \times N_{samples}$. The sequence gap reliably reveals that exactly $N_{samples}$ were lost in transit.
+  - **Distinction Between Transmitted Position and Host-Ingested Sample Count:**  
+    A sharp distinction must be maintained between the **transmitted sample position** (the absolute sample index along the continuous hardware acquisition timebase) and the **host-ingested sample count** (the cumulative tally of contiguous samples successfully received and stored by the host). A dropped frame introduces a missing block in host-ingested data, but the sequence multiplier preserves the true transmitter timeline offset without corruption.
+  - **Limitations Under Variable-Sized Frames & Session Resets:**  
+    The sequence multiplication approach fails under the following conditions:
+    - *Variable-Length Frames / Final Flushes:* If frames contain variable sample counts or a final buffer flush transmits fewer than $N_{samples}$ (e.g., 128 instead of 512), sequence multiplication no longer reflects true sample positions.
+    - *Session Restarts / Non-Zero Starts:* Resets or re-connections where the sequence counter is not zeroed break alignment with session start.
+- **Module C Recommendation:**  
+  For architectures that permit variable-sized frames, partial end-of-stream flushes, or independent frame counters, we recommend evaluating an **explicit cumulative first-sample index** (`uint32` or `uint64` `first_sample_index`) in the header alongside or in place of the frame sequence number. For strict fixed-size framing, a 32-bit sequence counter is mathematically sufficient for transmitted position tracking.
 - **Status:** This remains an **OPEN proposal pending joint agreement with Module B**.
 
 ---
