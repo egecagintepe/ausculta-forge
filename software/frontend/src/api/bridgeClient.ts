@@ -19,6 +19,9 @@ import {
   SpringerSegmentationReport,
   ValidationBenchmarkSummary,
   ValidationBenchmarkReport,
+  VirtualBenchScenarioSummary,
+  VirtualBenchReport,
+  VirtualBenchScenarioResult,
 } from '../types';
 
 export interface SignalFrameData {
@@ -668,6 +671,29 @@ class BridgeClient {
     } catch {
       return null;
     }
+  }
+
+  public async listBenchScenarios(): Promise<VirtualBenchScenarioSummary[]> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/bench/scenarios`);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async runBenchScenario(scenarioId: string = 'all', seed: number = 42): Promise<VirtualBenchReport> {
+    const resp = await fetch(`${this.apiUrl}/bench/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario_id: scenarioId, seed }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Virtual bench run failed' }));
+      throw new Error(err.detail || `Virtual bench run failed with status ${resp.status}`);
+    }
+    return await resp.json();
   }
 }
 

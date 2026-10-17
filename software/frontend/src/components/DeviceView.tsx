@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ArrowRight,
   Cpu,
@@ -12,9 +12,16 @@ import {
   AlertTriangle,
   CheckCircle,
   HelpCircle,
-  ShieldAlert
+  ShieldAlert,
+  Terminal,
+  CheckCircle2,
+  XCircle,
+  ChevronDown,
+  ChevronUp,
+  Play,
 } from 'lucide-react';
-import { StethoscopeDevice, DeviceRuntimeState, DeviceIntegrityStats, AudioSourceType } from '../types';
+import { StethoscopeDevice, DeviceRuntimeState, DeviceIntegrityStats, AudioSourceType, VirtualBenchReport } from '../types';
+import { bridgeClient } from '../api/bridgeClient';
 
 interface DeviceViewProps {
   deviceState: StethoscopeDevice;
@@ -48,6 +55,26 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
 }) => {
   const isHardwareConnected = deviceRuntimeState?.connected ?? false;
   const hardwareLifecycle = (deviceRuntimeState?.state ?? 'absent').toLowerCase();
+
+  // Virtual Bench state
+  const [benchRunning, setBenchRunning] = useState(false);
+  const [benchReport, setBenchReport] = useState<VirtualBenchReport | null>(null);
+  const [benchError, setBenchError] = useState<string | null>(null);
+  const [expandedScenarioId, setExpandedScenarioId] = useState<string | null>(null);
+
+  const handleRunBench = async () => {
+    setBenchRunning(true);
+    setBenchError(null);
+    try {
+      const rep = await bridgeClient.runBenchScenario('all');
+      setBenchReport(rep);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Virtual bench execution failed';
+      setBenchError(msg);
+    } finally {
+      setBenchRunning(false);
+    }
+  };
 
   // Helper for rendering truthful state badges
   const renderStateBadge = () => {
@@ -478,6 +505,189 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                 <ArrowRight size={12} />
               </button>
             )}
+          </div>
+        </div>
+
+        {/* SECTION 2.5: DETERMINISTIC VIRTUAL BENCH (Known-Answer Test Harness) */}
+        <div
+          className="rounded-xl border p-5 flex flex-col gap-4 shadow-xs"
+          style={{
+            backgroundColor: 'var(--surface-card)',
+            borderColor: 'var(--border-subtle)',
+          }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 font-mono-code text-xs font-bold text-[var(--on-surface)] uppercase">
+              <Terminal size={15} className="text-[var(--accent-oxblood)]" />
+              <span>Deterministic Virtual Bench</span>
+              <span className="px-2 py-0.5 rounded text-[9px] font-mono-code font-bold bg-[var(--accent-oxblood)]/15 text-[var(--accent-oxblood)] border border-[var(--accent-oxblood)]/30">
+                SOFTWARE BENCH · TEST ONLY (NOT HARDWARE)
+              </span>
+            </div>
+            <span className="font-mono-code text-[10px] text-[var(--status-warning)] font-bold">
+              Tag: SOFTWARE_KNOWN_ANSWER
+            </span>
+          </div>
+
+          <p className="text-xs text-[var(--on-surface-variant)] leading-relaxed">
+            A software-only integration harness executing the complete host acquisition seam, DSP filtering, display ring-buffer publication, and session recording without requiring an ESP32-S3. All 8 scenarios test deterministic inputs against independent mathematical known-answer oracles.
+          </p>
+
+          <div className="flex items-center justify-between gap-3 pt-2 border-t border-[var(--border-subtle)]">
+            <div className="flex items-center gap-2">
+              <button
+                id="btn-run-virtual-bench"
+                onClick={handleRunBench}
+                disabled={!backendConnected || benchRunning}
+                className={`px-3.5 py-1.5 rounded-lg font-mono-code text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer border ${
+                  !backendConnected || benchRunning
+                    ? 'bg-[var(--surface-muted)] text-[var(--on-surface-variant)]/50 border-[var(--border-subtle)] cursor-not-allowed'
+                    : 'bg-[var(--accent-oxblood)] text-white border-[var(--accent-oxblood)] hover:opacity-90 shadow-xs'
+                }`}
+              >
+                {benchRunning ? (
+                  <RefreshCw size={13} className="animate-spin" />
+                ) : (
+                  <Play size={13} />
+                )}
+                <span>{benchRunning ? 'Running 8 Scenarios...' : 'Run Known-Answer Test Suite'}</span>
+              </button>
+
+              <span className="text-[10px] font-mono-code text-[var(--on-surface-variant)]">
+                Seed: 42 (Fully Declared Deterministic)
+              </span>
+            </div>
+
+            {benchReport && (
+              <div className="flex items-center gap-2">
+                <span
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono-code font-bold border ${
+                    benchReport.all_passed
+                      ? 'bg-[var(--status-success)]/15 text-[var(--status-success)] border-[var(--status-success)]/40'
+                      : 'bg-[var(--status-danger)]/15 text-[var(--status-danger)] border-[var(--status-danger)]/40'
+                  }`}
+                >
+                  {benchReport.all_passed ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+                  <span>
+                    {benchReport.all_passed ? 'ALL PASSED' : 'TESTS FAILED'} ({benchReport.passed_scenarios}/{benchReport.total_scenarios})
+                  </span>
+                </span>
+              </div>
+            )}
+          </div>
+
+          {benchError && (
+            <div className="p-3 rounded-lg bg-[var(--status-danger)]/10 border border-[var(--status-danger)]/30 text-xs font-mono-code text-[var(--status-danger)]">
+              {benchError}
+            </div>
+          )}
+
+          {benchReport && (
+            <div className="flex flex-col gap-2 pt-2 border-t border-[var(--border-subtle)] font-mono-code text-xs">
+              <div className="flex items-center justify-between text-[11px] text-[var(--on-surface-variant)] pb-1">
+                <span>SCENARIOS EXECUTED ({benchReport.scenarios.length})</span>
+                <span>STATUS / DURATION</span>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                {benchReport.scenarios.map((scen) => {
+                  const isExpanded = expandedScenarioId === scen.scenario_id;
+                  return (
+                    <div
+                      key={scen.scenario_id}
+                      className="border border-[var(--border-subtle)] rounded-lg bg-[var(--surface-muted)] overflow-hidden"
+                    >
+                      <button
+                        onClick={() => setExpandedScenarioId(isExpanded ? null : scen.scenario_id)}
+                        className="w-full p-2.5 flex items-center justify-between gap-2 text-left hover:bg-[var(--surface-card)] transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          {scen.passed ? (
+                            <CheckCircle2 size={14} className="text-[var(--status-success)] shrink-0" />
+                          ) : (
+                            <XCircle size={14} className="text-[var(--status-danger)] shrink-0" />
+                          )}
+                          <span className="font-semibold text-[var(--on-surface)]">{scen.title}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface-card)] text-[var(--on-surface-variant)] border border-[var(--border-subtle)]">
+                            {scen.category}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-[var(--on-surface-variant)]">
+                            {scen.duration_ms.toFixed(1)}ms
+                          </span>
+                          <span className="text-[10px] font-bold text-[var(--status-success)]">
+                            [{scen.metrics.filter((m) => m.passed).length}/{scen.metrics.length} CHECKS]
+                          </span>
+                          {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="p-3 border-t border-[var(--border-subtle)]/60 bg-[var(--surface-card)] flex flex-col gap-2 text-[11px]">
+                          <div className="text-[10px] text-[var(--on-surface-variant)] flex items-center justify-between">
+                            <span>ID: <code>{scen.scenario_id}</code></span>
+                            <span>LABEL: <code className="text-[var(--status-warning)]">{scen.status_label}</code></span>
+                          </div>
+
+                          <table className="w-full text-left border-collapse text-[11px] mt-1">
+                            <thead>
+                              <tr className="border-b border-[var(--border-subtle)] text-[10px] text-[var(--on-surface-variant)]">
+                                <th className="pb-1">CHECK</th>
+                                <th className="pb-1">EXPECTED</th>
+                                <th className="pb-1">OBSERVED</th>
+                                <th className="pb-1 text-right">STATUS</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {scen.metrics.map((m, idx) => (
+                                <tr key={idx} className="border-b border-[var(--border-subtle)]/40">
+                                  <td className="py-1 text-[var(--on-surface)]">{m.name}</td>
+                                  <td className="py-1 text-[var(--on-surface-variant)] truncate max-w-[120px]" title={String(m.expected)}>
+                                    {String(m.expected)} {m.unit}
+                                  </td>
+                                  <td className="py-1 text-[var(--on-surface)] font-semibold truncate max-w-[120px]" title={String(m.observed)}>
+                                    {String(m.observed)} {m.unit}
+                                  </td>
+                                  <td className="py-1 text-right">
+                                    <span
+                                      className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                        m.passed
+                                          ? 'text-[var(--status-success)] bg-[var(--status-success)]/10'
+                                          : 'text-[var(--status-danger)] bg-[var(--status-danger)]/10'
+                                      }`}
+                                    >
+                                      {m.passed ? 'PASS' : 'FAIL'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+
+                          {Object.keys(scen.artifacts).length > 0 && (
+                            <div className="pt-2 border-t border-[var(--border-subtle)]/50 text-[10px] text-[var(--on-surface-variant)]">
+                              <span className="font-bold text-[var(--on-surface)]">Artifacts Generated: </span>
+                              {Object.entries(scen.artifacts).map(([k, v]) => (
+                                <span key={k} className="mr-3">
+                                  {k}: <code className="text-[var(--on-surface)]">{v}</code>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="p-2.5 rounded bg-[var(--surface-muted)] border border-[var(--border-subtle)] text-[10px] font-mono-code text-[var(--on-surface-variant)]">
+            <strong className="text-[var(--on-surface)]">Isolation Guarantee: </strong>
+            Software bench operates purely in-memory via double transports. It cannot alter production USB discovery or report physical hardware connected.
           </div>
         </div>
 

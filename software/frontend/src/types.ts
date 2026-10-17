@@ -596,3 +596,50 @@ export interface ValidationBenchmarkReport {
   warnings: string[];
   limitations: string[];
 }
+
+// =============================================================================
+// Virtual Integration Bench (Software-Only Known-Answer Testing)
+// =============================================================================
+
+export interface VirtualBenchMetric {
+  name: string;
+  expected: unknown;
+  observed: unknown;
+  tolerance?: number | null;
+  passed: boolean;
+  unit: string;
+  notes: string;
+}
+
+export interface VirtualBenchScenarioSummary {
+  id: string;
+  title: string;
+  category: string;
+  description: string;
+}
+
+export interface VirtualBenchScenarioResult {
+  scenario_id: string;
+  title: string;
+  category: string;
+  passed: boolean;
+  status_label: string; // "SOFTWARE_KNOWN_ANSWER"
+  duration_ms: number;
+  metrics: VirtualBenchMetric[];
+  artifacts: Record<string, string>;
+  telemetry_observed: Record<string, unknown>;
+  error_message?: string | null;
+  parameters: Record<string, unknown>;
+}
+
+export interface VirtualBenchReport {
+  bench_version: string;
+  timestamp_utc: string;
+  status_tag: string; // "SOFTWARE_KNOWN_ANSWER"
+  total_scenarios: number;
+  passed_scenarios: number;
+  failed_scenarios: number;
+  all_passed: boolean;
+  scenarios: VirtualBenchScenarioResult[];
+  environment_summary: Record<string, string>;
+}

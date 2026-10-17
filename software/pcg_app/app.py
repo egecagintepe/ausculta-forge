@@ -20,6 +20,7 @@ from pcg_core.scientific_config import list_analysis_profiles
 from .state import StreamManager
 from .device_runtime import DeviceRuntime, DeviceState
 from .analysis_service import AnalysisService
+from .virtual_bench import VirtualBenchRunner
 from .protocol import (
     make_hello_message,
     make_stream_state_message,
@@ -127,6 +128,10 @@ def create_app(
         profile_id: Optional[str] = "SPRINGER_PHYSIONET_REFERENCE_V1"
         max_display_points: Optional[int] = 600
 
+    class BenchRunRequest(BaseModel):
+        scenario_id: Optional[str] = "all"
+        seed: Optional[int] = 42
+
     # REST Endpoints
     @app.get("/api/status")
     def get_status() -> dict[str, Any]:
@@ -170,6 +175,27 @@ def create_app(
             manager.handle_device_disconnect("User requested device disconnect via API")
             await manager.broadcast(make_device_state_message(manager.device_runtime.get_state_dict()))
         return manager.device_runtime.get_state_dict()
+
+    # Virtual Integration Bench Endpoints (Software-Only Known-Answer Testing)
+    @app.get("/api/bench/scenarios")
+    def api_list_bench_scenarios() -> list[dict[str, Any]]:
+        runner = VirtualBenchRunner(output_dir="experiments/virtual-bench")
+        return runner.list_scenarios()
+
+    @app.post("/api/bench/run")
+    def api_run_bench(req: Optional[BenchRunRequest] = None) -> dict[str, Any]:
+        scen_id = (req.scenario_id if req else "all") or "all"
+        seed = req.seed if req and req.seed is not None else 42
+        runner = VirtualBenchRunner(output_dir="experiments/virtual-bench", seed=seed)
+        if scen_id == "all":
+            report = runner.run_all()
+            return report.to_dict()
+        else:
+            try:
+                res = runner.run_scenario(scen_id)
+                return res.to_dict()
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
 
     @app.get("/api/sessions")
     def api_list_sessions() -> list[dict[str, Any]]:
