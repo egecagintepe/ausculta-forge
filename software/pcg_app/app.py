@@ -14,7 +14,15 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from pcg_core.recording import list_sessions, get_session, validate_session_id
+from pcg_core.recording import (
+    list_sessions,
+    get_session,
+    validate_session_id,
+    verify_session_integrity,
+    export_session_manifest,
+    delete_session,
+    SessionCorruptedError,
+)
 from pcg_core.scientific import SystemIdConfig
 from pcg_core.scientific_config import list_analysis_profiles
 from .state import StreamManager
@@ -186,6 +194,36 @@ def create_app(
             raise HTTPException(status_code=404, detail="Session not found")
         return sess
 
+    @app.get("/api/sessions/{session_id}/verify")
+    def api_verify_session(session_id: str) -> dict[str, Any]:
+        try:
+            valid_id = validate_session_id(session_id, manager.sessions_dir)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid session ID")
+        return verify_session_integrity(valid_id, manager.sessions_dir)
+
+    @app.get("/api/sessions/{session_id}/manifest")
+    def api_get_session_manifest(session_id: str) -> dict[str, Any]:
+        try:
+            valid_id = validate_session_id(session_id, manager.sessions_dir)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid session ID")
+        try:
+            return export_session_manifest(valid_id, manager.sessions_dir)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+    @app.delete("/api/sessions/{session_id}")
+    def api_delete_session(session_id: str) -> dict[str, Any]:
+        try:
+            valid_id = validate_session_id(session_id, manager.sessions_dir)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid session ID")
+        deleted = delete_session(valid_id, manager.sessions_dir)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return {"status": "deleted", "session_id": valid_id}
+
     @app.post("/api/sessions/{session_id}/replay")
     async def api_replay_session(session_id: str) -> dict[str, Any]:
         try:
@@ -197,7 +235,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="Session not found")
         try:
             new_state = manager.select_source("session", session_id=valid_id)
-        except (ValueError, FileNotFoundError) as e:
+        except (ValueError, FileNotFoundError, SessionCorruptedError) as e:
             raise HTTPException(status_code=400, detail=str(e))
         manager.start_stream()
         await manager.broadcast(make_stream_state_message(new_state))
