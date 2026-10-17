@@ -333,6 +333,7 @@ class StreamManager:
         """
         # If switching away from hardware, stop device streaming cleanly
         if self.source_type == "hardware" and source_type != "hardware":
+            self.device_runtime.stop_supervisor()
             self.device_runtime.stop_streaming()
 
         self.display_aggregator.reset()
@@ -393,10 +394,39 @@ class StreamManager:
             if self.device_runtime.capabilities:
                 self.sample_rate_hz = self.device_runtime.capabilities.sample_rate_hz
                 self.block_size = self.device_runtime.profile.negotiated_block_size
-            self.device_runtime.start_streaming()
             self._source_generator = None
             self.is_streaming = True
             self.is_paused = False
+
+            # If physical transport and decoder are configured, start the supervisor read loop
+            if (
+                self.device_runtime.active_transport is not None
+                and self.device_runtime.decoder is not None
+                and not (self.device_runtime.supervisor and self.device_runtime.supervisor.is_running)
+            ):
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+
+                def _on_pkt(pkt: DeviceSamplePacket) -> None:
+                    if loop and loop.is_running():
+                        asyncio.run_coroutine_threadsafe(self.ingest_device_packet(pkt), loop)
+                    else:
+                        asyncio.run(self.ingest_device_packet(pkt))
+
+                def _on_disc(reason: str) -> None:
+                    if loop and loop.is_running():
+                        loop.call_soon_threadsafe(self.handle_device_disconnect, reason)
+                    else:
+                        self.handle_device_disconnect(reason)
+
+                self.device_runtime.start_supervisor(
+                    on_packet=_on_pkt,
+                    on_disconnect=_on_disc,
+                )
+            else:
+                self.device_runtime.start_streaming()
 
         else:
             raise ValueError(f"Invalid or unsupported source type: {source_type!r}")
@@ -474,6 +504,7 @@ class StreamManager:
         self.is_streaming = False
         self.display_aggregator.reset()
         if self.source_type == "hardware":
+            self.device_runtime.stop_supervisor()
             self.device_runtime.stop_streaming()
 
     async def start_streaming_task(self) -> None:
