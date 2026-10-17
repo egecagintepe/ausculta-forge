@@ -129,6 +129,7 @@ class DisplayFrame:
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
             "type": "display_frame",
+            "version": "2.0.0",
             "source_seq_start": self.source_seq_start,
             "source_seq_end": self.source_seq_end,
             "window_start_ts": round(self.window_start_ts, 4),
@@ -245,10 +246,11 @@ class DisplayAggregator:
         self._filt_accum.append(filt_samples)
         self._accum_samples += n_samples
 
-        # Bounded rolling buffer for spectral calculation (max 4096 samples)
+        # Bounded rolling buffer for spectral calculation (max 8192 samples at >=32kHz, 4096 at lower rates)
+        max_spec_samples = 8192 if self._fs >= 32000 else 4096
         self._recent_filt.append(filt_samples)
         self._recent_filt_count += n_samples
-        while self._recent_filt_count > 4096 and len(self._recent_filt) > 1:
+        while self._recent_filt_count > max_spec_samples and len(self._recent_filt) > 1:
             dropped = self._recent_filt.pop(0)
             self._recent_filt_count -= len(dropped)
 
@@ -300,16 +302,19 @@ class DisplayAggregator:
             cur_peak = 0.0
             cur_cf = 1.0
 
-        # Periodic spectral frame computation (bounded to recent <=4096 samples)
+        # Periodic spectral frame computation (bounded to recent samples)
         spectral_dict: Optional[dict[str, Any]] = None
         if self.config.enable_spectral and self._recent_filt_count >= 32:
             spec_elapsed = (self._ts_end or 0.0) - self._last_spectral_ts
             if spec_elapsed >= self.spectral_interval_s or self._last_spectral_ts == 0.0:
                 spec_samples = np.concatenate(self._recent_filt)
+                target_nperseg = self.config.spectral_nperseg
+                if self._fs >= 32000 and target_nperseg < 1024:
+                    target_nperseg = 1024
                 spec_frame = compute_spectral_frame(
                     spec_samples,
                     fs=self._fs,
-                    nperseg=min(self.config.spectral_nperseg, len(spec_samples)),
+                    nperseg=min(target_nperseg, len(spec_samples)),
                 )
                 spectral_dict = {
                     "frequencies_hz": spec_frame.frequencies_hz,

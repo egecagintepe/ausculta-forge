@@ -25,7 +25,8 @@ import {
   FilterPreset,
   FilterStrength,
   ListeningTrack,
-  HeartSoundMetadata
+  HeartSoundMetadata,
+  SpectralFrameData,
 } from '../types';
 
 interface LiveWorkspaceProps {
@@ -67,6 +68,9 @@ interface LiveWorkspaceProps {
   onStartRecording?: () => void;
   onStopRecording?: () => void;
   recordingElapsedSeconds?: number;
+  droppedDisplayFrames?: number;
+  spectralFrame?: SpectralFrameData | null;
+  displayPointsPerSec?: number;
 }
 
 export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
@@ -108,6 +112,9 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
   onStartRecording,
   onStopRecording,
   recordingElapsedSeconds,
+  droppedDisplayFrames = 0,
+  spectralFrame = null,
+  displayPointsPerSec,
 }) => {
   const [viewMode, setViewMode] = useState<'oscilloscope' | 'fft'>('oscilloscope');
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
@@ -116,6 +123,9 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const rawCanvasRef = useRef<HTMLCanvasElement>(null);
   const overviewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const fftCanvasRef = useRef<HTMLCanvasElement>(null);
+  const spectrogramCanvasRef = useRef<HTMLCanvasElement>(null);
+  const spectralHistoryRef = useRef<Array<{ freqs: number[]; powers: number[] }>>([]);
 
   // Close filter menu when clicking outside
   useEffect(() => {
@@ -171,9 +181,15 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
 
     const waveColor = isDark ? '#D19AA3' : '#7A3842';
 
-    if (sourceType !== 'none' && filteredData.length > 0 && sampleRate > 0) {
-      const startIndex = Math.max(0, Math.floor(windowStart * sampleRate));
-      const endIndex = Math.min(filteredData.length, Math.ceil(windowEnd * sampleRate));
+    const ptsRate = displayPointsPerSec && displayPointsPerSec > 0
+      ? displayPointsPerSec
+      : (filteredData.length > 0 && duration > 0 ? filteredData.length / Math.min(15.0, duration) : sampleRate);
+    const bufferSpan = filteredData.length > 0 && ptsRate > 0 ? filteredData.length / ptsRate : visibleWindowSec;
+    const bufferStart = Math.max(0, duration - bufferSpan);
+
+    if (sourceType !== 'none' && filteredData.length > 0 && ptsRate > 0) {
+      const startIndex = Math.max(0, Math.floor((windowStart - bufferStart) * ptsRate));
+      const endIndex = Math.min(filteredData.length, Math.ceil((windowEnd - bufferStart) * ptsRate));
       const count = endIndex - startIndex;
 
       if (count > 0) {
@@ -214,7 +230,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
         ctx.stroke();
       }
     }
-  }, [filteredData, sampleRate, windowStart, windowEnd, isDark, visibleWindowSec, sourceType]);
+  }, [filteredData, sampleRate, windowStart, windowEnd, isDark, visibleWindowSec, sourceType, displayPointsPerSec, duration]);
 
   // Draw Raw Waveform on Canvas
   useEffect(() => {
@@ -236,9 +252,15 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
 
     const waveColor = isDark ? '#948E84' : '#93897C';
 
-    if (sourceType !== 'none' && rawData.length > 0 && sampleRate > 0) {
-      const startIndex = Math.max(0, Math.floor(windowStart * sampleRate));
-      const endIndex = Math.min(rawData.length, Math.ceil(windowEnd * sampleRate));
+    const ptsRate = displayPointsPerSec && displayPointsPerSec > 0
+      ? displayPointsPerSec
+      : (rawData.length > 0 && duration > 0 ? rawData.length / Math.min(15.0, duration) : sampleRate);
+    const bufferSpan = rawData.length > 0 && ptsRate > 0 ? rawData.length / ptsRate : visibleWindowSec;
+    const bufferStart = Math.max(0, duration - bufferSpan);
+
+    if (sourceType !== 'none' && rawData.length > 0 && ptsRate > 0) {
+      const startIndex = Math.max(0, Math.floor((windowStart - bufferStart) * ptsRate));
+      const endIndex = Math.min(rawData.length, Math.ceil((windowEnd - bufferStart) * ptsRate));
       const count = endIndex - startIndex;
 
       if (count > 0) {
@@ -278,7 +300,238 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
         ctx.stroke();
       }
     }
-  }, [rawData, sampleRate, windowStart, windowEnd, isDark, showRaw, visibleWindowSec, sourceType]);
+  }, [rawData, sampleRate, windowStart, windowEnd, isDark, showRaw, visibleWindowSec, sourceType, displayPointsPerSec, duration]);
+
+  // Accumulate spectral history for the waterfall spectrogram heatmap
+  useEffect(() => {
+    if (!spectralFrame || !spectralFrame.frequencies_hz || spectralFrame.frequencies_hz.length === 0) return;
+    const history = spectralHistoryRef.current;
+    history.push({
+      freqs: spectralFrame.frequencies_hz,
+      powers: spectralFrame.power_db,
+    });
+    if (history.length > 80) {
+      history.shift();
+    }
+  }, [spectralFrame]);
+
+  // Draw FFT / Power Spectral Density on Canvas
+  useEffect(() => {
+    if (viewMode !== 'fft') return;
+    const canvas = fftCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+
+    const w = rect.width;
+    const h = rect.height;
+    ctx.clearRect(0, 0, w, h);
+
+    if (spectralFrame && spectralFrame.frequencies_hz && spectralFrame.frequencies_hz.length > 0) {
+      const freqs = spectralFrame.frequencies_hz;
+      const powers = spectralFrame.power_db;
+      const maxFreq = 2000;
+      const minDb = -85;
+      const maxDb = 0;
+
+      const freqToX = (f: number) => Math.max(0, Math.min(w, (f / maxFreq) * w));
+      const dbToY = (db: number) => {
+        const clamped = Math.max(minDb, Math.min(maxDb, db));
+        return h - ((clamped - minDb) / (maxDb - minDb)) * h;
+      };
+
+      // 1. Shaded clinical acoustic zones
+      // S1/S2 Primary PCG: 20-150 Hz
+      const s1X1 = freqToX(20);
+      const s1X2 = freqToX(150);
+      ctx.fillStyle = isDark ? 'rgba(197, 155, 39, 0.12)' : 'rgba(183, 154, 112, 0.15)';
+      ctx.fillRect(s1X1, 0, s1X2 - s1X1, h);
+
+      // Murmur/Turbulence: 150-600 Hz
+      const mX1 = freqToX(150);
+      const mX2 = freqToX(600);
+      ctx.fillStyle = isDark ? 'rgba(209, 154, 163, 0.10)' : 'rgba(122, 29, 46, 0.10)';
+      ctx.fillRect(mX1, 0, mX2 - mX1, h);
+
+      // 2. Graticules
+      ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
+      ctx.lineWidth = 1;
+
+      [-20, -40, -60, -80].forEach(db => {
+        const y = dbToY(db);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      });
+
+      [50, 100, 200, 500, 1000, 1500].forEach(f => {
+        const x = freqToX(f);
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      });
+
+      // 3. Curve fill
+      ctx.beginPath();
+      let first = true;
+      for (let i = 0; i < freqs.length; i++) {
+        if (freqs[i] > maxFreq) break;
+        const x = freqToX(freqs[i]);
+        const y = dbToY(powers[i]);
+        if (first) {
+          ctx.moveTo(x, y);
+          first = false;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      if (isDark) {
+        grad.addColorStop(0, 'rgba(209, 154, 163, 0.40)');
+        grad.addColorStop(0.7, 'rgba(197, 155, 39, 0.12)');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      } else {
+        grad.addColorStop(0, 'rgba(122, 56, 66, 0.35)');
+        grad.addColorStop(0.7, 'rgba(183, 154, 112, 0.12)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      }
+
+      ctx.save();
+      const lastIdx = Math.min(freqs.length - 1, freqs.findIndex(f => f > maxFreq));
+      const endX = freqToX(freqs[lastIdx >= 0 ? lastIdx : freqs.length - 1]);
+      ctx.lineTo(endX, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+
+      // Stroke curve line
+      ctx.beginPath();
+      first = true;
+      for (let i = 0; i < freqs.length; i++) {
+        if (freqs[i] > maxFreq) break;
+        const x = freqToX(freqs[i]);
+        const y = dbToY(powers[i]);
+        if (first) {
+          ctx.moveTo(x, y);
+          first = false;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.strokeStyle = isDark ? '#D19AA3' : '#7A3842';
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+
+      // Peak crosshair marker
+      const peakFreq = spectralFrame.peak_frequency_hz;
+      if (peakFreq > 0 && peakFreq <= maxFreq) {
+        const peakX = freqToX(peakFreq);
+        let closestPower = -80;
+        let minDiff = Infinity;
+        for (let i = 0; i < freqs.length; i++) {
+          const diff = Math.abs(freqs[i] - peakFreq);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closestPower = powers[i];
+          }
+        }
+        const peakY = dbToY(closestPower);
+
+        ctx.strokeStyle = isDark ? 'rgba(253, 224, 71, 0.7)' : 'rgba(122, 29, 46, 0.8)';
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(peakX, 0);
+        ctx.lineTo(peakX, h);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.beginPath();
+        ctx.arc(peakX, peakY, 4, 0, Math.PI * 2);
+        ctx.fillStyle = isDark ? '#FDE047' : '#7A1D2E';
+        ctx.fill();
+        ctx.strokeStyle = isDark ? '#FFFFFF' : '#000000';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    } else {
+      ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.35)' : 'rgba(0, 0, 0, 0.35)';
+      ctx.font = '11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(sourceType === 'none' ? 'NO ACQUISITION SOURCE ACTIVE' : 'AWAITING SPECTRAL FRAME TICKS...', w / 2, h / 2);
+    }
+  }, [viewMode, spectralFrame, isDark, sourceType]);
+
+  // Draw Waterfall Spectrogram Heatmap on Canvas
+  useEffect(() => {
+    if (viewMode !== 'fft') return;
+    const canvas = spectrogramCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+
+    const w = rect.width;
+    const h = rect.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const history = spectralHistoryRef.current;
+    if (history.length === 0) return;
+
+    const maxFreq = 2000;
+    const minDb = -85;
+    const maxDb = 0;
+    const colW = w / Math.max(1, history.length);
+
+    history.forEach((frame, colIdx) => {
+      const x = colIdx * colW;
+      const freqs = frame.freqs;
+      const powers = frame.powers;
+      const nBins = freqs.length;
+      if (nBins === 0) return;
+
+      for (let i = 0; i < nBins; i++) {
+        if (freqs[i] > maxFreq) break;
+        const freqNext = i < nBins - 1 ? freqs[i + 1] : maxFreq;
+        const yTop = h - (freqNext / maxFreq) * h;
+        const yBottom = h - (freqs[i] / maxFreq) * h;
+        const binH = Math.max(1, yBottom - yTop);
+
+        const norm = Math.max(0, Math.min(1, (powers[i] - minDb) / (maxDb - minDb)));
+        let color = '#1a1816';
+        if (norm < 0.25) {
+          color = `rgb(${Math.round(norm * 4 * 74)},${Math.round(norm * 4 * 18)},${Math.round(norm * 4 * 26)})`;
+        } else if (norm < 0.55) {
+          const t = (norm - 0.25) / 0.3;
+          color = `rgb(${Math.round(74 + t * 48)},${Math.round(18 + t * 11)},${Math.round(26 + t * 20)})`;
+        } else if (norm < 0.85) {
+          const t = (norm - 0.55) / 0.3;
+          color = `rgb(${Math.round(122 + t * 75)},${Math.round(29 + t * 126)},${Math.round(46 - t * 7)})`;
+        } else {
+          const t = (norm - 0.85) / 0.15;
+          color = `rgb(${Math.round(197 + t * 56)},${Math.round(155 + t * 69)},${Math.round(39 + t * 32)})`;
+        }
+
+        ctx.fillStyle = color;
+        ctx.fillRect(x, yTop, colW + 0.5, binH);
+      }
+    });
+  }, [viewMode, spectralFrame, isDark]);
 
   // Draw Full Overview mini-waveform
   useEffect(() => {
@@ -389,23 +642,43 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
 
             <div className="h-6 w-px bg-[var(--border-subtle)] hidden sm:block mx-1" />
 
-            {/* Signal / Stream Quality Badge */}
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded ${
-              streamQuality?.is_healthy !== false
-                ? 'bg-[var(--status-success)]/10 text-[var(--status-success)] border border-[var(--status-success)]/25'
-                : 'bg-[var(--status-warning)]/10 text-[var(--status-warning)] border border-[var(--status-warning)]/25'
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${
-                streamQuality?.is_healthy !== false ? 'bg-[var(--status-success)]' : 'bg-[var(--status-warning)]'
-              }`} />
-              <span className="font-mono-code text-[11px] font-semibold tracking-wide">
-                {backendConnected
-                  ? `STREAM: ${streamQuality?.is_healthy !== false ? 'OPTIMAL' : 'DEGRADED'} (${streamQuality?.dropped_blocks || 0} DROPS)`
-                  : (activeMetadata?.quality.score != null
-                      ? `QUALITY: ${activeMetadata.quality.rating.toUpperCase()} (${activeMetadata.quality.score}%)`
-                      : `SOURCE: ${activeMetadata?.quality.message || 'SYNTHETIC BENCH'}`)}
-              </span>
-            </div>
+            {/* Backend Offline Alert Badge */}
+            {backendConnected === false && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--status-danger)]/15 text-[var(--status-danger)] border border-[var(--status-danger)]/30 animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-danger)]" />
+                <span className="font-mono-code text-[11px] font-semibold tracking-wide">
+                  BACKEND OFFLINE — RECONNECTING...
+                </span>
+              </div>
+            )}
+
+            {/* Signal / Stream Quality Badge with Truthful MCU vs UI Separation */}
+            {backendConnected && (
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded ${
+                streamQuality?.is_healthy !== false && (droppedDisplayFrames || 0) === 0
+                  ? 'bg-[var(--status-success)]/10 text-[var(--status-success)] border border-[var(--status-success)]/25'
+                  : 'bg-[var(--status-warning)]/10 text-[var(--status-warning)] border border-[var(--status-warning)]/25'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  streamQuality?.is_healthy !== false && (droppedDisplayFrames || 0) === 0
+                    ? 'bg-[var(--status-success)]'
+                    : 'bg-[var(--status-warning)]'
+                }`} />
+                <span className="font-mono-code text-[11px] font-semibold tracking-wide">
+                  STREAM: {streamQuality?.is_healthy !== false ? 'OPTIMAL' : 'DEGRADED'} · MCU: {streamQuality?.dropped_blocks || 0} LOSS · UI: {droppedDisplayFrames || 0} DROPS
+                </span>
+              </div>
+            )}
+
+            {!backendConnected && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--surface-muted)] text-[var(--on-surface-variant)] border border-[var(--border-subtle)]">
+                <span className="font-mono-code text-[11px] font-semibold tracking-wide">
+                  {activeMetadata?.quality.score != null
+                    ? `QUALITY: ${activeMetadata.quality.rating.toUpperCase()} (${activeMetadata.quality.score}%)`
+                    : `SOURCE: ${activeMetadata?.quality.message || 'OFFLINE SPECIMEN'}`}
+                </span>
+              </div>
+            )}
 
             {/* Filter Preset Chip */}
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--surface-muted)] text-[var(--on-surface)] border border-[var(--border-subtle)]">
@@ -490,66 +763,106 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
           <div className="flex items-center justify-between pb-2 px-1">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[var(--accent-oxblood)]" />
+                <span className={`w-2.5 h-2.5 rounded-full ${viewMode === 'fft' ? 'bg-[var(--accent-metal)]' : 'bg-[var(--accent-oxblood)]'}`} />
                 <span className="font-mono-code text-[11px] text-[var(--on-surface)] font-bold tracking-wider uppercase">
-                  Track A: Processed Phonocardiogram (PCG)
+                  {viewMode === 'fft' ? 'Track S: Real-Time Acoustic Spectral Density (PSD)' : 'Track A: Processed Phonocardiogram (PCG)'}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2 font-mono-code text-[10px]">
-                <span className="px-2 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--accent-oxblood)] font-bold border border-[var(--border-subtle)]">
-                  {presetLabels[filterPreset].title} ({presetLabels[filterPreset].range})
-                </span>
-                {liveMetrics && (
-                  <span className="text-[var(--on-surface-variant)] hidden md:inline">
-                    RMS: <strong className="text-[var(--on-surface)]">{liveMetrics.rms.toFixed(4)}</strong> · PEAK: <strong className="text-[var(--on-surface)]">{liveMetrics.peak.toFixed(4)}</strong> · CREST: <strong className="text-[var(--on-surface)]">{liveMetrics.crest_factor.toFixed(2)}</strong>
-                  </span>
-                )}
-                {streamQuality && (
-                  <span className={`px-2 py-0.5 rounded font-mono-code text-[10px] font-semibold border ${
-                    streamQuality.is_healthy
-                      ? 'bg-[var(--status-success)]/10 text-[var(--status-success)] border-[var(--status-success)]/30'
-                      : 'bg-[var(--status-warning)]/10 text-[var(--status-warning)] border-[var(--status-warning)]/30'
-                  }`}>
-                    {streamQuality.is_healthy ? 'STREAM HEALTHY' : `${streamQuality.dropped_blocks} DROPPED`}
-                  </span>
+                {viewMode === 'oscilloscope' ? (
+                  <>
+                    <span className="px-2 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--accent-oxblood)] font-bold border border-[var(--border-subtle)]">
+                      {presetLabels[filterPreset].title} ({presetLabels[filterPreset].range})
+                    </span>
+                    {liveMetrics && (
+                      <span className="text-[var(--on-surface-variant)] hidden md:inline">
+                        RMS: <strong className="text-[var(--on-surface)]">{liveMetrics.rms.toFixed(4)}</strong> · PEAK: <strong className="text-[var(--on-surface)]">{liveMetrics.peak.toFixed(4)}</strong> · CREST: <strong className="text-[var(--on-surface)]">{liveMetrics.crest_factor.toFixed(2)}</strong>
+                      </span>
+                    )}
+                    {streamQuality && (
+                      <span className={`px-2 py-0.5 rounded font-mono-code text-[10px] font-semibold border ${
+                        streamQuality.is_healthy && (droppedDisplayFrames || 0) === 0
+                          ? 'bg-[var(--status-success)]/10 text-[var(--status-success)] border-[var(--status-success)]/30'
+                          : 'bg-[var(--status-warning)]/10 text-[var(--status-warning)] border-[var(--status-warning)]/30'
+                      }`}>
+                        {streamQuality.is_healthy ? 'MCU: 0 LOSS' : `MCU: ${streamQuality.dropped_blocks} LOSS`}
+                        {' · '}
+                        {(droppedDisplayFrames || 0) === 0 ? 'UI: 0 DROPS' : `UI: ${droppedDisplayFrames} DROPS`}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className={`px-2 py-0.5 rounded font-mono-code text-[10px] font-bold border ${
+                      spectralFrame?.dominant_band === 'fundamental_pcg'
+                        ? 'bg-[var(--status-success)]/15 text-[var(--status-success)] border-[var(--status-success)]/30'
+                        : spectralFrame?.dominant_band === 'extended_pcg'
+                        ? 'bg-[var(--accent-oxblood)]/15 text-[var(--accent-oxblood)] border-[var(--accent-oxblood)]/30'
+                        : 'bg-[var(--surface-muted)] text-[var(--on-surface)] border-[var(--border-subtle)]'
+                    }`}>
+                      {spectralFrame?.dominant_band === 'fundamental_pcg'
+                        ? 'S1/S2 PCG BAND (20–150 Hz)'
+                        : spectralFrame?.dominant_band === 'extended_pcg'
+                        ? 'MURMUR / TURBULENCE (150–600 Hz)'
+                        : spectralFrame?.dominant_band === 'sub_audible'
+                        ? 'INFRASOUND (<20 Hz)'
+                        : spectralFrame?.dominant_band ? spectralFrame.dominant_band.toUpperCase() : 'AWAITING TICKS'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--on-surface)] font-mono-code text-[10px] border border-[var(--border-subtle)]">
+                      PEAK: <strong className="text-[var(--accent-oxblood)]">{spectralFrame?.peak_frequency_hz ? spectralFrame.peak_frequency_hz.toFixed(1) + ' Hz' : '-- Hz'}</strong>
+                    </span>
+                    <span className="text-[var(--on-surface-variant)] hidden md:inline">
+                      WELCH PSD · ADAPTIVE 48 kHz BINS · 5.0 Hz CADENCE
+                    </span>
+                  </>
                 )}
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="font-mono-code text-[10px] text-[var(--on-surface-variant)]">SPAN:</span>
-              <div className="flex items-center bg-[var(--surface-muted)] rounded p-0.5 border border-[var(--border-subtle)]">
-                {[2, 5, 10].map(sec => (
+              {viewMode === 'oscilloscope' && (
+                <>
+                  <span className="font-mono-code text-[10px] text-[var(--on-surface-variant)]">SPAN:</span>
+                  <div className="flex items-center bg-[var(--surface-muted)] rounded p-0.5 border border-[var(--border-subtle)]">
+                    {[2, 5, 10].map(sec => (
+                      <button
+                        key={sec}
+                        onClick={() => onChangeWindowSec(sec)}
+                        className={`px-2 py-0.5 rounded font-mono-code text-[10px] cursor-pointer transition-colors ${
+                          visibleWindowSec === sec
+                            ? 'bg-[var(--surface-card)] text-[var(--accent-oxblood)] font-bold shadow-xs'
+                            : 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]'
+                        }`}
+                      >
+                        {sec} s
+                      </button>
+                    ))}
+                  </div>
+
                   <button
-                    key={sec}
-                    onClick={() => onChangeWindowSec(sec)}
-                    className={`px-2 py-0.5 rounded font-mono-code text-[10px] cursor-pointer transition-colors ${
-                      visibleWindowSec === sec
-                        ? 'bg-[var(--surface-card)] text-[var(--accent-oxblood)] font-bold shadow-xs'
-                        : 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]'
+                    id="toggle-raw-btn"
+                    onClick={onToggleShowRaw}
+                    className={`px-3 py-1 rounded transition-colors font-mono-code text-[10px] font-semibold flex items-center gap-1.5 border cursor-pointer ${
+                      showRaw
+                        ? 'bg-[var(--surface-muted)] text-[var(--on-surface)] border-[var(--border-strong)]'
+                        : 'bg-[var(--surface-card)] text-[var(--on-surface-variant)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                     }`}
                   >
-                    {sec} s
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--waveform-raw)]" />
+                    <span>{showRaw ? 'SHOW RAW (ACTIVE)' : 'SHOW RAW'}</span>
                   </button>
-                ))}
-              </div>
+                </>
+              )}
 
-              <button
-                id="toggle-raw-btn"
-                onClick={onToggleShowRaw}
-                className={`px-3 py-1 rounded transition-colors font-mono-code text-[10px] font-semibold flex items-center gap-1.5 border cursor-pointer ${
-                  showRaw
-                    ? 'bg-[var(--surface-muted)] text-[var(--on-surface)] border-[var(--border-strong)]'
-                    : 'bg-[var(--surface-card)] text-[var(--on-surface-variant)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--waveform-raw)]" />
-                <span>{showRaw ? 'SHOW RAW (ACTIVE)' : 'SHOW RAW'}</span>
-              </button>
+              {viewMode === 'fft' && (
+                <div className="font-mono-code text-[10px] px-2 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--accent-metal)] border border-[var(--border-subtle)] font-semibold">
+                  PASSBAND: 0–2000 Hz
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Waveform Reticle Area (Recessed Tray #EAE5D9) */}
+          {/* Reticle Area (Recessed Tray) */}
           <div
             className="relative w-full rounded-lg overflow-hidden flex flex-col shadow-inner border"
             style={{
@@ -557,7 +870,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
               borderColor: 'var(--border-subtle)'
             }}
           >
-            {/* Timecode Top Axis Ruler */}
+            {/* Top Axis Ruler: Dynamic physical timestamps for Oscilloscope, Frequency ticks for FFT */}
             <div
               className="h-6 w-full flex items-center justify-between px-6 font-mono-code text-[10px] tracking-wider select-none relative border-b"
               style={{
@@ -566,57 +879,126 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                 color: 'var(--on-surface-variant)'
               }}
             >
-              {[0, 2, 4, 6, 8, 10].map(s => (
-                <div key={s} className="flex items-center gap-1">
-                  <span>{s}.0s</span>
-                  <div className="w-px h-2 bg-[var(--border-strong)]" />
-                </div>
-              ))}
+              {viewMode === 'oscilloscope' ? (
+                <>
+                  {(() => {
+                    const numTicks = 6;
+                    const ticks = [];
+                    for (let i = 0; i < numTicks; i++) {
+                      const t = windowStart + (i * visibleWindowSec) / (numTicks - 1);
+                      ticks.push(t);
+                    }
+                    return ticks.map((t, idx) => (
+                      <div key={idx} className="flex items-center gap-1">
+                        <span>{t.toFixed(1)}s</span>
+                        <div className="w-px h-2 bg-[var(--border-strong)]" />
+                      </div>
+                    ));
+                  })()}
 
-              {/* Metric Floating Stamp */}
-              <div
-                className="absolute right-3 top-1 px-2 py-0.5 rounded text-[9px] font-mono-code font-semibold shadow-xs border"
-                style={{
-                  backgroundColor: 'var(--surface-card)',
-                  borderColor: 'var(--border-subtle)',
-                  color: 'var(--accent-metal)'
-                }}
-              >
-                {sourceType === 'none' ? 'INPUT: NO ACQUISITION SOURCE' : 'INPUT: ACTIVE STREAM (4.0 kHz)'}
-              </div>
+                  <div
+                    className="absolute right-3 top-1 px-2 py-0.5 rounded text-[9px] font-mono-code font-semibold shadow-xs border"
+                    style={{
+                      backgroundColor: 'var(--surface-card)',
+                      borderColor: 'var(--border-subtle)',
+                      color: 'var(--accent-metal)'
+                    }}
+                  >
+                    {sourceType === 'none' ? 'INPUT: NO ACQUISITION SOURCE' : `INPUT: ACTIVE STREAM (${(sampleRate / 1000).toFixed(1)} kHz)`}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {[0, 100, 200, 500, 1000, 1500, 2000].map(f => (
+                    <div key={f} className="flex items-center gap-1">
+                      <span>{f} Hz</span>
+                      <div className="w-px h-2 bg-[var(--border-strong)]" />
+                    </div>
+                  ))}
+
+                  <div
+                    className="absolute right-3 top-1 px-2 py-0.5 rounded text-[9px] font-mono-code font-semibold shadow-xs border"
+                    style={{
+                      backgroundColor: 'var(--surface-card)',
+                      borderColor: 'var(--border-subtle)',
+                      color: 'var(--accent-metal)'
+                    }}
+                  >
+                    ACOUSTIC BAND: 0–2000 Hz · WELCH PSD
+                  </div>
+                </>
+              )}
             </div>
 
-            {/* Active Reticle Waveform Screen */}
+            {/* Active Reticle Screen */}
             <div
               className="relative h-64 w-full cursor-crosshair overflow-hidden"
-              onClick={handleMainCanvasClick}
+              onClick={viewMode === 'oscilloscope' ? handleMainCanvasClick : undefined}
             >
-              {/* Millimeter Reticle Grid Backdrop */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" height="100%" width="100%">
-                <defs>
-                  <pattern id="millimeter-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="var(--grid-line)" strokeWidth="0.5" opacity="0.6" />
-                  </pattern>
-                  <pattern id="major-grid" width="100" height="100" patternUnits="userSpaceOnUse">
-                    <rect width="100" height="100" fill="url(#millimeter-grid)" />
-                    <path d="M 100 0 L 0 0 0 100" fill="none" stroke="var(--grid-line)" strokeWidth="1.2" opacity="0.9" />
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#major-grid)" />
-                <line x1="0" y1="50%" x2="100%" y2="50%" stroke="var(--accent-metal)" strokeWidth="1" strokeDasharray="4,2" opacity="0.7" />
-              </svg>
+              {viewMode === 'oscilloscope' ? (
+                <>
+                  {/* Millimeter Reticle Grid Backdrop */}
+                  <svg className="absolute inset-0 w-full h-full pointer-events-none" height="100%" width="100%">
+                    <defs>
+                      <pattern id="millimeter-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="var(--grid-line)" strokeWidth="0.5" opacity="0.6" />
+                      </pattern>
+                      <pattern id="major-grid" width="100" height="100" patternUnits="userSpaceOnUse">
+                        <rect width="100" height="100" fill="url(#millimeter-grid)" />
+                        <path d="M 100 0 L 0 0 0 100" fill="none" stroke="var(--grid-line)" strokeWidth="1.2" opacity="0.9" />
+                      </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#major-grid)" />
+                    <line x1="0" y1="50%" x2="100%" y2="50%" stroke="var(--accent-metal)" strokeWidth="1" strokeDasharray="4,2" opacity="0.7" />
+                  </svg>
 
-              {/* Amplitude Graticule Scale Labels (dBFS) */}
-              <div className="absolute left-2 inset-y-0 flex flex-col justify-between py-2 pointer-events-none font-mono-code text-[9px] text-[var(--on-surface-variant)]/70 font-semibold select-none z-10">
-                <span>+1.00</span>
-                <span>+0.50</span>
-                <span className="text-[var(--accent-metal)] font-bold">0.00FS</span>
-                <span>-0.50</span>
-                <span>-1.00</span>
-              </div>
+                  {/* Amplitude Graticule Scale Labels (dBFS) */}
+                  <div className="absolute left-2 inset-y-0 flex flex-col justify-between py-2 pointer-events-none font-mono-code text-[9px] text-[var(--on-surface-variant)]/70 font-semibold select-none z-10">
+                    <span>+1.00</span>
+                    <span>+0.50</span>
+                    <span className="text-[var(--accent-metal)] font-bold">0.00FS</span>
+                    <span>-0.50</span>
+                    <span>-1.00</span>
+                  </div>
 
-              {/* High-Resolution Waveform Canvas */}
-              <canvas ref={mainCanvasRef} className="absolute inset-0 w-full h-full z-10" />
+                  {/* High-Resolution Waveform Canvas */}
+                  <canvas ref={mainCanvasRef} className="absolute inset-0 w-full h-full z-10" />
+
+                  {/* Acoustic Playhead (Vertical hairline) */}
+                  {sourceType !== 'none' && (
+                    <div
+                      className="absolute top-0 bottom-0 w-px bg-[var(--accent-oxblood)] z-20 pointer-events-none flex flex-col items-center transition-all duration-75"
+                      style={{ left: `${playheadPercent}%` }}
+                    >
+                      <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[8px] border-t-[var(--accent-oxblood)] -mt-0.5" />
+                      <div
+                        className="mt-auto mb-1 px-1 rounded shadow-xs font-mono-code text-[9px] font-bold border"
+                        style={{
+                          backgroundColor: 'var(--surface-card)',
+                          borderColor: 'var(--border-subtle)',
+                          color: 'var(--accent-oxblood)'
+                        }}
+                      >
+                        {currentTime.toFixed(2)}s
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* FFT Power Scale Labels */}
+                  <div className="absolute left-2 inset-y-0 flex flex-col justify-between py-2 pointer-events-none font-mono-code text-[9px] text-[var(--on-surface-variant)]/70 font-semibold select-none z-10">
+                    <span>0 dB</span>
+                    <span>-20 dB</span>
+                    <span>-40 dB</span>
+                    <span>-60 dB</span>
+                    <span>-80 dB</span>
+                  </div>
+
+                  {/* High-Resolution FFT PSD Canvas */}
+                  <canvas ref={fftCanvasRef} className="absolute inset-0 w-full h-full z-10" />
+                </>
+              )}
 
               {/* Empty state overlay when no source is selected */}
               {sourceType === 'none' && (
@@ -632,40 +1014,53 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                   </p>
                 </div>
               )}
-
-              {/* Frequency Scrubbing Selection Bounding Region (when source active) */}
-              {sourceType !== 'none' && (
-                <div className="absolute top-0 bottom-0 left-[80%] w-[12%] bg-[var(--selection-window)]/35 border-x border-dashed border-[var(--accent-oxblood)]/60 pointer-events-none z-10">
-                  <span className="absolute top-1 left-1.5 font-mono-code text-[9px] text-[var(--accent-oxblood)] font-bold tracking-wider">
-                    Δt: 1.20 s
-                  </span>
-                </div>
-              )}
-
-              {/* Acoustic Playhead (Vertical hairline) */}
-              {sourceType !== 'none' && (
-                <div
-                  className="absolute top-0 bottom-0 w-px bg-[var(--accent-oxblood)] z-20 pointer-events-none flex flex-col items-center transition-all duration-75"
-                  style={{ left: `${playheadPercent}%` }}
-                >
-                  <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[8px] border-t-[var(--accent-oxblood)] -mt-0.5" />
-                  <div
-                    className="mt-auto mb-1 px-1 rounded shadow-xs font-mono-code text-[9px] font-bold border"
-                    style={{
-                      backgroundColor: 'var(--surface-card)',
-                      borderColor: 'var(--border-subtle)',
-                      color: 'var(--accent-oxblood)'
-                    }}
-                  >
-                    {currentTime.toFixed(2)}s
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
-          {/* 3. Secondary Track: Synchronized Raw Sensor Waveform (#93897C) */}
-          {showRaw && (
+          {/* Secondary Track in FFT Mode: Continuous Waterfall Spectrogram Heatmap */}
+          {viewMode === 'fft' && (
+            <div
+              id="spectrogram-track-container"
+              className="mt-3 flex flex-col rounded-lg border-t-2 pt-2 transition-all"
+              style={{
+                borderColor: 'var(--border-subtle)'
+              }}
+            >
+              <div className="flex items-center justify-between pb-1 px-1">
+                <div className="flex items-center gap-2">
+                  <Layers size={16} className="text-[var(--accent-metal)]" />
+                  <span className="font-mono-code text-[11px] text-[var(--on-surface-variant)] font-semibold tracking-wider uppercase">
+                    Track S2: Continuous Waterfall Spectrogram Heatmap
+                  </span>
+                  <span className="font-mono-code text-[10px] text-[var(--border-strong)]">
+                    [0–2000 Hz · TIME-FREQUENCY ROLLING STFT]
+                  </span>
+                </div>
+                <div className="text-[var(--on-surface-variant)] font-mono-code text-[10px]">
+                  INTENSITY: -85 dBFS (BURGUNDY) → 0 dBFS (GOLD)
+                </div>
+              </div>
+
+              <div
+                className="relative h-28 w-full rounded overflow-hidden shadow-inner border"
+                style={{
+                  backgroundColor: '#121110',
+                  borderColor: 'var(--border-subtle)'
+                }}
+              >
+                <canvas ref={spectrogramCanvasRef} className="absolute inset-0 w-full h-full z-10" />
+                <div className="absolute right-2 top-1 font-mono-code text-[9px] text-white/50 select-none pointer-events-none z-20">
+                  ▲ 2000 Hz
+                </div>
+                <div className="absolute right-2 bottom-1 font-mono-code text-[9px] text-white/50 select-none pointer-events-none z-20">
+                  ▼ 0 Hz
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Secondary Track in Oscilloscope Mode: Synchronized Raw Sensor Waveform */}
+          {viewMode === 'oscilloscope' && showRaw && (
             <div
               id="raw-track-container"
               className="mt-3 flex flex-col rounded-lg border-t-2 pt-2 transition-all"
