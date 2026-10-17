@@ -1,0 +1,19 @@
+{
+  "generator": "auscultaforge_golden_generator_c",
+  "version": "1.0.0",
+  "schema": "auscultaforge.golden_vector.v1",
+  "baseline_profile": {
+    "sample_rate_hz": 48000,
+    "container_bits": 32,
+    "meaningful_bits": 24,
+    "channels": 1
+  },
+  "fixtures": [
+    "sine_100hz_48khz_512s_lsb.bin",
+    "sine_100hz_48khz_512s_msb.bin",
+    "counter_ramp_512s_lsb.bin",
+    "counter_ramp_512s_msb.bin",
+    "boundary_stress_lsb.bin",
+    "boundary_stress_msb.bin"
+  ]
+}
