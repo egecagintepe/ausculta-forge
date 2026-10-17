@@ -6,6 +6,8 @@
 
 ## 1. Evidence and privacy
 
+Detailed public-safe line ledger: [W04_B_actual-orders_2026-10-16_v01.csv](W04_B_actual-orders_2026-10-16_v01.csv). It preserves the line-level values supplied by the owner and marks VAT rounding, delivery, exact product code and Motorobit add-on reconciliation as open where evidence is missing.
+
 This closeout uses the order details supplied in the project conversation. It intentionally excludes receipts, home address, phone, identity/tax numbers, payment card details and shipping labels. “Ordered / paid (reported)” records the owner's statement, not independent delivery or invoice verification. No delivery date, tracking number or delivery confirmation is claimed unless explicitly provided.
 
 The supplied order summaries mix VAT-inclusive unit prices with VAT-exclusive line subtotals. Use the reported supplier checkout totals as the present cost authority; do not silently recalculate a supplier's gross total from selected line entries.
