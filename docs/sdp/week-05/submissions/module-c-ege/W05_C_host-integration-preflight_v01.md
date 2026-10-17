@@ -53,6 +53,7 @@ A dedicated, deterministic preflight verification suite (`TestHostPreflightVerif
 
 ### 3.2 Actual Test Execution Output
 
+Targeted Module C Preflight Suite (`software/tests/test_device_runtime.py`):
 ```
 ============================= test session starts =============================
 platform win32 -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
@@ -66,15 +67,55 @@ software\tests\test_device_runtime.py .................................. [100%]
 ============================= 34 passed in 2.10s ==============================
 ```
 
-Combined suite execution:
+Complete Repository Suite Execution (`pytest software/tests`):
 ```
-software/tests/test_device_runtime.py
-software/tests/test_recording.py
-software/tests/test_streaming.py
-software/tests/test_app.py
-software/tests/test_display_pipeline.py
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: C:\Dev\Antigravity\bitirme\ausculta-forge
+configfile: pytest.ini
+testpaths: software/tests
+plugins: anyio-4.15.1
+collected 281 items
 
-======================== 69 passed, 1 warning in 4.26s ========================
+software\tests\test_analysis.py .......                                  [  2%]
+software\tests\test_analysis_service.py ..................               [  8%]
+software\tests\test_app.py ........                                      [ 11%]
+software\tests\test_cinc2016_adapter.py ...                              [ 12%]
+software\tests\test_circor_adapter.py ........                           [ 15%]
+software\tests\test_core.py ..                                           [ 16%]
+software\tests\test_device_runtime.py .................................. [ 28%]
+software\tests\test_display_pipeline.py ...........                      [ 32%]
+software\tests\test_experiment.py .........                              [ 35%]
+software\tests\test_recording.py .......                                 [ 38%]
+software\tests\test_scientific_api.py .......                            [ 40%]
+software\tests\test_scientific_config.py ......................          [ 48%]
+software\tests\test_scientific_envelopes.py ........                     [ 51%]
+software\tests\test_scientific_signal_quality.py ...........             [ 55%]
+software\tests\test_scientific_spectral.py ...........                   [ 59%]
+software\tests\test_scientific_system_id.py ........                     [ 61%]
+software\tests\test_springer_api.py ....                                 [ 63%]
+software\tests\test_springer_durations.py ....                           [ 64%]
+software\tests\test_springer_end_to_end.py .....                         [ 66%]
+software\tests\test_springer_evaluation.py ...                           [ 67%]
+software\tests\test_springer_features.py ...........                     [ 71%]
+software\tests\test_springer_heart_rate.py ...........                   [ 75%]
+software\tests\test_springer_hsmm.py ......                              [ 77%]
+software\tests\test_springer_logistic.py .....                           [ 79%]
+software\tests\test_springer_preprocessing.py ............               [ 83%]
+software\tests\test_springer_training_labels.py ....                     [ 85%]
+software\tests\test_streaming.py .........                               [ 88%]
+software\tests\test_validation.py ..........                             [ 91%]
+software\tests\test_validation_annotations_mask.py .....                 [ 93%]
+software\tests\test_validation_api.py .                                  [ 93%]
+software\tests\test_validation_end_to_end_synthetic.py ..                [ 94%]
+software\tests\test_validation_failure_inclusive.py .                    [ 95%]
+software\tests\test_validation_macro_subject.py .                        [ 95%]
+software\tests\test_validation_matching.py ........                      [ 98%]
+software\tests\test_validation_metrics.py .                              [ 98%]
+software\tests\test_validation_splitting_leakage.py ...                  [ 99%]
+software\tests\test_validation_state_metrics.py .                        [100%]
+
+======================= 281 passed, 1 warning in 6.95s ========================
 ```
 
 ---

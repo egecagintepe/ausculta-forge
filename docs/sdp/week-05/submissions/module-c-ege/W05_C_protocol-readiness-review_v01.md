@@ -10,7 +10,7 @@
 
 > [!WARNING]
 > **CRITICAL DECISION BOUNDARY:**  
-> All transport options, frame headers, sync magic words (`0xAA55`), sequence widths, timestamp units, and CRC algorithms described in this document are **PROPOSED / NOT APPROVED**. None of these are final B→C decisions until Ozan (Module B) and Ege (Module C) jointly approve them.  
+> All transport classes, frame headers, sync magic words (`0xAA55`), sequence/sample counter semantics, timestamp units, and CRC algorithms described in this document are **PROPOSED / NOT APPROVED**. None of these are final B→C decisions until Ozan (Module B) and Ege (Module C) jointly approve them.  
 > **Do not implement a production decoder against this unapproved layout.**
 
 ---
@@ -20,7 +20,7 @@
 This document prepares the joint embedded-to-host interface review for Week 05. The device-to-host physical transport medium was closed in **DW03-08** as **wired ESP32-S3 Native USB**. However, the byte-level wire layout, USB device class, packet framing, integer bit alignment, application CRC, and acquisition profile reconciliation remain open decisions under **DW03-09, DW03-10, and DW03-12**.
 
 The objective of this review is to:
-1. Provide Module C's concrete, defensible recommendations for all open B→C interface decisions.
+1. Provide Module C's concrete recommendations for all open B→C interface decisions.
 2. Outline an illustrative packet framing concept to guide firmware development without prematurely freezing byte-level offsets.
 3. Explicitly resolve the sensor profile discrepancy between the theoretical PUI DMM-4026 baseline and the purchased INMP441 MEMS breakout module.
 
@@ -32,37 +32,47 @@ The objective of this review is to:
 
 | Criterion | USB CDC-ACM (Virtual COM) — *Proposed* | Vendor Bulk (Custom Endpoints via WinUSB / libusb) | Module C Assessment |
 |---|---|---|---|
-| **Host Driver Requirements** | Built-in OS support (Windows usbser.sys, Linux cdc_acm, macOS). Zero driver installation or INF signing needed. | Requires WinUSB installation via Zadig or custom INF on Windows. Potential driver conflicts during lab grading. | **CDC-ACM is strongly preferred for reliability across academic evaluator machines.** |
+| **Host Driver Requirements** | Built-in OS support (Windows `usbser.sys`, Linux `cdc_acm`, macOS). Zero custom driver installation or INF signing needed. | Requires WinUSB installation via Zadig or custom INF on Windows. Potential driver conflicts during academic lab grading. | **CDC-ACM is strongly preferred for host installation simplicity and evaluator portability.** |
 | **Python Ecosystem Support** | Supported natively via `pyserial` / `serial_asyncio`. Robust, mature, zero native C-extension compilation required. | Requires `pyusb` / `libusb-1.0.dll` bundled binaries and user-space access permissions. | **CDC-ACM minimizes host dependencies and runtime fragility.** |
-| **Throughput Capability** | Native USB Full-Speed (12 Mbps) yields effective throughput > 800 kB/s. 48 kHz mono 24-in-32 requires 192 kB/s (~24% of bus limit). CDC virtual baud rate is ignored by Native USB stack. | Bulk endpoints can utilize available bus bandwidth with slightly lower packet framing overhead (~1–2%). | **Both classes easily satisfy the 192 kB/s payload requirement with >3× headroom.** |
+| **Throughput Considerations** | Nominal USB Full-Speed PHY signaling rate is 12.0 Mbit/s. Calculated uncompressed payload for 48 kHz mono 24-in-32 is 192,000 bytes/s. Actual application throughput through OS serial drivers is unmeasured. | Bulk endpoints avoid serial line-discipline emulation, but effective throughput is governed by the same Full-Speed bus scheduling. | **Both classes theoretically support 192 kB/s payload, but actual throughput must be measured on bench.** |
 | **Framing & Packetization** | Byte-stream transport. Requires explicit application-level sync framing / delimiters to recover frame boundaries. | USB transfer blocks provide packet boundary hints, but application framing is still required for multi-packet transfers. | **Application framing is required in either class; CDC-ACM has no inherent disadvantage.** |
-| **Resynchronization on Loss** | Sync-word search in ring buffer recovers alignment immediately after dropped or corrupt bytes. | Bulk packet boundaries can desynchronize if transfer sizes do not match application frame sizes. | **CDC-ACM stream parser with sync word is simple, robust, and verifiable.** |
+| **Resynchronization on Loss** | Sync-word search in ring buffer recovers alignment after dropped or corrupt bytes. | Bulk packet boundaries can desynchronize if host read buffer sizes do not match device transfer sizes. | **CDC-ACM stream parser with sync word is simple, robust, and verifiable.** |
 
-**Module C Position (Proposed / Not Approved):** Recommend **CDC-ACM** as the Hardware Rev-A physical baseline. It provides frictionless cross-platform connectivity without custom driver installation while easily providing the required 192 kB/s bandwidth. This recommendation remains subject to Module B evaluation.
+#### Throughput Separation & Bench Verification Requirement:
+- **Nominal USB Full-Speed Signaling Rate:** 12.0 Mbit/s (raw physical wire bitrate).
+- **Calculated Audio Payload Requirement:** For the illustrative 48,000 samples/s × 1 channel × 4 bytes/sample (32-bit container) profile, the mathematical payload rate is exactly **192,000 bytes/s** (1.536 Mbit/s). (If packed 24-bit / 3 bytes per sample were chosen, it would be 144,000 bytes/s).
+- **Calculated Framing Protocol Overhead:** For the illustrative 16-byte header + 2-byte CRC over 512-sample blocks (93.75 frames/s), framing overhead adds $93.75 \times 18 \approx 1,688 \text{ bytes/s}$, yielding a calculated transmission rate of $\approx 193.69 \text{ kB/s}$.
+- **Actual Verified Application Throughput:** **NOT MEASURED ON HARDWARE**. Effective throughput through the ESP32-S3 USB peripheral, TinyUSB stack, OS virtual COM line disciplines, and Python async ingestion cannot be theoretically guaranteed and must be experimentally benchmarked on the physical test bench during Week 05 (`C-W05-09`).
+
+**Module C Position (Proposed / Not Approved):** Recommend **CDC-ACM** as the Hardware Rev-A physical baseline. This recommendation is based on driverless cross-platform portability and Python ecosystem simplicity, not an unmeasured bandwidth guarantee. It remains subject to Module B evaluation.
 
 ---
 
 ### 2.2 Protocol Versioning & Message Types (PROPOSED / NOT APPROVED)
 
-To prevent silent misinterpretation of wire bytes, all communications must begin with an explicit message type header.
+To prevent silent misinterpretation of wire bytes, all communications must begin with an explicit message type header with clear directional semantics.
 
-#### Proposed Conceptual Message Types:
-- `0x01` — `DATA_FRAME`: Streaming acoustic sample payload from MCU to PC.
-- `0x02` — `HANDSHAKE_ANNOUNCE`: MCU advertises device ID, firmware SHA, and hardware capabilities.
-- `0x03` — `HANDSHAKE_ACCEPT`: Host validates compatibility and confirms active profile & negotiated block size.
-- `0x04` — `CMD_STREAM_START`: Host instructs MCU to commence DMA acquisition and USB packet transmission.
-- `0x05` — `CMD_STREAM_STOP`: Host instructs MCU to halt DMA/USB streaming cleanly.
-- `0x06` — `TELEMETRY_STATUS`: MCU reports internal health (DMA overruns, buffer depth, rail status).
-- `0xFF` — `ERROR_REPORT`: Fatal error or invalid state notification.
+#### Proposed Conceptual Message Types & Direction:
 
-The protocol version field is proposed as a 1-byte integer (`0x01` for Version 1.0). If the host receives an unknown protocol version, it rejects the handshake and enters `DeviceState.INCOMPATIBLE`.
+| Message ID | Identifier | Direction | Purpose / Semantics | Status |
+|---|---|---|---|---|
+| `0x01` | `DATA_FRAME` | Device → Host | Streaming acoustic sample payload from MCU to PC. | Proposed / Not Approved |
+| `0x02` | `CAPABILITIES_ANNOUNCE` | Device → Host | MCU advertises device ID, firmware SHA, sample rate, format, and buffer limits upon connection or in response to request. | Proposed / Not Approved |
+| `0x03` | `HANDSHAKE_ACCEPT` | Host → Device | Host validates capabilities against active profile and confirms negotiated block size. | Proposed / Not Approved |
+| `0x04` | `CMD_STREAM_START` | Host → Device | Host instructs MCU to commence DMA acquisition and USB packet transmission. | Proposed / Not Approved |
+| `0x05` | `CMD_STREAM_STOP` | Host → Device | Host instructs MCU to halt DMA/USB streaming cleanly. | Proposed / Not Approved |
+| `0x06` | `TELEMETRY_STATUS` | Device → Host | MCU reports internal health (DMA overruns, buffer depth, rail status). | Proposed / Not Approved |
+| `0x10` | `REQ_CAPABILITIES` | Host → Device | (Optional) Host explicitly polls device for capabilities if not announced autonomously. | Proposed / Not Approved |
+| `0xFF` | `ERROR_REPORT` | Device → Host | Fatal error, buffer fault, or invalid state notification. | Proposed / Not Approved |
+
+The protocol version field is proposed as a 1-byte integer (`0x01` for Version 1.0). If the host receives an unknown protocol version, it rejects the handshake and transitions to `DeviceState.INCOMPATIBLE`.
 
 ---
 
 ### 2.3 Illustrative Frame Concept & Header Layout (ILLUSTRATIVE ONLY / NOT APPROVED)
 
 > [!NOTE]
-> The layout below is an **illustrative concept** to verify field requirements and length math. It is **NOT** a frozen byte-level wire contract. Offsets, packing pragmas (`#pragma pack(1)`), alignment, and delimiter choices must be jointly agreed with Module B.
+> The layout below is an **illustrative concept** to analyze field requirements and length arithmetic. It is **NOT** a frozen byte-level wire contract. Offsets, packing pragmas (`#pragma pack(1)`), alignment, and delimiter choices must be jointly agreed with Module B.
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -74,7 +84,7 @@ The protocol version field is proposed as a 1-byte integer (`0x01` for Version 1
 - **Magic Word:** `0xAA, 0x55` (2 bytes, offset 0) — Proposed synchronization preamble for frame boundary recovery.
 - **Protocol Version:** `0x01` (1 byte, offset 2) — Proposed protocol version identifier.
 - **Message Type:** `0x01` (`DATA_FRAME`, 1 byte, offset 3) — Proposed message discriminator.
-- **Sequence Number:** 32-bit unsigned integer (4 bytes, offset 4, little-endian) — Proposed frame counter.
+- **Sequence / Frame Counter:** 32-bit unsigned integer (4 bytes, offset 4, little-endian) — Proposed frame counter.
 - **Device Timestamp:** 32-bit microsecond counter (4 bytes, offset 8, little-endian) — Proposed hardware acquisition time.
 - **Sample Count ($N_{samples}$):** 16-bit unsigned integer (2 bytes, offset 12, little-endian, e.g. `512`).
 - **Hardware Status Flags:** 16-bit bitmask (2 bytes, offset 14, little-endian).
@@ -106,9 +116,13 @@ While the arithmetic sums cleanly to 16 bytes, compiler structure padding on 32-
 ### 2.5 Sequence Tracking vs. First-Sample Index (PROPOSED / NOT APPROVED)
 
 - Host telemetry requires monotonic sample accounting to detect packet drops and buffer slips.
-- **Module C Proposal:** Transmit **Frame Sequence Number** (`uint32`) in the primary header. Because $N_{samples}$ is fixed (512) or declared in each frame header, the cumulative sample index is computable deterministically:
-  $$\text{Sample Index} = \text{Sequence} \times N_{samples}$$
-- Rollover occurs at $2^{32}-1$ (approx. 530 days of continuous streaming at 93.75 fps), which is practically infinite for single-session PCG acquisitions.
+- **Limitation of Sequence Multiplication:**  
+  The formula $\text{sample\_index} = \text{sequence} \times N_{samples}$ is a simplified approximation that is **strictly valid only** when every packet contains an identical fixed sample count, packets start at sequence 0, and no partial frames occur.
+  - *Variable-Length Frames / Final Flushes:* If the final packet before session stop or buffer flush contains fewer than $N_{samples}$ (e.g. 128 instead of 512), sequence multiplication produces an erroneous cumulative count.
+  - *Dropped Packets:* If packet sequence $k$ is dropped by USB buffer overflow, multiplying $(k+1) \times N_{samples}$ incorrectly assumes the lost samples were ingested or skews sample alignment.
+  - *Session Resets & Rollover:* Restarts without sequence reset break cumulative sample counting.
+- **Module C Recommendation:** We recommend evaluating an **explicit cumulative first-sample index** (`uint32` or `uint64` `first_sample_index`) in the header alongside or in place of the frame sequence number. This provides unambiguous sample tracking regardless of packet size variations or partial flushes.
+- **Status:** This remains an **OPEN proposal pending joint agreement with Module B**.
 
 ---
 
@@ -144,10 +158,10 @@ While the arithmetic sums cleanly to 16 bytes, compiler structure padding on 32-
 ### 2.8 Handshake and Streaming Lifecycle (PROPOSED / NOT APPROVED)
 
 1. **Host Opening:** Host detects CDC-ACM COM port and opens connection. State: `OPENING`.
-2. **Capabilities Discovery:** Host issues `0x02` or MCU announces `DeviceCapabilities` upon port DTR assertion. State: `HANDSHAKING`.
-3. **Compatibility Validation:** Host verifies protocol version, sample rate (48000 Hz), channels (1), and container format. State transitions to `READY`.
-4. **Streaming Command:** Host transmits `0x04` (`CMD_STREAM_START`). MCU acknowledges and begins streaming frames. State: `STREAMING`.
-5. **Clean Termination:** Host transmits `0x05` (`CMD_STREAM_STOP`). MCU halts transmission. State: `READY`.
+2. **Capabilities Discovery (Device → Host):** MCU transmits `CAPABILITIES_ANNOUNCE` (`0x02`) advertising device identity, firmware SHA, sample rate, format, and buffer limits upon port connection (DTR assertion) or in response to an optional host poll (`REQ_CAPABILITIES`, `0x10`). State: `HANDSHAKING`.
+3. **Compatibility Validation (Host → Device):** Host verifies protocol version, sample rate (48000 Hz), channels (1), and container format against active profile. Host transmits `HANDSHAKE_ACCEPT` (`0x03`). State transitions to `READY`.
+4. **Streaming Command (Host → Device):** Host transmits `CMD_STREAM_START` (`0x04`). MCU acknowledges and begins streaming `DATA_FRAME` (`0x01`) packets. State: `STREAMING`.
+5. **Clean Termination (Host → Device):** Host transmits `CMD_STREAM_STOP` (`0x05`). MCU halts transmission. State: `READY`.
 6. **Physical Disconnect:** If USB cable is dislodged, host transitions immediately to `INTERRUPTED`. Any active recording is cleanly finalized with `termination_reason='device_disconnected'`.
 
 ---
@@ -166,10 +180,13 @@ While the arithmetic sums cleanly to 16 bytes, compiler structure padding on 32-
 
 ## 3. Hardware Profile Accuracy: PUI DMM-4026 vs. Purchased INMP441
 
-### 3.1 Sourcing Background
+### 3.1 Sourcing Background & Three-Layer Architecture
 
 - The purchased MEMS microphone module is the **INMP441 breakout module**, selected because the original PUI evaluation board (`PUI DMM-4026-B-I2S-EB-R`) could not be sourced within the required project schedule (exhibiting 22-week manufacturer lead times and distributor stock deficits).
-- **CRITICAL DIRECTIVE:** Do NOT assume that the INMP441 module uses the identical meaningful-bit interpretation, slot alignment, or USB sample representation as the PUI sensor.
+- **CRITICAL DIRECTIVE:** Do NOT present the USB payload alignment or host normalization as verified merely because the MEMS sensor provides I²S data. We must strictly distinguish three separate architectural layers:
+  1. **Sensor Physical I²S Output Layer:** The INMP441 datasheet documents 24-bit 2's complement serial data on DOUT, MSB first, with 1 SCK delay after WS transition (standard I²S). In a 32-bit slot, trailing 8 bits are zeroed/tri-stated.
+  2. **MCU Peripheral & DMA Representation Layer:** How the ESP32-S3 I²S peripheral captures and stages these samples in RAM depends entirely on firmware configuration (`i2s_chan_config`, bit width, slot mask, DMA byte order). The DMA buffer may be MSB-aligned, LSB-aligned with sign extension, or byte-swapped. *This MCU representation is unverified until Module B benchmarks it.*
+  3. **USB Wire Format & Host Normalization Layer:** The payload packed into USB packets by firmware and adapted by `packet_to_sample_block` is an unverified protocol proposal. Normalization ($2^{23}$ vs $2^{31}$) cannot be assumed until Module B confirms the exact DMA memory layout.
 - **PROFILE PRESERVATION:** The existing PUI Rev-A baseline profile (`rev_a_pui_dmm4026`) and legacy 4 kHz development profile (`dev_4khz_legacy`) in `software/pcg_app/device_runtime.py` remain **STRICTLY PRESERVED** and unchanged until a separately reviewed and approved hardware profile change is formally available.
 
 ### 3.2 Transducer Discrepancy Matrix
@@ -198,6 +215,7 @@ Before any new acquisition profile is introduced into `device_runtime.py`:
 1. **Joint Review (Ozan & Ege):**
    - Review and evaluate CDC-ACM as the transport class.
    - Evaluate the 16-byte illustrative header concept and decide on packing pragmas.
+   - Agree on sequence counter vs. explicit first-sample index semantics.
    - Agree on CRC policy (DW03-09): decide whether to use CRC-16 or USB hardware CRC.
    - Confirm I2S DMA sample alignment (LSB vs MSB).
 

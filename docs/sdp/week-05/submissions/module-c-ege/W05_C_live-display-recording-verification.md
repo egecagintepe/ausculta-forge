@@ -25,7 +25,7 @@ Verify the real-time PCG live display, signal-processing views, continuous recor
 
 ## Evidence
 
-- Preflight test execution: 34/34 tests passing in `software/tests/test_device_runtime.py` (69/69 passing across core test suite).
+- Preflight test execution: 34/34 tests passing in `software/tests/test_device_runtime.py` (281/281 passing across complete repository test suite).
 - All preflight results labeled strictly `SOFTWARE_KNOWN_ANSWER`.
 - Physical bench runs and hardware logs remain pending physical board arrival.
 
