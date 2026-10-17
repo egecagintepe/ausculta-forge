@@ -91,6 +91,7 @@ pnpm-debug.log*
 # Session recording outputs
 experiments/sessions/*
 !experiments/sessions/.gitkeep
+experiments/virtual-bench/
 
 # Analysis reference assets and comparison reports
 experiments/analysis-assets/*

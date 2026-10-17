@@ -14,10 +14,15 @@ Phase-1 Architecture Rules:
 - Python runtime state is authoritative; the UI strictly reflects backend state.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from enum import Enum
+import queue
+import struct
+import threading
 import time
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
 import uuid
@@ -60,6 +65,31 @@ ALLOWED_TRANSITIONS: dict[DeviceState, set[DeviceState]] = {
 
 class InvalidStateTransitionError(RuntimeError):
     """Raised when an illegal device lifecycle state transition is attempted."""
+    pass
+
+
+class TransportError(RuntimeError):
+    """Base exception for physical device transport errors."""
+    pass
+
+
+class TransportTimeoutError(TransportError):
+    """Raised when transport read times out unexpectedly."""
+    pass
+
+
+class TransportDisconnectedError(TransportError):
+    """Raised when physical transport link is lost or closed during operation."""
+    pass
+
+
+class TransportOverflowError(TransportError):
+    """Raised when incoming buffer overflows bounded capacity."""
+    pass
+
+
+class TransportConcurrentOwnershipError(TransportError):
+    """Raised when concurrent reader ownership is attempted."""
     pass
 
 
@@ -298,6 +328,165 @@ class DevicePacketDecoder(ABC):
         pass
 
 
+def crc16_ccitt(data: bytes, init: int = 0xFFFF, poly: int = 0x1021) -> int:
+    """CRC-16-CCITT computation over byte data.
+
+    NOTE: Polynomial, initialization, reflection, and coverage remain PROPOSED / NOT APPROVED
+    pending joint B->C sign-off (DW03-09).
+    """
+    crc = init
+    for byte in data:
+        crc ^= (byte << 8)
+        for _ in range(8):
+            if crc & 0x8000:
+                crc = ((crc << 1) ^ poly) & 0xFFFF
+            else:
+                crc = (crc << 1) & 0xFFFF
+    return crc
+
+
+def build_test_frame(
+    sequence: int,
+    timestamp_us: int,
+    raw_samples: np.ndarray,
+    flags: int = 0,
+    corrupt_crc: bool = False,
+    magic: bytes = b"\xaa\x55",
+    version: int = 1,
+    msg_type: int = 1,
+) -> bytes:
+    """Helper generating raw wire frame bytes for test transports.
+
+    Layout (16-byte header + payload + 2-byte CRC):
+    Magic (2B) | Ver (1B) | Type (1B) | Seq (4B) | Timestamp (4B) | Count (2B) | Flags (2B) | Payload (N*4B) | CRC (2B)
+    """
+    count = len(raw_samples)
+    payload = np.asarray(raw_samples, dtype="<i4").tobytes()
+    header = struct.pack("<2sBBIIHH", magic, version, msg_type, sequence, timestamp_us, count, flags)
+    body = header + payload
+    crc = crc16_ccitt(body)
+    if corrupt_crc:
+        crc ^= 0xFFFF
+    return body + struct.pack("<H", crc)
+
+
+class ReferenceFramedPacketDecoder(DevicePacketDecoder):
+    """Illustrative reference decoder demonstrating robust multi-fragment frame assembly.
+
+    NOTE: The byte-level wire format is PROPOSED / NOT APPROVED pending joint Module B/C agreement.
+    This reference decoder demonstrates the transport supervisor's ability to:
+    - Buffer fragmented chunk reads until a complete frame is assembled.
+    - Recover framing synchronization after encountering garbage bytes or line noise.
+    - Slice concatenated / combined frames arriving in a single read.
+    - Reject corrupted frames via application CRC-16 check.
+    """
+
+    MAGIC: bytes = b"\xaa\x55"
+    HEADER_SIZE: int = 16
+
+    def __init__(self, meaningful_bits: int = 24, sample_rate_hz: int = 48000) -> None:
+        self.meaningful_bits = meaningful_bits
+        self.sample_rate_hz = sample_rate_hz
+        self._buffer = bytearray()
+        self._malformed_count = 0
+        self._crc_failure_count = 0
+
+    def reset(self) -> None:
+        """Reset internal parser assembly buffer."""
+        self._buffer.clear()
+
+    @property
+    def buffer_len(self) -> int:
+        return len(self._buffer)
+
+    @property
+    def malformed_count(self) -> int:
+        return self._malformed_count
+
+    @property
+    def crc_failure_count(self) -> int:
+        return self._crc_failure_count
+
+    def feed_bytes(self, chunk: bytes) -> list[DeviceSamplePacket]:
+        """Process incoming raw wire bytes and assemble completed frames.
+
+        CRITICAL GUARANTEE:
+        A fragmented byte read is NEVER emitted prematurely as a complete frame.
+        The buffer retains partial frames until all bytes (header + payload + CRC) arrive.
+        """
+        if not chunk:
+            return []
+
+        self._buffer.extend(chunk)
+        packets: list[DeviceSamplePacket] = []
+
+        while len(self._buffer) >= self.HEADER_SIZE:
+            magic_idx = self._buffer.find(self.MAGIC)
+            if magic_idx == -1:
+                # No sync magic found; retain only the last byte (in case it is 0xAA)
+                if len(self._buffer) > 1:
+                    del self._buffer[:-1]
+                break
+
+            if magic_idx > 0:
+                # Discard garbage preceding sync magic
+                del self._buffer[:magic_idx]
+                if len(self._buffer) < self.HEADER_SIZE:
+                    break
+
+            header_bytes = bytes(self._buffer[:self.HEADER_SIZE])
+            magic, ver, mtype, seq, ts_us, count, flags = struct.unpack("<2sBBIIHH", header_bytes)
+
+            if ver != 1 or mtype != 1 or count == 0 or count > 4096:
+                # Invalid header: skip magic and search again
+                self._malformed_count += 1
+                del self._buffer[:2]
+                continue
+
+            payload_len = count * 4
+            total_frame_len = self.HEADER_SIZE + payload_len + 2
+
+            if len(self._buffer) < total_frame_len:
+                # Fragmented read: wait for subsequent bytes!
+                break
+
+            frame_bytes = bytes(self._buffer[:total_frame_len])
+            del self._buffer[:total_frame_len]
+
+            crc_received = struct.unpack("<H", frame_bytes[-2:])[0]
+            crc_computed = crc16_ccitt(frame_bytes[:-2])
+
+            if crc_received != crc_computed:
+                self._crc_failure_count += 1
+                pkt = DeviceSamplePacket(
+                    sequence=seq,
+                    timestamp_s=float(ts_us) / 1_000_000.0,
+                    raw_samples=np.zeros(0, dtype=np.int32),
+                    flags=flags,
+                    crc_ok=False,
+                    meaningful_bits=self.meaningful_bits,
+                    sample_rate_hz=self.sample_rate_hz,
+                )
+                packets.append(pkt)
+                continue
+
+            payload_bytes = frame_bytes[self.HEADER_SIZE:-2]
+            raw_samples = np.frombuffer(payload_bytes, dtype="<i4")
+
+            pkt = DeviceSamplePacket(
+                sequence=seq,
+                timestamp_s=float(ts_us) / 1_000_000.0,
+                raw_samples=raw_samples,
+                flags=flags,
+                crc_ok=True,
+                meaningful_bits=self.meaningful_bits,
+                sample_rate_hz=self.sample_rate_hz,
+            )
+            packets.append(pkt)
+
+        return packets
+
+
 # ==============================================================================
 # 5. Physical Transport Abstraction
 # ==============================================================================
@@ -325,6 +514,413 @@ class DeviceTransport(Protocol):
     def write_control(self, data: bytes) -> int:
         """Send control or command message to device."""
         ...
+
+
+# ==============================================================================
+# 5.1 Transport Configuration & Factory Interfaces
+# ==============================================================================
+
+class TransportType(str, Enum):
+    """Supported physical and test transport classes."""
+    CDC_ACM = "cdc_acm"
+    VENDOR_BULK = "vendor_bulk"
+    TEST_DOUBLE = "test_double"
+
+
+@dataclass(slots=True)
+class TransportConfig(ABC):
+    """Abstract configuration interface for physical device transports."""
+    transport_type: TransportType
+
+    @abstractmethod
+    def validate(self) -> None:
+        """Validate configuration parameters."""
+        pass
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class CdcAcmTransportConfig(TransportConfig):
+    """Configuration interface for USB CDC-ACM (Virtual COM port) transport.
+
+    NOTE: CDC-ACM is the Hardware Rev-A proposal under review (DW03-12).
+    """
+    transport_type: TransportType = field(default=TransportType.CDC_ACM, init=False)
+    port: Optional[str] = None
+    baudrate: int = 115200
+    timeout_s: float = 0.1
+    dtr: bool = True
+    rts: bool = True
+    read_buffer_size: int = 4096
+
+    def validate(self) -> None:
+        if self.baudrate <= 0:
+            raise ValueError(f"Invalid baudrate: {self.baudrate}")
+        if self.timeout_s < 0:
+            raise ValueError(f"Timeout cannot be negative: {self.timeout_s}")
+
+
+@dataclass(slots=True)
+class VendorBulkTransportConfig(TransportConfig):
+    """Configuration interface for USB Vendor Bulk (WinUSB / pyusb) transport.
+
+    NOTE: Vendor Bulk is an alternative transport under review (DW03-12).
+    """
+    transport_type: TransportType = field(default=TransportType.VENDOR_BULK, init=False)
+    vid: Optional[int] = None
+    pid: Optional[int] = None
+    read_endpoint: int = 0x81
+    write_endpoint: int = 0x01
+    timeout_ms: int = 100
+    read_buffer_size: int = 4096
+
+    def validate(self) -> None:
+        if self.timeout_ms < 0:
+            raise ValueError(f"Timeout cannot be negative: {self.timeout_ms}")
+        if self.read_endpoint == self.write_endpoint:
+            raise ValueError("Read and write endpoints cannot be identical")
+
+
+@dataclass(slots=True)
+class TestTransportConfig(TransportConfig):
+    """Configuration for test-only in-memory or scripted transports."""
+    __test__ = False
+    transport_type: TransportType = field(default=TransportType.TEST_DOUBLE, init=False)
+    read_buffer_size: int = 4096
+
+    def validate(self) -> None:
+        pass
+
+
+class TransportFactory(ABC):
+    """Pluggable factory interface for constructing physical device transports."""
+    @abstractmethod
+    def create_transport(self, config: TransportConfig) -> DeviceTransport:
+        pass
+
+
+class PendingHardwareTransportFactory(TransportFactory):
+    """Production factory declaring that concrete USB class adapter is pending Module B sign-off."""
+    def create_transport(self, config: TransportConfig) -> DeviceTransport:
+        raise NotImplementedError(
+            f"Concrete host transport adapter for {config.transport_type.value!r} is pending "
+            f"joint B->C protocol approval (DW03-12). Use test-only transport doubles for development."
+        )
+
+
+# ==============================================================================
+# 5.2 Transport Lifecycle Supervisor
+# ==============================================================================
+
+class TransportSupervisor:
+    """Robust lifecycle supervisor for physical device transport read loops.
+
+    Guarantees:
+    - Single-reader ownership: raises TransportConcurrentOwnershipError if started concurrently.
+    - Graceful cancellation and join timeouts: guarantees no orphan threads or leaked handles.
+    - Bounded buffering: drops or throttles with explicit error / telemetry accounting rather than
+      unbounded memory growth.
+    - Resource cleanup: guarantees transport close() and decoder reset() on stop/disconnect/error.
+    - Fragmented read assembly: passes raw chunks to DevicePacketDecoder, ensuring partial frames
+      are buffered until complete.
+    - Explicit error propagation: categorizes disconnects, timeouts, and framing errors with
+      runtime event logging.
+    """
+
+    def __init__(
+        self,
+        transport: DeviceTransport,
+        decoder: DevicePacketDecoder,
+        read_chunk_size: int = 4096,
+        read_timeout_s: float = 0.05,
+        bounded_queue_size: int = 100,
+        event_log: Optional[DeviceEventLog] = None,
+        stats: Optional[DeviceIntegrityStats] = None,
+    ) -> None:
+        self.transport = transport
+        self.decoder = decoder
+        self.read_chunk_size = read_chunk_size
+        self.read_timeout_s = read_timeout_s
+        self.bounded_queue_size = bounded_queue_size
+        self.event_log = event_log
+        self.stats = stats
+
+        self._thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+        self._lock = threading.Lock()
+        self._is_running = False
+        self._on_packet_cb: Optional[Callable[[DeviceSamplePacket], None]] = None
+        self._on_disconnect_cb: Optional[Callable[[str], None]] = None
+        self._on_error_cb: Optional[Callable[[Exception], None]] = None
+
+    @property
+    def is_running(self) -> bool:
+        with self._lock:
+            return self._is_running and self._thread is not None and self._thread.is_alive()
+
+    def start(
+        self,
+        on_packet: Callable[[DeviceSamplePacket], None],
+        on_disconnect: Optional[Callable[[str], None]] = None,
+        on_error: Optional[Callable[[Exception], None]] = None,
+    ) -> None:
+        """Start the background transport reader thread with single-reader ownership enforcement."""
+        with self._lock:
+            if self._is_running or (self._thread is not None and self._thread.is_alive()):
+                raise TransportConcurrentOwnershipError(
+                    "Cannot start TransportSupervisor: reader loop is already active. "
+                    "Concurrent reader ownership is prohibited."
+                )
+
+            if not self.transport.is_connected():
+                raise TransportDisconnectedError(
+                    "Cannot start TransportSupervisor: transport is not connected."
+                )
+
+            self._on_packet_cb = on_packet
+            self._on_disconnect_cb = on_disconnect
+            self._on_error_cb = on_error
+            self._stop_event.clear()
+            self._is_running = True
+
+            self._thread = threading.Thread(
+                target=self._run_loop,
+                name="AuscultaForge-TransportSupervisor",
+                daemon=True,
+            )
+            self._thread.start()
+
+            if self.event_log:
+                self.event_log.log(
+                    "SUPERVISOR_STARTED",
+                    "Transport supervisor background read loop started",
+                    severity="info",
+                )
+
+    def stop(self, timeout_s: float = 2.0) -> None:
+        """Stop the background reader thread cleanly and wait for it to join."""
+        with self._lock:
+            if not self._is_running and (self._thread is None or not self._thread.is_alive()):
+                return
+            self._stop_event.set()
+            self._is_running = False
+
+        if self._thread and self._thread.is_alive() and threading.current_thread() != self._thread:
+            self._thread.join(timeout=timeout_s)
+            if self._thread.is_alive() and self.event_log:
+                self.event_log.log(
+                    "SUPERVISOR_JOIN_TIMEOUT",
+                    f"Transport supervisor thread did not exit within {timeout_s}s",
+                    severity="warning",
+                )
+
+        with self._lock:
+            self._cleanup_resources()
+            self._thread = None
+            if self.event_log:
+                self.event_log.log(
+                    "SUPERVISOR_STOPPED",
+                    "Transport supervisor background read loop stopped cleanly",
+                    severity="info",
+                )
+
+    def _cleanup_resources(self) -> None:
+        try:
+            self.decoder.reset()
+        except Exception:
+            pass
+        try:
+            self.transport.close()
+        except Exception:
+            pass
+
+    def _run_loop(self) -> None:
+        try:
+            while not self._stop_event.is_set():
+                if not self.transport.is_connected():
+                    self._handle_disconnect("Physical transport link disconnected")
+                    break
+
+                try:
+                    chunk = self.transport.read(
+                        max_bytes=self.read_chunk_size,
+                        timeout_s=self.read_timeout_s,
+                    )
+                except (TimeoutError, TransportTimeoutError):
+                    continue
+                except TransportDisconnectedError as e:
+                    self._handle_disconnect(str(e))
+                    break
+                except Exception as e:
+                    if self._stop_event.is_set():
+                        break
+                    self._handle_error(e)
+                    break
+
+                if not chunk:
+                    if not self.transport.is_connected():
+                        self._handle_disconnect("EOF / Link terminated")
+                        break
+                    continue
+
+                try:
+                    packets = self.decoder.feed_bytes(chunk)
+                except Exception as e:
+                    if self.stats:
+                        self.stats.record_malformed_frame()
+                    if self.event_log:
+                        self.event_log.log(
+                            "DECODER_MALFORMED_FRAME",
+                            f"Decoder error on wire chunk: {e}",
+                            severity="warning",
+                        )
+                    continue
+
+                for packet in packets:
+                    if self._stop_event.is_set():
+                        break
+                    try:
+                        if self._on_packet_cb:
+                            self._on_packet_cb(packet)
+                    except Exception as e:
+                        if self.event_log:
+                            self.event_log.log(
+                                "PACKET_DISPATCH_ERROR",
+                                f"Error dispatching packet: {e}",
+                                severity="error",
+                            )
+        finally:
+            with self._lock:
+                self._is_running = False
+                self._cleanup_resources()
+
+    def _handle_disconnect(self, reason: str) -> None:
+        if self.event_log:
+            self.event_log.log("TRANSPORT_DISCONNECTED", reason, severity="warning")
+        if self._on_disconnect_cb and not self._stop_event.is_set():
+            try:
+                self._on_disconnect_cb(reason)
+            except Exception:
+                pass
+
+    def _handle_error(self, err: Exception) -> None:
+        if self.event_log:
+            self.event_log.log("TRANSPORT_ERROR", str(err), severity="error")
+        if self._on_error_cb and not self._stop_event.is_set():
+            try:
+                self._on_error_cb(err)
+            except Exception:
+                pass
+
+
+# ==============================================================================
+# 5.3 Test-Only Injectable Transport Double
+# ==============================================================================
+
+class InjectableTestTransport:
+    """Test-only injectable physical transport double for host readiness verification.
+
+    Provides fine-grained test hooks for simulating:
+    - Fragmented chunk reads (sub-frame byte slicing)
+    - Concatenated / combined byte reads (multiple frames packed into single read)
+    - Read timeouts (TimeoutError / empty chunks)
+    - Buffer overflow conditions
+    - Injected transport read errors
+    - Sudden mid-stream physical cable disconnects
+    """
+
+    def __init__(self, should_fail_open: bool = False) -> None:
+        self.should_fail_open = should_fail_open
+        self._is_connected: bool = False
+        self._chunks: list[bytes] = []
+        self._control_writes: list[bytes] = []
+        self._simulate_timeout: bool = False
+        self._simulated_error: Optional[Exception] = None
+        self._lock = threading.Lock()
+
+    def open(self) -> bool:
+        if self.should_fail_open:
+            return False
+        self._is_connected = True
+        return True
+
+    def close(self) -> None:
+        self._is_connected = False
+
+    def is_connected(self) -> bool:
+        return self._is_connected
+
+    def read(self, max_bytes: int = 4096, timeout_s: float = 0.05) -> bytes:
+        with self._lock:
+            if not self._is_connected:
+                raise TransportDisconnectedError("Transport is disconnected")
+
+            if self._simulated_error:
+                err = self._simulated_error
+                self._simulated_error = None
+                raise err
+
+            if self._simulate_timeout:
+                raise TimeoutError(f"Simulated read timeout after {timeout_s}s")
+
+            if not self._chunks:
+                time.sleep(min(timeout_s, 0.01))
+                return b""
+
+            chunk = self._chunks.pop(0)
+            if len(chunk) > max_bytes:
+                rem = chunk[max_bytes:]
+                self._chunks.insert(0, rem)
+                chunk = chunk[:max_bytes]
+            return chunk
+
+    def write_control(self, data: bytes) -> int:
+        with self._lock:
+            self._control_writes.append(data)
+            return len(data)
+
+    # Injectable test helpers
+    def push_bytes(self, data: bytes, chunk_size: Optional[int] = None) -> None:
+        """Push raw byte sequence into transport, optionally sliced into fragments."""
+        with self._lock:
+            if chunk_size is not None and chunk_size > 0:
+                for i in range(0, len(data), chunk_size):
+                    self._chunks.append(data[i : i + chunk_size])
+            else:
+                self._chunks.append(data)
+
+    def push_chunk(self, chunk: bytes) -> None:
+        with self._lock:
+            self._chunks.append(chunk)
+
+    def push_combined_frames(self, frames: list[bytes]) -> None:
+        """Push multiple complete frames concatenated into a single chunk."""
+        combined = b"".join(frames)
+        self.push_chunk(combined)
+
+    def simulate_timeout(self, enabled: bool = True) -> None:
+        with self._lock:
+            self._simulate_timeout = enabled
+
+    def simulate_error(self, exc: Exception) -> None:
+        with self._lock:
+            self._simulated_error = exc
+
+    def simulate_disconnect(self) -> None:
+        with self._lock:
+            self._is_connected = False
+
+    @property
+    def pending_chunks_count(self) -> int:
+        with self._lock:
+            return len(self._chunks)
+
+    @property
+    def control_writes(self) -> list[bytes]:
+        with self._lock:
+            return list(self._control_writes)
 
 
 # ==============================================================================
@@ -529,6 +1125,8 @@ class DeviceRuntime:
         self._state: DeviceState = DeviceState.ABSENT
         self._active_candidate: Optional[DeviceCandidate] = None
         self._active_transport: Optional[DeviceTransport] = None
+        self._decoder: Optional[DevicePacketDecoder] = None
+        self._supervisor: Optional[TransportSupervisor] = None
         self._capabilities: Optional[DeviceCapabilities] = None
         self._last_error: Optional[str] = None
         self._connected_at_utc: Optional[str] = None
@@ -545,6 +1143,18 @@ class DeviceRuntime:
     @property
     def active_candidate(self) -> Optional[DeviceCandidate]:
         return self._active_candidate
+
+    @property
+    def active_transport(self) -> Optional[DeviceTransport]:
+        return self._active_transport
+
+    @property
+    def decoder(self) -> Optional[DevicePacketDecoder]:
+        return self._decoder
+
+    @property
+    def supervisor(self) -> Optional[TransportSupervisor]:
+        return self._supervisor
 
     def transition_to(self, new_state: DeviceState, error_msg: Optional[str] = None) -> None:
         """Transition device to a new lifecycle state following ALLOWED_TRANSITIONS."""
@@ -611,6 +1221,15 @@ class DeviceRuntime:
             self.transition_to(DeviceState.ERROR, error_msg=err)
             raise
 
+    def attach_decoder(self, decoder: DevicePacketDecoder) -> None:
+        """Attach packet framing decoder to the device runtime."""
+        self._decoder = decoder
+        self.event_log.log(
+            "DECODER_ATTACHED",
+            f"Packet framing decoder attached: {decoder.__class__.__name__}",
+            severity="info",
+        )
+
     def complete_handshake(self, capabilities: DeviceCapabilities) -> None:
         """Validate reported capabilities against active profile and transition to READY."""
         if self._state != DeviceState.HANDSHAKING:
@@ -645,6 +1264,48 @@ class DeviceRuntime:
             )
             raise
 
+    def start_supervisor(
+        self,
+        on_packet: Callable[[DeviceSamplePacket], None],
+        on_disconnect: Optional[Callable[[str], None]] = None,
+        on_error: Optional[Callable[[Exception], None]] = None,
+    ) -> TransportSupervisor:
+        """Initialize and start the supervised background transport read loop.
+
+        Enforces single-reader ownership and safe state transition to STREAMING.
+        """
+        if not self._active_transport:
+            raise RuntimeError("Cannot start supervisor: no transport attached")
+        if not self._decoder:
+            raise RuntimeError("Cannot start supervisor: no packet decoder attached")
+
+        if self._supervisor is None:
+            self._supervisor = TransportSupervisor(
+                transport=self._active_transport,
+                decoder=self._decoder,
+                event_log=self.event_log,
+                stats=self.stats,
+            )
+
+        self._supervisor.start(
+            on_packet=on_packet,
+            on_disconnect=on_disconnect,
+            on_error=on_error,
+        )
+
+        if self._state == DeviceState.READY:
+            self.start_streaming()
+
+        return self._supervisor
+
+    def stop_supervisor(self) -> None:
+        """Stop supervisor cleanly, close transport handle, and join worker thread."""
+        if self._supervisor:
+            self._supervisor.stop()
+            self._supervisor = None
+        if self._state == DeviceState.STREAMING:
+            self.stop_streaming()
+
     def start_streaming(self) -> None:
         """Transition device to STREAMING state."""
         self.transition_to(DeviceState.STREAMING)
@@ -657,7 +1318,8 @@ class DeviceRuntime:
             self.event_log.log("STREAM_STOPPED", "Acoustic stream stopped cleanly", severity="info")
 
     def handle_disconnect(self, error_msg: Optional[str] = None) -> None:
-        """Handle hardware disconnect event."""
+        """Handle hardware disconnect event cleanly without leaked handles or orphan threads."""
+        # 1. Transition state according to current lifecycle state
         if self._state == DeviceState.STREAMING:
             self.transition_to(DeviceState.INTERRUPTED, error_msg=error_msg or "Physical link lost while streaming")
         elif self._state in (DeviceState.DETECTED, DeviceState.OPENING, DeviceState.HANDSHAKING, DeviceState.READY):
@@ -665,6 +1327,15 @@ class DeviceRuntime:
         elif self._state in (DeviceState.ERROR, DeviceState.INCOMPATIBLE):
             self.transition_to(DeviceState.ABSENT)
 
+        # 2. Stop supervisor and clean up background threads
+        if self._supervisor:
+            try:
+                self._supervisor.stop()
+            except Exception:
+                pass
+            self._supervisor = None
+
+        # 3. Release physical transport handle
         if self._active_transport:
             try:
                 self._active_transport.close()
@@ -703,4 +1374,6 @@ class DeviceRuntime:
             "discovery_status": self.discovery_provider.get_status_description(),
             "negotiated_block_size": self.profile.negotiated_block_size,
             "acquisition_profile": self.profile.to_dict(),
+            "supervisor_active": self._supervisor.is_running if self._supervisor else False,
+            "decoder_type": self._decoder.__class__.__name__ if self._decoder else None,
         }
