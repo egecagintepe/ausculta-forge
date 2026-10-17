@@ -18,6 +18,16 @@ All files in this folder must follow the canonical naming pattern:
 - `W03_B_example-task_v01.pdf`
 - `W03_B_example-task_v01.md`
 
+## Week-3 Source Deliverables (Rev02)
+
+- [Procurement, BOM and test matrix (XLSX)](W03_B_procurement-bom-test_v02.xlsx)
+- [System design and technical specification (DOCX)](W03_B_system-design-technical-specification_v02.docx)
+- [Device-to-host frame draft (Markdown)](W03_B_device-to-host-frame-draft.md)
+- [Module B task closeout and acceptance map (Markdown)](W03_B_task-closeout.md)
+- [Week-3 decision log](../../decisions.md)
+
+The XLSX and DOCX are the source Office deliverables reviewed for this closeout. They document proposed architecture, procurement research, open technical decisions and planned tests; they do not certify that hardware has been built or that physical measurements have passed.
+
 ## Instructions
 
 - Original PDF, DOCX, and XLSX deliverables may be placed in this folder alongside Markdown summaries.
@@ -33,7 +43,8 @@ All files in this folder must follow the canonical naming pattern:
 |---|---|---|
 | W03 Module B device-to-host frame draft | **DRAFT COMPLETE** | [W03_B_device-to-host-frame-draft.md](W03_B_device-to-host-frame-draft.md). Contains MCU candidate, MEMS and ECM acquisition paths, conceptual B→C frame fields, 48 kHz mono baseline, buffering/continuity/timebase direction and Week-4 handoff. |
 | Acquisition / DMA research | **PARTIAL — Week 4 freeze remains** | Peripheral-driven DMA/ping-pong architecture and continuity/timestamp requirements documented. Exact DMA allocation/buffer sizes, interrupt/cache behavior and measured stream performance are not claimed as validated. |
-| BOM / local sourcing | **REVIEWED — NOT FULLY ORDER-READY** | REV02 workbook identifies candidates and line-item gates. Exact chestpiece SKU, passive-kit selection, phantom geometry, several cable/connectors and live stock/price checks remain open. |
+| BOM / local sourcing | **REVIEWED — NOT FULLY ORDER-READY** | [REV02 workbook](W03_B_procurement-bom-test_v02.xlsx) identifies candidates and line-item gates. Exact chestpiece SKU, passive-kit selection, phantom geometry, several cable/connectors and live stock/price checks remain open. |
+| System design / technical specification | **REV02 REVIEWED — OPEN ITEMS RETAINED** | [REV02 system design](W03_B_system-design-technical-specification_v02.docx) records architecture, ICD/power safety, requirements, procurement gates and verification plan. Physical tests remain pending. |
 | Laboratory equipment audit | **AVAILABILITY RECORDED** | Ozan reports scope, function generator, DMM, solder station and reusable breadboards/dev-boards available; department USB audio interface C-05 unavailable. Availability does not confirm calibration/performance. |
 | MCU / transport decision record | **PARTIALLY CLOSED BY SCOPE** | ESP32-S3-DevKitC-1-N8R8 candidate identity and wired Native USB physical medium are recorded. Actual board stock/revision and two data cables need confirmation; USB class stays open. |
 | Sample representation / integrity | **OPEN — joint B/C decision** | Signed 24-bit meaningful samples in a 32-bit container is a proposal, not a frozen contract. DW03-09 CRC/checksum cannot be closed without Module B + Module C agreement; DW03-10 remains open. |
