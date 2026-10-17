@@ -127,6 +127,25 @@ def create_app(
         profile_id: Optional[str] = "SPRINGER_PHYSIONET_REFERENCE_V1"
         max_display_points: Optional[int] = 600
 
+    class PhantomStimulusGenerateRequest(BaseModel):
+        stimulus_type: str
+        duration_s: Optional[float] = 5.0
+        sample_rate_hz: Optional[int] = 48000
+        amplitude_fs: Optional[float] = 0.8
+        save_as_asset: Optional[bool] = True
+        custom_params: Optional[dict[str, Any]] = None
+
+    class PhantomCharacterizeRequest(BaseModel):
+        asset_id: str
+        session_id: str
+        template_id: Optional[str] = "PHANTOM_LOG_SWEEP_20_500HZ_V1"
+        trial_id: Optional[str] = None
+        output_gain_dbfs: Optional[float] = -6.0
+        operator_notes: Optional[str] = ""
+        hardware_status: Optional[str] = "PENDING_PHYSICAL_MEASUREMENT"
+        pipeline_buffer_delay_ms: Optional[float] = 30.0
+        max_display_points: Optional[int] = 300
+
     # REST Endpoints
     @app.get("/api/status")
     def get_status() -> dict[str, Any]:
@@ -346,6 +365,61 @@ def create_app(
             if not report:
                 raise HTTPException(status_code=404, detail=f"System identification report not found: {analysis_id}")
             return report
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # =========================================================================
+    # Phantom Reference Playback & System Identification Endpoints
+    # =========================================================================
+
+    @app.get("/api/scientific/phantom/templates")
+    def api_list_phantom_templates() -> list[dict[str, Any]]:
+        return analysis.list_phantom_templates()
+
+    @app.post("/api/scientific/phantom/stimulus/generate")
+    def api_generate_phantom_stimulus(req: PhantomStimulusGenerateRequest) -> dict[str, Any]:
+        try:
+            return analysis.generate_phantom_stimulus(
+                stimulus_type=req.stimulus_type,
+                duration_s=req.duration_s or 5.0,
+                sample_rate_hz=req.sample_rate_hz or 48000,
+                amplitude_fs=req.amplitude_fs or 0.8,
+                save_as_asset=True if req.save_as_asset is None else req.save_as_asset,
+                custom_params=req.custom_params,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.post("/api/scientific/phantom/characterize")
+    def api_characterize_phantom(req: PhantomCharacterizeRequest) -> dict[str, Any]:
+        try:
+            return analysis.characterize_phantom(
+                asset_id=req.asset_id,
+                session_id=req.session_id,
+                template_id=req.template_id or "PHANTOM_LOG_SWEEP_20_500HZ_V1",
+                trial_id=req.trial_id,
+                output_gain_dbfs=req.output_gain_dbfs if req.output_gain_dbfs is not None else -6.0,
+                operator_notes=req.operator_notes or "",
+                hardware_status=req.hardware_status or "PENDING_PHYSICAL_MEASUREMENT",
+                pipeline_buffer_delay_ms=req.pipeline_buffer_delay_ms if req.pipeline_buffer_delay_ms is not None else 30.0,
+                max_display_points=req.max_display_points or 300,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+    @app.get("/api/scientific/phantom/experiments")
+    def api_list_phantom_experiments() -> list[dict[str, Any]]:
+        return analysis.list_phantom_experiments()
+
+    @app.get("/api/scientific/phantom/experiments/{trial_id}")
+    def api_get_phantom_experiment(trial_id: str) -> dict[str, Any]:
+        try:
+            exp = analysis.get_phantom_experiment(trial_id)
+            if not exp:
+                raise HTTPException(status_code=404, detail=f"Phantom experiment not found: {trial_id}")
+            return exp
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
