@@ -57,4 +57,8 @@ def __getattr__(name: str):
     if name == "segmentation":
         from . import segmentation
         return segmentation
+    if name == "metrology":
+        from . import metrology
+        return metrology
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
