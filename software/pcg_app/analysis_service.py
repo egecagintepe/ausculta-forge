@@ -53,6 +53,21 @@ from pcg_core.scientific import (
     SystemIdentificationResult,
     estimate_siso_system_id,
 )
+from pcg_core.stimulus import (
+    StimulusRecord,
+    generate_100hz_sine,
+    generate_multitone,
+    generate_log_sweep,
+    generate_impulse_train,
+    prepare_reference_wav_stimulus,
+)
+from pcg_core.phantom import (
+    PhantomTemplate,
+    STANDARD_PHANTOM_TEMPLATES,
+    PhantomExperimentRecord,
+    run_phantom_characterization,
+    estimate_phantom_alignment,
+)
 from pcg_core.scientific_config import (
     get_analysis_profile,
     list_analysis_profiles,
@@ -1004,6 +1019,194 @@ class AnalysisService:
 
         reports.sort(key=lambda r: r.get("created_at_utc", ""), reverse=True)
         return reports
+
+    # =========================================================================
+    # Acoustic Phantom Characterization & Reproducible System Identification
+    # =========================================================================
+
+    def list_phantom_templates(self) -> list[dict[str, Any]]:
+        """List all standardized acoustic phantom experiment templates."""
+        return [t.to_dict() for t in STANDARD_PHANTOM_TEMPLATES.values()]
+
+    def generate_phantom_stimulus(
+        self,
+        stimulus_type: str,
+        duration_s: float = 5.0,
+        sample_rate_hz: int = 48000,
+        amplitude_fs: float = 0.8,
+        save_as_asset: bool = True,
+        custom_params: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Generate a deterministic stimulus for driving the acoustic phantom.
+
+        Optionally stores the stimulus as an imported reference WAV asset for immediate reuse.
+        """
+        params = custom_params or {}
+        stype = stimulus_type.lower().strip()
+
+        if stype == "sine_100hz":
+            phase_rad = float(params.get("phase_rad", 0.0))
+            record = generate_100hz_sine(
+                duration_s=duration_s,
+                sample_rate_hz=sample_rate_hz,
+                amplitude_fs=amplitude_fs,
+                phase_rad=phase_rad,
+            )
+        elif stype == "multitone":
+            freqs = params.get("frequencies_hz", [30.0, 60.0, 100.0, 150.0, 250.0, 400.0])
+            use_schroeder = bool(params.get("use_schroeder_phase", True))
+            record = generate_multitone(
+                frequencies_hz=freqs,
+                duration_s=duration_s,
+                sample_rate_hz=sample_rate_hz,
+                peak_amplitude_fs=amplitude_fs,
+                use_schroeder_phase=use_schroeder,
+            )
+        elif stype == "log_sweep":
+            f_start = float(params.get("f_start_hz", 20.0))
+            f_stop = float(params.get("f_stop_hz", 500.0))
+            taper_s = float(params.get("taper_duration_s", 0.05))
+            record = generate_log_sweep(
+                f_start_hz=f_start,
+                f_stop_hz=f_stop,
+                duration_s=duration_s,
+                sample_rate_hz=sample_rate_hz,
+                amplitude_fs=amplitude_fs,
+                taper_duration_s=taper_s,
+            )
+        elif stype == "impulse_train":
+            interval = float(params.get("interval_s", 1.0))
+            pulse_w = int(params.get("pulse_width_samples", 1))
+            record = generate_impulse_train(
+                interval_s=interval,
+                duration_s=duration_s,
+                sample_rate_hz=sample_rate_hz,
+                amplitude_fs=amplitude_fs,
+                pulse_width_samples=pulse_w,
+            )
+        else:
+            raise ValueError(
+                f"Unsupported stimulus_type: {stimulus_type!r}. "
+                "Allowed: 'sine_100hz', 'multitone', 'log_sweep', 'impulse_train'."
+            )
+
+        asset_id = None
+        if save_as_asset:
+            wav_bytes = record.to_wav_bytes(bit_depth=16)
+            asset_meta = self.import_reference_wav(
+                file_bytes=wav_bytes,
+                original_filename=f"{record.stimulus_type}_{sample_rate_hz}hz.wav",
+            )
+            asset_id = asset_meta["asset_id"]
+
+        result = record.to_dict(include_samples=False)
+        result["asset_id"] = asset_id
+        return result
+
+    def characterize_phantom(
+        self,
+        asset_id: str,
+        session_id: str,
+        template_id: str = "PHANTOM_LOG_SWEEP_20_500HZ_V1",
+        trial_id: Optional[str] = None,
+        output_gain_dbfs: float = -6.0,
+        operator_notes: str = "",
+        hardware_status: str = "PENDING_PHYSICAL_MEASUREMENT",
+        pipeline_buffer_delay_ms: float = 30.0,
+        max_display_points: int = 300,
+    ) -> dict[str, Any]:
+        """Perform comprehensive acoustic phantom characterization and system identification.
+
+        Estimates acoustic lag, separates pipeline buffer latency, computes SISO H1 and coherence,
+        detects synchronization/clipping/coverage status, and saves a reproducible experiment report.
+        """
+        valid_asset_id = validate_identifier(asset_id, "asset_id", self.assets_dir)
+        valid_sess_id = validate_session_id(session_id, self.sessions_dir)
+
+        asset_meta = self.get_reference_asset(valid_asset_id)
+        if asset_meta is None:
+            raise FileNotFoundError(f"Reference asset not found: {asset_id}")
+
+        sess_meta = get_session(valid_sess_id, self.sessions_dir)
+        if sess_meta is None:
+            raise FileNotFoundError(f"Capture session not found: {session_id}")
+
+        ref_path = self.assets_dir / f"{valid_asset_id}.wav"
+        cap_path = self.sessions_dir / valid_sess_id / "raw.wav"
+
+        with open(ref_path, "rb") as f:
+            ref_bytes = f.read()
+
+        stimulus = prepare_reference_wav_stimulus(
+            wav_bytes=ref_bytes,
+            filename=asset_meta["filename"],
+        )
+
+        cap_samples, cap_fs = load_wav_as_float32(cap_path)
+
+        rec = run_phantom_characterization(
+            stimulus=stimulus,
+            capture_samples=cap_samples,
+            capture_fs=cap_fs,
+            template_id=template_id,
+            trial_id=trial_id,
+            output_gain_dbfs=output_gain_dbfs,
+            operator_notes=operator_notes,
+            hardware_status=hardware_status,
+            pipeline_buffer_delay_ms=pipeline_buffer_delay_ms,
+            max_display_points=max_display_points,
+        )
+
+        report_dir = self.analysis_dir / f"phantom_{rec.trial_id}"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report_file = report_dir / "phantom_experiment.json"
+        with open(report_file, "w", encoding="utf-8") as f:
+            json.dump(rec.to_dict(), f, indent=2)
+
+        return rec.to_dict()
+
+    def list_phantom_experiments(self) -> list[dict[str, Any]]:
+        """List summary metadata of all recorded phantom experiments sorted newest first."""
+        experiments: list[dict[str, Any]] = []
+        for report_file in self.analysis_dir.glob("phantom_*/phantom_experiment.json"):
+            try:
+                with open(report_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    sys_dict = data.get("system_id", {})
+                    align_dict = data.get("alignment", {})
+                    lat_dict = data.get("latency", {})
+                    experiments.append({
+                        "trial_id": data.get("trial_id", report_file.parent.name.replace("phantom_", "")),
+                        "template_id": data.get("template_id"),
+                        "created_at_utc": data.get("created_at_utc", ""),
+                        "hardware_status": data.get("hardware_status", "PENDING_PHYSICAL_MEASUREMENT"),
+                        "stimulus_id": data.get("stimulus", {}).get("stimulus_id"),
+                        "stimulus_type": data.get("stimulus", {}).get("stimulus_type"),
+                        "session_id": data.get("capture", {}).get("session_id"),
+                        "sync_status": align_dict.get("sync_status"),
+                        "normalized_cross_correlation": align_dict.get("normalized_cross_correlation"),
+                        "estimated_acoustic_lag_ms": lat_dict.get("estimated_acoustic_lag_ms"),
+                        "total_end_to_end_latency_estimate_ms": lat_dict.get("total_end_to_end_latency_estimate_ms"),
+                        "mean_coherence_over_excited_band": sys_dict.get("mean_coherence_over_excited_band"),
+                        "clipping_detected": align_dict.get("capture_clipping", {}).get("clipping_detected", False),
+                    })
+            except Exception:
+                pass
+
+        experiments.sort(key=lambda x: x.get("created_at_utc", ""), reverse=True)
+        return experiments
+
+    def get_phantom_experiment(self, trial_id: str) -> Optional[dict[str, Any]]:
+        """Load a persisted phantom experiment record safely."""
+        valid_id = validate_identifier(trial_id, "trial_id", self.analysis_dir)
+        report_file = self.analysis_dir / f"phantom_{valid_id}" / "phantom_experiment.json"
+        if not report_file.exists():
+            return None
+        try:
+            with open(report_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
 
     # =========================================================================
     # Springer LR-HSMM Segmentation Orchestration
