@@ -28,7 +28,25 @@ Analysis profiles enforce reproducibility across automated tests, offline labora
 
 ---
 
-### 2.2. `GENERAL_PCG_V1`
+### 2.2. `PCG_CHARACTERIZATION_20_500_HZ`
+- **Identifier:** `PCG_CHARACTERIZATION_20_500_HZ` (Version `1.0.0`)
+- **Purpose:** Mandatory acoustic characterization band for PCG acquisition verification (C-W04-FR02).
+- **Passband Semantics:** Mandatory 20–500 Hz characterization band. Attenuates frequencies below 20 Hz (DC drift, sensor contact friction) and above 500 Hz (high-frequency acoustics). Distinct from the provisional 20–600 Hz general development preset.
+- **Sample Rate Policy:** Native ($48,000\text{ Hz}$) or specimen native rate.
+- **Filter Policy:**
+  - Prototype: 4th-order Butterworth bandpass ($20\text{--}500\text{ Hz}$).
+  - Structure: Cascaded Second-Order Sections (SOS), strictly causal IIR (`causal_iir`).
+- **Spectral Policy:**
+  - Window: Hann, $n_{\text{perseg}} = 512$, $n_{\text{overlap}} = 256$.
+  - Evaluation Range: $20\text{--}500\text{ Hz}$.
+  - Detrend: Constant (DC subtraction).
+  - Scaling: Power Spectral Density ($\text{FS}^2/\text{Hz}$).
+- **Feature Policy:** RMS, Peak, Crest Factor, Band Energy Ratios ($0\text{--}20$, $20\text{--}150$, $20\text{--}500$, $150\text{--}600$, $>600\text{ Hz}$).
+- **Literature Basis:** Rangayyan (R001), Oppenheim & Schafer (R002), Welch (R004).
+
+---
+
+### 2.3. `GENERAL_PCG_V1`
 - **Identifier:** `GENERAL_PCG_V1` (Version `1.0.0`)
 - **Purpose:** Engineering live monitoring and display passband for acoustic heart sound visualization.
 - **Passband Semantics:** Provisional engineering development preset; attenuates content outside 20–600 Hz (does not eliminate noise). Content below 20 Hz is a very-low-frequency (VLF) region (drift, motion/contact artifacts, and potential legitimate mechanical content); content above 600 Hz is extended/high-frequency acoustic content (not automatically noise). Neither region is assigned pathological meaning.

@@ -286,6 +286,7 @@ export interface ScientificSignalQuality {
   digital_saturation_count: number;
   digital_saturation_fraction: number;
   zero_crossing_rate: number | null;
+  quality_dimensions?: Record<string, any>;
   provenance: Record<string, unknown>;
 }
 
@@ -342,6 +343,7 @@ export interface ScientificSessionAnalysisResult {
   total_samples: number;
   duration_s: number;
   analysis_profile: string;
+  filter_metadata?: Record<string, unknown>;
   signal_quality: ScientificSignalQuality;
   spectral: ScientificSpectralData;
   envelope_lab: ScientificEnvelopeLabData;
