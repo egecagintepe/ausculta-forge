@@ -27,4 +27,12 @@ All files in this folder must follow the canonical naming pattern:
 
 ## Status
 
-All tasks for Week 5 are initially **NOT STARTED**. Update status fields as work progresses.
+Sprint 1 Host Preflight is **COMPLETE**. Physical MCU integration remains **PENDING HARDWARE ARRIVAL**.
+
+### Deliverables in this Folder:
+
+| Deliverable File | Description | Status |
+|---|---|---|
+| [`W05_C_host-integration-preflight_v01.md`](W05_C_host-integration-preflight_v01.md) | Host integration preflight test report and C-W05-01..09 acceptance mapping | Complete (`SOFTWARE_KNOWN_ANSWER` verified) |
+| [`W05_C_protocol-readiness-review_v01.md`](W05_C_protocol-readiness-review_v01.md) | Joint B→C wire protocol review, CDC-ACM vs Bulk analysis, and INMP441 reconciliation | Complete (Awaiting Module B sign-off) |
+| [`W05_C_live-display-recording-verification.md`](W05_C_live-display-recording-verification.md) | Week 05 live bench display and recording verification task placeholder | In Progress (Preflight complete; live hardware pending) |
