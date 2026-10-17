@@ -13,6 +13,20 @@ export type DeviceLifecycleState =
   | 'error'
   | 'incompatible';
 
+export interface DeviceCandidate {
+  device_id: string;
+  descriptor: string;
+  detected_at_utc: string;
+  transport_hint?: string;
+  port?: string;
+  vid?: number;
+  pid?: number;
+  serial_number?: string | null;
+  description?: string | null;
+  manufacturer?: string | null;
+  is_auscultaforge_candidate?: boolean;
+}
+
 export interface DeviceRuntimeState {
   state: DeviceLifecycleState;
   device_state?: DeviceLifecycleState;
@@ -20,6 +34,8 @@ export interface DeviceRuntimeState {
   is_connected?: boolean;
   device_id: string | null;
   firmware_version: string | null;
+  port?: string | null;
+  candidate?: DeviceCandidate | null;
   sample_rate_hz: number | null;
   sample_format: string | null;
   channels?: number | null;

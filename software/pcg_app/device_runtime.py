@@ -339,6 +339,9 @@ class DeviceCandidate:
     detected_at_utc: str
     transport_hint: str = "native_usb"
 
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
 
 class DeviceDiscoveryProvider(ABC):
     """Abstract discovery provider scanning system hardware buses."""

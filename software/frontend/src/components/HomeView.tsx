@@ -10,7 +10,7 @@ import {
   Disc,
   ArrowRight
 } from 'lucide-react';
-import { NavigationDestination, HeartSoundMetadata } from '../types';
+import { NavigationDestination, HeartSoundMetadata, DeviceRuntimeState } from '../types';
 import { STARTER_SAMPLES } from '../audio/samplesData';
 
 interface HomeViewProps {
@@ -21,6 +21,9 @@ interface HomeViewProps {
   deviceConnected: boolean;
   deviceConnecting: boolean;
   onToggleDiagnostics: () => void;
+  backendConnected?: boolean;
+  deviceRuntimeState?: DeviceRuntimeState | null;
+  sampleRate?: number;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
@@ -31,6 +34,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
   deviceConnected,
   deviceConnecting,
   onToggleDiagnostics,
+  backendConnected = false,
+  deviceRuntimeState,
+  sampleRate = 4000,
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -108,12 +114,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 borderColor: 'var(--border-subtle)'
               }}
             >
-              <span className={`w-2 h-2 rounded-full ${deviceConnected ? 'bg-[var(--status-success)]' : 'bg-[var(--accent-metal)] animate-pulse'}`} />
+              <span className={`w-2 h-2 rounded-full ${
+                deviceConnected
+                  ? 'bg-[var(--status-success)] animate-pulse'
+                  : backendConnected
+                  ? 'bg-[var(--status-success)]/70'
+                  : 'bg-[var(--status-warning)] animate-pulse'
+              }`} />
               <span className="font-mono-code text-[11px] uppercase tracking-wider font-semibold text-[var(--on-surface-variant)]">
                 System State:
               </span>
               <span className="font-mono-code text-[11px] font-bold tracking-wide text-[var(--accent-oxblood)]">
-                {deviceConnected ? 'STREAMING' : 'STANDBY'}
+                {deviceConnected ? 'STREAMING' : backendConnected ? 'BRIDGE ONLINE' : 'BRIDGE OFFLINE'}
               </span>
             </div>
 
@@ -181,21 +193,47 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded font-mono-code text-[10px] uppercase tracking-wide border ${
                     deviceConnected
                       ? 'bg-[var(--status-success)]/10 text-[var(--status-success)] border-[var(--status-success)]/30 font-bold'
+                      : deviceRuntimeState?.state === 'interrupted'
+                      ? 'bg-[var(--status-warning)]/15 text-[var(--status-warning)] border-[var(--status-warning)]/30 font-bold'
+                      : deviceRuntimeState?.state === 'detected'
+                      ? 'bg-blue-500/10 text-blue-500 border-blue-500/30 font-bold'
                       : 'bg-[var(--surface-muted)] text-[var(--on-surface-variant)] border-[var(--border-subtle)]'
                   }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${deviceConnected ? 'bg-[var(--status-success)]' : 'bg-[var(--waveform-raw)]'}`} />
-                    {deviceConnected ? 'COM4 CONNECTED' : 'PORT UNMAPPED'}
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      deviceConnected
+                        ? 'bg-[var(--status-success)]'
+                        : deviceRuntimeState?.state === 'interrupted'
+                        ? 'bg-[var(--status-warning)]'
+                        : 'bg-[var(--waveform-raw)]'
+                    }`} />
+                    {deviceConnected
+                      ? `${deviceRuntimeState?.state?.toUpperCase() || 'CONNECTED'} · ${deviceRuntimeState?.transport_type?.toUpperCase() || 'NATIVE USB'}`
+                      : deviceRuntimeState?.state === 'interrupted'
+                      ? 'INTERRUPTED · LINK LOST'
+                      : deviceRuntimeState?.state === 'detected'
+                      ? 'DETECTED · CANDIDATE FOUND'
+                      : 'ABSENT · AWAITING USB'}
                   </span>
                 </div>
 
                 <div className="flex flex-col gap-1.5 mt-2">
                   <h2 className="font-serif-display text-2xl text-[var(--on-surface)] font-semibold">
-                    {deviceConnected ? 'Stethoscope Hardware Synchronized' : 'No stethoscope connected'}
+                    {deviceConnected
+                      ? 'ESP32-S3 Physical Transducer Synchronized'
+                      : deviceRuntimeState?.state === 'interrupted'
+                      ? 'Physical Link Interrupted'
+                      : deviceRuntimeState?.state === 'detected'
+                      ? 'ESP32-S3 Hardware Detected'
+                      : 'No Stethoscope Hardware Connected'}
                   </h2>
                   <p className="text-xs text-[var(--on-surface-variant)] leading-relaxed">
                     {deviceConnected
-                      ? 'Piezoelectric chestpiece transducer is polling at 4.0 kHz over virtual serial bus. Dual mono channels verified.'
-                      : 'Connect a precision acoustic transducer when available, or inspect pre-recorded phonocardiograms. Hardware is polled automatically without interrupting the active calibration matrix.'}
+                      ? `ESP32-S3 Native USB link active at ${(sampleRate / 1000).toFixed(1)} kHz mono (${deviceRuntimeState?.sample_format || '24-in-32 signed PCM'}). Stream validated against active acquisition profile.`
+                      : deviceRuntimeState?.state === 'interrupted'
+                      ? 'Physical transport link was disconnected mid-stream. Active recording was finalized safely with termination_reason="device_disconnected".'
+                      : deviceRuntimeState?.state === 'detected'
+                      ? 'Hardware candidate probe detected on USB bus; awaiting transport opening.'
+                      : 'No physical ESP32-S3 stethoscope detected on host bus. Connect the physical instrument via Native USB, or explore offline session replays and synthetic benchmark signals.'}
                   </p>
                 </div>
               </div>
@@ -219,7 +257,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     <button
                       id="detect-device-btn"
                       onClick={onDetectDevice}
-                      disabled={deviceConnecting}
+                      disabled={deviceConnecting || !backendConnected}
+                      title={!backendConnected ? 'Python backend bridge is offline' : 'Scan system USB bus for candidate devices'}
                       className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border font-medium text-xs transition-all shadow-xs cursor-pointer active:scale-[0.98] disabled:opacity-50"
                       style={{
                         backgroundColor: 'var(--surface-card)',
@@ -228,22 +267,23 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       }}
                     >
                       <RefreshCw size={14} className={deviceConnecting ? 'animate-spin text-[var(--accent-oxblood)]' : ''} />
-                      <span>{deviceConnecting ? 'Scanning USB Bus…' : 'Detect Device'}</span>
+                      <span>{deviceConnecting ? 'Scanning USB Bus…' : 'Scan USB Bus'}</span>
                     </button>
                   )}
 
                   <div className="flex items-center gap-1.5 text-[var(--on-surface-variant)] font-mono-code text-[11px]">
                     <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--status-success)] opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--status-success)]" />
+                      <span className={`inline-flex rounded-full h-2 w-2 ${backendConnected ? 'bg-[var(--status-success)]' : 'bg-[var(--status-warning)]'}`} />
                     </span>
-                    <span>Automatic polling active (500ms)</span>
+                    <span className="truncate max-w-[240px]">
+                      {deviceRuntimeState?.discovery_status || (backendConnected ? 'Native USB discovery active' : 'Bridge offline')}
+                    </span>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between text-[var(--on-surface-variant)] font-mono-code text-[10px] pt-1">
-                  <span>BUS PROTOCOL: USB-CDC / HID</span>
-                  <span>DEVICE_ID: {deviceConnected ? 'STETH-USB-8842' : 'NULL_VAL'}</span>
+                  <span>TRANSPORT: ESP32-S3 NATIVE USB (CDC-ACM PROPOSED)</span>
+                  <span>DEVICE_ID: {deviceRuntimeState?.device_id || 'NONE (NO PROBE)'}</span>
                 </div>
               </div>
             </div>
@@ -373,7 +413,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <div className="flex items-center gap-3 text-[var(--accent-metal)] font-medium">
             <span>SOURCE-INDEPENDENT PROCESSING ARCHITECTURE</span>
             <span>•</span>
-            <span>OFFLINE CALIBRATION READY</span>
+            <span>OFFLINE REPLAY &amp; ANALYSIS READY</span>
           </div>
         </section>
       </div>
