@@ -56,6 +56,7 @@ from pcg_core.scientific import (
 from pcg_core.scientific_config import (
     get_analysis_profile,
     list_analysis_profiles,
+    PCG_CHARACTERIZATION_20_500_HZ,
     GENERAL_PCG_V1,
     RAW_INTEGRITY_V1,
     BROADBAND_SYSTEM_ID_V1,
@@ -725,12 +726,43 @@ class AnalysisService:
             profile = GENERAL_PCG_V1
             profile_id = GENERAL_PCG_V1.profile_id
 
-        if profile_id == "GENERAL_PCG_V1":
+        filter_metadata: dict[str, Any] = {
+            "filter_type": "none",
+            "phase_policy": "none",
+            "order": 0,
+            "low_hz": 0.0,
+            "high_hz": 0.0,
+            "preset": "none",
+        }
+
+        if profile_id == "PCG_CHARACTERIZATION_20_500_HZ":
+            nyq = fs / 2.0
+            high_cut = min(500.0, nyq - 1.0)
+            low_cut = min(20.0, high_cut * 0.5)
+            sos = scipy.signal.butter(4, [low_cut, high_cut], btype="bandpass", fs=fs, output="sos")
+            analysis_samples = scipy.signal.sosfilt(sos, raw_samples).astype(np.float32)
+            filter_metadata = {
+                "filter_type": "butterworth_bandpass",
+                "phase_policy": "causal_iir",
+                "order": 4,
+                "low_hz": low_cut,
+                "high_hz": high_cut,
+                "preset": "PCG_CHARACTERIZATION_20_500_HZ",
+            }
+        elif profile_id == "GENERAL_PCG_V1":
             nyq = fs / 2.0
             high_cut = min(600.0, nyq - 1.0)
             low_cut = min(20.0, high_cut * 0.5)
             sos = scipy.signal.butter(4, [low_cut, high_cut], btype="bandpass", fs=fs, output="sos")
             analysis_samples = scipy.signal.sosfilt(sos, raw_samples).astype(np.float32)
+            filter_metadata = {
+                "filter_type": "butterworth_bandpass",
+                "phase_policy": "causal_iir",
+                "order": 4,
+                "low_hz": low_cut,
+                "high_hz": high_cut,
+                "preset": "GENERAL_PCG_V1",
+            }
         else:
             # RAW or BROADBAND profiles preserve the full bandwidth
             analysis_samples = raw_samples.copy()
@@ -810,6 +842,7 @@ class AnalysisService:
             "total_samples": len(raw_samples),
             "duration_s": round(duration_s, 4),
             "analysis_profile": profile_id,
+            "filter_metadata": filter_metadata,
             "signal_quality": quality_result.to_dict(),
             "spectral": spectral_result.to_dict(),
             "envelope_lab": envelope_result.to_dict(),
