@@ -368,7 +368,17 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                     {activeMetadata?.filename || 'normal_sample_01.wav'}
                   </span>
                   <span className="bg-[var(--surface-muted)] text-[var(--on-surface-variant)] font-mono-code text-[10px] px-2 py-0.5 rounded font-semibold border border-[var(--border-subtle)]">
-                    {sourceType === 'device' ? 'HARDWARE TELEMETRY' : 'FILE AUDITION'}
+                    {sourceType === 'device'
+                      ? 'LIVE HARDWARE'
+                      : sourceType === 'synthetic'
+                      ? 'SYNTHETIC BENCHMARK (NOT HARDWARE)'
+                      : sourceType === 'session'
+                      ? 'SESSION REPLAY'
+                      : sourceType === 'sample'
+                      ? 'REFERENCE SPECIMEN'
+                      : sourceType === 'file'
+                      ? 'FILE AUDITION'
+                      : 'NO SOURCE'}
                   </span>
                 </div>
                 <span className="font-mono-code text-[10px] text-[var(--on-surface-variant)] uppercase tracking-wider">
@@ -701,7 +711,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                   </button>
 
                   <div className="text-[var(--on-surface-variant)] font-mono-code text-[10px] pl-2">
-                    RMS: {liveMetrics ? (20 * Math.log10(Math.max(liveMetrics.rms, 1e-4))).toFixed(1) + ' dBFS' : '-24.6 dBFS'}
+                    RMS: {liveMetrics && liveMetrics.rms > 0 ? (20 * Math.log10(Math.max(liveMetrics.rms, 1e-4))).toFixed(1) + ' dBFS' : '-- dBFS'}
                   </div>
                 </div>
               </div>

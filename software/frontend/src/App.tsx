@@ -196,6 +196,20 @@ export default function App() {
         addToast('Connected to Python DSP Bridge', 'success');
       } else {
         addLog('Disconnected from Python DSP Bridge. Retrying...', 'warning', 'Bridge');
+        setDeviceRuntimeState({
+          connected: false,
+          state: 'absent',
+          discovery_status: 'Bridge offline — awaiting connection',
+          device_id: null,
+          firmware_version: null,
+          candidate: null,
+        });
+        setDeviceState(prev => ({
+          ...prev,
+          connected: false,
+          state: 'Not connected',
+          deviceId: 'None (Bridge Offline)'
+        }));
       }
     });
 
@@ -223,7 +237,7 @@ export default function App() {
         ...prev,
         connected: dev.connected,
         state: dev.connected ? (dev.state === 'streaming' ? 'Streaming' : 'Connected') : 'Not connected',
-        deviceId: dev.device_id || 'None (Waiting for Probe)',
+        deviceId: dev.device_id || (dev.candidate ? dev.candidate.description || 'USB Candidate' : 'None (Waiting for Probe)'),
         firmwareVersion: dev.firmware_version || 'Pending',
       }));
     });
@@ -245,7 +259,7 @@ export default function App() {
           ...prev,
           connected: dev.connected,
           state: dev.connected ? (dev.state === 'streaming' ? 'Streaming' : 'Connected') : 'Not connected',
-          deviceId: dev.device_id || 'None (Waiting for Probe)',
+          deviceId: dev.device_id || (dev.candidate ? dev.candidate.description || 'USB Candidate' : 'None (Waiting for Probe)'),
           firmwareVersion: dev.firmware_version || 'Pending',
         }));
       }
@@ -431,90 +445,81 @@ export default function App() {
     }
   }, [addLog, addToast]);
 
-  // Connect/Detect Device Simulation
-  const handleDetectDevice = useCallback(() => {
-    setDeviceConnecting(true);
-    addLog('Connecting to local stream simulation...', 'info', 'Hardware');
-
-    setTimeout(() => {
-      setDeviceConnecting(false);
-      setDeviceState({
-        connected: true,
-        state: 'Connected',
-        deviceId: 'ESP32-S3-SIM',
-        port: 'Native USB (Simulation)',
-        firmwareVersion: 'v0.1-DEV',
-        sampleRateHz: 4000,
-        uptimeSeconds: 120
-      });
-      addLog('Simulation stream synchronized (4.0 kHz)', 'info', 'Hardware');
-      addToast('Simulation stream connected', 'success');
-    }, 900);
-  }, [addLog, addToast]);
-
-  const handleDisconnectDevice = useCallback(() => {
-    setDeviceState({
-      connected: false,
-      state: 'Not connected',
-      deviceId: 'ESP32-S3-SIM',
-      port: 'Native USB (Simulation)',
-      firmwareVersion: 'v0.1-DEV',
-      sampleRateHz: 4000
-    });
-    if (sourceType === 'device') {
-      setSourceType('sample');
+  // Truthful Device Discovery and Disconnect
+  const handleDetectDevice = useCallback(async () => {
+    if (!backendConnected) {
+      addToast('Python Bridge is offline. Cannot scan hardware.', 'warning');
+      addLog('Hardware scan aborted: Python Bridge is offline', 'warning', 'Hardware');
+      return;
     }
-    addLog('Device disconnected', 'info', 'Hardware');
-    addToast('Stethoscope disconnected', 'info');
-  }, [addLog, addToast, sourceType]);
+    setDeviceConnecting(true);
+    addLog('Executing USB bus discovery scan via Python host provider...', 'info', 'Hardware');
 
-  const handleSimulateInterruption = useCallback(() => {
-    if (!deviceState.connected) return;
-    addLog('Simulation stream interrupted', 'warning', 'Transport');
-    setDeviceState(prev => ({ ...prev, state: 'Connection interrupted' }));
+    try {
+      const res = await bridgeClient.pollDevice();
+      setDeviceConnecting(false);
+      const devState = res?.state;
+      if (devState && devState.connected) {
+        addLog(`Hardware verified: ${devState.device_id || 'ESP32-S3'} on ${devState.port || 'Native USB'}`, 'info', 'Hardware');
+        addToast(`Hardware connected: ${devState.device_id || 'ESP32-S3'}`, 'success');
+      } else {
+        const statusMsg = devState?.discovery_status || 'No AuscultaForge device found on USB bus';
+        addLog(`Hardware scan complete: ${statusMsg}`, 'info', 'Hardware');
+        addToast('No AuscultaForge hardware detected', 'info');
+      }
+    } catch (err) {
+      setDeviceConnecting(false);
+      addLog(`Hardware discovery request failed: ${String(err)}`, 'error', 'Hardware');
+      addToast('Device scan failed', 'warning');
+    }
+  }, [backendConnected, addLog, addToast]);
 
-    setTimeout(() => {
-      addLog('Attempting auto-reconnect (attempt 1/3)…', 'info', 'Transport');
-    }, 1000);
-
-    setTimeout(() => {
-      setDeviceState(prev => ({ ...prev, state: 'Connected' }));
-      addLog('Simulation stream restored', 'info', 'Transport');
-      addToast('Connection restored', 'success');
-    }, 2400);
-  }, [addLog, addToast, deviceState.connected]);
+  const handleDisconnectDevice = useCallback(async () => {
+    if (!backendConnected) return;
+    try {
+      addLog('Sending graceful disconnect request to hardware runtime...', 'info', 'Hardware');
+      const res = await bridgeClient.disconnectDevice();
+      if (sourceType === 'device') {
+        setSourceType('none');
+        setActiveSourceName('None');
+      }
+      addLog(`Hardware disconnected successfully: ${res?.state || 'absent'}`, 'info', 'Hardware');
+      addToast('Stethoscope disconnected', 'info');
+    } catch (err) {
+      addLog(`Disconnect command failed: ${String(err)}`, 'error', 'Hardware');
+      addToast('Disconnect failed', 'warning');
+    }
+  }, [backendConnected, addLog, addToast, sourceType]);
 
   const handleUseDeviceInLive = useCallback(() => {
-    const { raw, filtered } = generateSyntheticHeartAudio('sample_normal_01', 30, 4000);
-    audioEngine.setAudioData(raw, filtered, 4000);
-    setRawData(raw);
-    setFilteredData(filtered);
-    setSampleRate(4000);
-    setDuration(30);
-    setCurrentTime(0);
-    setIsPlaying(false);
-    setSourceType('device');
-
-    setActiveMetadata({
-      id: 'device-live-stream',
-      title: 'Digital Stethoscope Live Stream',
-      filename: 'Device_Live_Telemetry.wav',
-      category: 'Live Hardware Acquisition',
-      durationSeconds: 30,
-      sampleRateHz: 4000,
-      channels: 1,
-      description: 'Real-time telemetry stream from connected stethoscope chestpiece simulation.',
-      sourceAttribution: 'AuscultaForge synthetic development signal',
-      quality: {
-        rating: 'Unavailable',
-        score: null,
-        message: 'Synthetic bench simulation'
-      }
-    });
-
-    setCurrentDestination('live');
-    addLog('Live device stream bound to workspace', 'info', 'Acquisition');
-  }, [addLog]);
+    if (deviceRuntimeState?.connected) {
+      bridgeClient.selectSource('hardware');
+      setSourceType('device');
+      setActiveSourceName(`Physical Hardware: ${deviceRuntimeState.device_id || 'ESP32-S3'}`);
+      setActiveMetadata({
+        id: 'hardware-live-stream',
+        title: 'ESP32-S3 Physical Transducer Stream',
+        filename: 'ESP32S3_Live_Acquisition.pcm',
+        category: 'Live Hardware Acquisition',
+        durationSeconds: 0,
+        sampleRateHz: sampleRate,
+        channels: 1,
+        description: 'Real-time telemetry stream from connected ESP32-S3 stethoscope transducer.',
+        sourceAttribution: 'AuscultaForge Live Physical Transducer',
+        quality: {
+          rating: 'Optimal',
+          score: 100,
+          message: 'Authoritative hardware streaming'
+        }
+      });
+      setCurrentDestination('live');
+      addLog('Live physical hardware stream bound to workspace', 'info', 'Acquisition');
+      addToast('Bound live hardware stream to workspace', 'success');
+    } else {
+      addToast('No physical hardware connected. Connect device or activate synthetic benchmark.', 'warning');
+      addLog('Cannot bind hardware stream: No physical device in READY or STREAMING state', 'warning', 'Acquisition');
+    }
+  }, [deviceRuntimeState, sampleRate, addLog, addToast]);
 
   const handleStartRecording = useCallback(() => {
     bridgeClient.startRecording();
@@ -818,6 +823,7 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
         onToggleFullscreen={handleToggleFullscreen}
         backendConnected={backendConnected}
         deviceState={deviceRuntimeState?.state ?? 'absent'}
+        sampleRate={sampleRate}
         isRecording={isRecording}
         recordingElapsedSeconds={recordingElapsedSeconds}
         recordingSessionId={recordingSessionId}
@@ -844,9 +850,12 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
               onNavigate={navigateTo}
               onSelectSample={loadSample}
               onDetectDevice={handleDetectDevice}
-              deviceConnected={deviceState.connected}
+              deviceConnected={deviceRuntimeState?.connected ?? false}
               deviceConnecting={deviceConnecting}
               onToggleDiagnostics={() => setDiagnosticsOpen(true)}
+              backendConnected={backendConnected}
+              deviceRuntimeState={deviceRuntimeState}
+              sampleRate={sampleRate}
             />
           )}
 
@@ -917,9 +926,9 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
             <DeviceView
               deviceState={deviceState}
               deviceRuntimeState={deviceRuntimeState}
+              deviceStats={deviceStats}
               onDetectDevice={handleDetectDevice}
               onDisconnectDevice={handleDisconnectDevice}
-              onSimulateInterruption={handleSimulateInterruption}
               onUseDevice={handleUseDeviceInLive}
               isConnecting={deviceConnecting}
               isDark={isDark}
@@ -966,6 +975,8 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
       {/* 4. Bottom Status Footer Strip */}
       <FooterStatus
         backendConnected={backendConnected}
+        deviceConnected={deviceRuntimeState?.connected ?? false}
+        deviceState={deviceRuntimeState?.state ?? 'absent'}
         sampleRate={sampleRate}
         isHealthy={streamQuality.is_healthy}
         isRecording={isRecording}

@@ -18,7 +18,7 @@ from pcg_core.recording import list_sessions, get_session, validate_session_id
 from pcg_core.scientific import SystemIdConfig
 from pcg_core.scientific_config import list_analysis_profiles
 from .state import StreamManager
-from .device_runtime import DeviceRuntime
+from .device_runtime import DeviceRuntime, DeviceState
 from .analysis_service import AnalysisService
 from .protocol import (
     make_hello_message,
@@ -69,6 +69,8 @@ def create_app(
         version="1.0.0",
         lifespan=lifespan,
     )
+    app.state.stream_manager = manager
+    app.state.analysis_service = analysis
 
     # Permit strictly local frontend origins (loopback only)
     app.add_middleware(
@@ -145,6 +147,29 @@ def create_app(
     @app.get("/api/device/stats")
     def get_device_stats() -> dict[str, Any]:
         return manager.device_runtime.stats.to_dict()
+
+    @app.post("/api/device/poll")
+    async def api_poll_device() -> dict[str, Any]:
+        candidates = manager.device_runtime.discovery_provider.poll_candidates()
+        manager.device_runtime.event_log.log(
+            "DEVICE_SCAN_EXECUTED",
+            f"Hardware discovery scan executed ({len(candidates)} candidate devices detected)",
+            severity="info",
+            metadata={"candidate_count": len(candidates)},
+        )
+        st = manager.device_runtime.get_state_dict()
+        await manager.broadcast(make_device_state_message(st))
+        return {
+            "candidates": [c.to_dict() for c in candidates],
+            "state": st,
+        }
+
+    @app.post("/api/device/disconnect")
+    async def api_disconnect_device() -> dict[str, Any]:
+        if manager.device_runtime.state in (DeviceState.READY, DeviceState.STREAMING):
+            manager.handle_device_disconnect("User requested device disconnect via API")
+            await manager.broadcast(make_device_state_message(manager.device_runtime.get_state_dict()))
+        return manager.device_runtime.get_state_dict()
 
     @app.get("/api/sessions")
     def api_list_sessions() -> list[dict[str, Any]]:
@@ -543,6 +568,25 @@ def create_app(
                     limit = data.get("limit", 50)
                     events = manager.device_runtime.event_log.get_recent(limit=limit)
                     await websocket.send_json({"type": "device_events", "events": events})
+
+                elif action == "poll_device":
+                    candidates = manager.device_runtime.discovery_provider.poll_candidates()
+                    manager.device_runtime.event_log.log(
+                        "DEVICE_SCAN_EXECUTED",
+                        f"Hardware discovery scan executed ({len(candidates)} candidate devices detected)",
+                        severity="info",
+                        metadata={"candidate_count": len(candidates)},
+                    )
+                    st = manager.device_runtime.get_state_dict()
+                    await websocket.send_json(make_device_state_message(st))
+                    await manager.broadcast(make_device_state_message(st))
+
+                elif action == "disconnect_device":
+                    if manager.device_runtime.state in (DeviceState.READY, DeviceState.STREAMING):
+                        manager.handle_device_disconnect("User requested device disconnect via WebSocket")
+                        await manager.broadcast(make_device_state_message(manager.device_runtime.get_state_dict()))
+                    else:
+                        await websocket.send_json(make_device_state_message(manager.device_runtime.get_state_dict()))
 
                 elif action == "ping":
                     await websocket.send_json({"type": "pong", "time": time.time()})

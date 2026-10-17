@@ -2,6 +2,8 @@ import React from 'react';
 
 interface FooterStatusProps {
   backendConnected?: boolean;
+  deviceConnected?: boolean;
+  deviceState?: string;
   sampleRate?: number;
   isHealthy?: boolean;
   isRecording?: boolean;
@@ -10,11 +12,41 @@ interface FooterStatusProps {
 
 export const FooterStatus: React.FC<FooterStatusProps> = ({
   backendConnected = false,
+  deviceConnected = false,
+  deviceState = 'absent',
   sampleRate = 4000,
   isHealthy = true,
   isRecording = false,
-  sourceName = 'Synthetic PCG',
+  sourceName = 'None',
 }) => {
+  const getDeviceDisplay = () => {
+    if (!backendConnected) {
+      return { text: 'UNKNOWN (BRIDGE OFFLINE)', color: 'text-[var(--status-warning)]' };
+    }
+    switch (deviceState.toLowerCase()) {
+      case 'ready':
+        return { text: 'READY (ESP32-S3)', color: 'text-[var(--status-success)]' };
+      case 'streaming':
+        return { text: 'STREAMING (ESP32-S3)', color: 'text-[var(--status-success)] font-bold animate-pulse' };
+      case 'detected':
+        return { text: 'DETECTED (PENDING OPEN)', color: 'text-blue-500' };
+      case 'opening':
+      case 'handshaking':
+        return { text: `${deviceState.toUpperCase()}...`, color: 'text-amber-500 animate-pulse' };
+      case 'interrupted':
+        return { text: 'INTERRUPTED (USB LOST)', color: 'text-[var(--status-warning)] font-bold' };
+      case 'error':
+        return { text: 'ERROR (DEVICE FAULT)', color: 'text-[var(--status-danger)] font-bold' };
+      case 'incompatible':
+        return { text: 'INCOMPATIBLE', color: 'text-[var(--status-danger)] font-bold' };
+      case 'absent':
+      default:
+        return { text: 'ABSENT (NO HARDWARE)', color: 'text-[var(--on-surface-variant)]' };
+    }
+  };
+
+  const devInfo = getDeviceDisplay();
+
   return (
     <footer
       id="app-footer"
@@ -30,6 +62,13 @@ export const FooterStatus: React.FC<FooterStatusProps> = ({
           BRIDGE:{' '}
           <strong className={backendConnected ? 'text-[var(--status-success)] font-semibold' : 'text-[var(--status-warning)] font-semibold'}>
             {backendConnected ? 'CONNECTED (127.0.0.1:8000)' : 'DISCONNECTED'}
+          </strong>
+        </span>
+        <span className="text-[var(--border-strong)]">|</span>
+        <span>
+          DEVICE:{' '}
+          <strong className={`${devInfo.color} font-semibold`}>
+            {devInfo.text}
           </strong>
         </span>
         <span className="text-[var(--border-strong)]">|</span>

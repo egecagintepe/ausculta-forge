@@ -249,3 +249,84 @@ def test_cors_and_websocket_origin_security(test_app_and_dir):
             with client.websocket_connect("/ws", headers={"Origin": "http://malicious-site.com"}):
                 pass
         assert excinfo.value.code == 1008
+
+
+def test_device_poll_and_disconnect_endpoints(test_app_and_dir):
+    app, _ = test_app_and_dir
+    with TestClient(app) as client:
+        # Test truthful poll endpoint
+        resp = client.post("/api/device/poll")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "candidates" in data
+        assert isinstance(data["candidates"], list)
+        assert data["state"]["device_state"] == "absent"
+        assert not data["state"]["connected"]
+
+        # Verify event was logged
+        events = client.get("/api/device/events").json()
+        assert any(e["code"] == "DEVICE_SCAN_EXECUTED" for e in events)
+
+        # Test disconnect when absent returns clean state
+        resp = client.post("/api/device/disconnect")
+        assert resp.status_code == 200
+        disc_data = resp.json()
+        assert disc_data["device_state"] == "absent"
+
+        # Test WebSocket poll_device and disconnect_device commands
+        with client.websocket_connect("/ws") as ws:
+            _ = ws.receive_json()  # hello
+            _ = ws.receive_json()  # device_state
+
+            ws.send_json({"action": "poll_device"})
+            poll_resp = ws.receive_json()
+            assert poll_resp["type"] == "device_state"
+            assert poll_resp["device_state"] == "absent"
+
+            ws.send_json({"action": "disconnect_device"})
+            disc_resp = ws.receive_json()
+            assert disc_resp["type"] == "device_state"
+            assert disc_resp["device_state"] == "absent"
+
+
+def test_device_lifecycle_states_and_transitions(test_app_and_dir):
+    from software.pcg_app.device_runtime import DeviceCandidate, DeviceState
+
+    app, _ = test_app_and_dir
+    # Directly inspect manager device_runtime transitions
+    manager = app.state.stream_manager
+
+    with TestClient(app) as client:
+        # Mock a candidate detection in discovery provider
+        mock_candidate = DeviceCandidate(
+            device_id="ESP32-S3-TEST",
+            descriptor="COM9 (VID=0x303A, PID=0x1001)",
+            detected_at_utc="2026-10-17T12:00:00Z",
+            transport_hint="native_usb",
+        )
+        manager.device_runtime.discovery_provider.poll_candidates = lambda: [mock_candidate]
+
+        poll_res = client.post("/api/device/poll").json()
+        assert len(poll_res["candidates"]) == 1
+        cand = poll_res["candidates"][0]
+        assert cand["device_id"] == "ESP32-S3-TEST"
+        assert cand["descriptor"] == "COM9 (VID=0x303A, PID=0x1001)"
+        assert cand["transport_hint"] == "native_usb"
+
+        # Test INTERRUPTED state representation
+        manager.device_runtime._state = DeviceState.INTERRUPTED
+        st = client.get("/api/device/state").json()
+        assert st["device_state"] == "interrupted"
+        assert st["connected"] is False
+
+        # Test ERROR state representation
+        manager.device_runtime._state = DeviceState.ERROR
+        st = client.get("/api/device/state").json()
+        assert st["device_state"] == "error"
+
+        # Test INCOMPATIBLE state representation
+        manager.device_runtime._state = DeviceState.INCOMPATIBLE
+        st = client.get("/api/device/state").json()
+        assert st["device_state"] == "incompatible"
+
+

@@ -161,6 +161,18 @@ class BridgeClient {
       this.ws.onopen = () => {
         this.isConnected = true;
         this.notifyConnection(true);
+        // Refresh authoritative device state, stats, and events upon connection/reconnect
+        this.fetchDeviceState().then(dev => {
+          if (dev) this.deviceStateListeners.forEach(cb => cb(dev));
+        });
+        this.fetchDeviceStats().then(stats => {
+          if (stats) this.deviceStatsListeners.forEach(cb => cb(stats));
+        });
+        this.fetchDeviceEvents().then(evts => {
+          if (evts && evts.length > 0) {
+            evts.forEach(evt => this.deviceEventListeners.forEach(cb => cb(evt)));
+          }
+        });
       };
 
       this.ws.onclose = () => {
@@ -385,6 +397,32 @@ class BridgeClient {
       const resp = await fetch(`${this.apiUrl}/device/stats`);
       if (!resp.ok) return null;
       return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public async pollDevice(): Promise<{ candidates: unknown[]; state: DeviceRuntimeState } | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/device/poll`, { method: 'POST' });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      if (data.state) {
+        this.deviceStateListeners.forEach(cb => cb(data.state));
+      }
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  public async disconnectDevice(): Promise<DeviceRuntimeState | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/device/disconnect`, { method: 'POST' });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      this.deviceStateListeners.forEach(cb => cb(data));
+      return data;
     } catch {
       return null;
     }

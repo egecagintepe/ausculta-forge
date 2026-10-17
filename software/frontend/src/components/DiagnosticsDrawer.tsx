@@ -270,6 +270,12 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
                 </span>
               </div>
               <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
+                <span className="text-[var(--on-surface-variant)]">USB Port / Candidate:</span>
+                <span className="text-[var(--on-surface)] font-mono-code truncate max-w-[220px]" title={deviceRuntimeState?.candidate?.port || deviceRuntimeState?.port || 'None'}>
+                  {deviceRuntimeState?.candidate?.port || deviceRuntimeState?.port || 'None'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
                 <span className="text-[var(--on-surface-variant)]">Discovery:</span>
                 <span className="text-[10px] text-[var(--on-surface-variant)] text-right max-w-[240px]">
                   {deviceRuntimeState?.discovery_status ?? 'Configuration pending USB descriptor decision'}
@@ -361,7 +367,7 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
               </div>
               <div className="flex items-center justify-between py-1">
                 <span className="text-[var(--on-surface-variant)]">Resampling:</span>
-                <span className="text-[var(--on-surface)]">None (Native 4 kHz match)</span>
+                <span className="text-[var(--on-surface)]">{diagnosticState.inputSampleRate ? `Native (${diagnosticState.inputSampleRate})` : 'Native Direct Pass-Through'}</span>
               </div>
             </div>
           )}
@@ -443,7 +449,7 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
           <CheckCircle2 size={13} className="text-[var(--status-success)]" />
           <span className="tracking-wider font-semibold">HOST BUFFER STABLE</span>
         </div>
-        <span>CPU: 1.4% · MEM: 48MB</span>
+        <span>{deviceStats ? `TX: ${deviceStats.packets_received} PKTS · ${deviceStats.samples_received} SMP` : 'STREAM RING BUFFER: 15s ROLLING'}</span>
       </div>
     </aside>
   );
