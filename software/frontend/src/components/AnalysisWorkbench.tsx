@@ -30,6 +30,7 @@ import {
 } from '../types';
 import { bridgeClient, SessionItem } from '../api/bridgeClient';
 import { ScientificLab } from './ScientificLab';
+import { ResearchErrorBoundary } from './ResearchErrorBoundary';
 
 interface AnalysisWorkbenchProps {
   initialSessionId?: string | null;
@@ -498,6 +499,17 @@ export const AnalysisWorkbench: React.FC<AnalysisWorkbenchProps> = ({
             }}
           >
             <button
+              onClick={() => setActiveTab('scientific')}
+              className={`px-3 py-1.5 rounded transition-colors cursor-pointer font-medium flex items-center gap-1.5 ${
+                activeTab === 'scientific'
+                  ? 'bg-[var(--surface-card)] text-[var(--accent-oxblood)] font-bold shadow-xs'
+                  : 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]'
+              }`}
+            >
+              <Activity size={14} />
+              <span>Scientific Lab &amp; Research</span>
+            </button>
+            <button
               onClick={() => setActiveTab('compare')}
               className={`px-3 py-1.5 rounded transition-colors cursor-pointer font-medium flex items-center gap-1.5 ${
                 activeTab === 'compare'
@@ -585,6 +597,20 @@ export const AnalysisWorkbench: React.FC<AnalysisWorkbenchProps> = ({
             </p>
           </div>
         </div>
+
+        {/* Tab 0: Scientific Lab & Research */}
+        {activeTab === 'scientific' && (
+          <ResearchErrorBoundary fallbackTitle="Scientific Lab Render Error">
+            <ScientificLab
+              isDark={isDark}
+              sessions={sessions}
+              referenceAssets={referenceAssets}
+              selectedSessionId={selectedSessionId}
+              onSelectSessionId={(id) => setSelectedSessionId(id)}
+              addToast={addToast}
+            />
+          </ResearchErrorBoundary>
+        )}
 
         {/* Tab 1: Comparison & Workbench View */}
         {activeTab === 'compare' && (
