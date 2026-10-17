@@ -1,0 +1,593 @@
+{
+  "bench_version": "2.0.0-sprint02",
+  "timestamp_utc": "2026-10-17T11:34:30.818589+00:00",
+  "status_tag": "SOFTWARE_KNOWN_ANSWER",
+  "total_scenarios": 8,
+  "passed_scenarios": 8,
+  "failed_scenarios": 0,
+  "all_passed": true,
+  "scenarios": [
+    {
+      "scenario_id": "sine_100hz_48k",
+      "title": "48 kHz Mono 100 Hz Pure Sine Wave",
+      "category": "wave_fidelity",
+      "passed": true,
+      "status_label": "SOFTWARE_KNOWN_ANSWER",
+      "duration_ms": 78.91,
+      "metrics": [
+        {
+          "name": "sample_rate_hz",
+          "expected": 48000,
+          "observed": 48000,
+          "tolerance": null,
+          "passed": true,
+          "unit": "Hz",
+          "notes": ""
+        },
+        {
+          "name": "sample_count",
+          "expected": 10240,
+          "observed": 10240,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "dominant_frequency",
+          "expected": 100.0,
+          "observed": 100.0,
+          "tolerance": 1.0,
+          "passed": true,
+          "unit": "Hz",
+          "notes": ""
+        },
+        {
+          "name": "waveform_max_error",
+          "expected": 0.0,
+          "observed": 1.1920928955078125e-07,
+          "tolerance": 1e-05,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "rms_level",
+          "expected": 0.5303300858899106,
+          "observed": 0.5311664938926697,
+          "tolerance": 0.01,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "sha256_verified",
+          "expected": "95ce3d0fed6e66b9c7db5153c722ac0cc151ffb6c3c39bda99086fa092c985cf",
+          "observed": "95ce3d0fed6e66b9c7db5153c722ac0cc151ffb6c3c39bda99086fa092c985cf",
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        }
+      ],
+      "artifacts": {
+        "session_id": "session_20261017_113430_7c08809b",
+        "raw_wav": "experiments\\virtual-bench\\sine_100hz_48k\\session_20261017_113430_7c08809b\\raw.wav",
+        "session_json": "experiments\\virtual-bench\\sine_100hz_48k\\session_20261017_113430_7c08809b\\session.json"
+      },
+      "telemetry_observed": {
+        "packets_received": 20,
+        "samples_received": 10240,
+        "sequence_gaps": 0,
+        "repeated_packets": 0,
+        "out_of_order_packets": 0,
+        "crc_failures": 0,
+        "malformed_frames": 0,
+        "timestamp_regressions": 0,
+        "disconnect_count": 0,
+        "reconnect_count": 0
+      },
+      "error_message": null,
+      "parameters": {
+        "sample_rate_hz": 48000,
+        "frequency_hz": 100.0,
+        "amplitude": 0.75,
+        "total_samples": 10240
+      }
+    },
+    {
+      "scenario_id": "ascending_sample_counter",
+      "title": "Ascending Sample Counter (Exact Accounting)",
+      "category": "sample_accounting",
+      "passed": true,
+      "status_label": "SOFTWARE_KNOWN_ANSWER",
+      "duration_ms": 44.25,
+      "metrics": [
+        {
+          "name": "sample_count",
+          "expected": 4096,
+          "observed": 4096,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "first_sample_int",
+          "expected": 500.0,
+          "observed": 500.0,
+          "tolerance": 0.1,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "last_sample_int",
+          "expected": 4595.0,
+          "observed": 4595.0,
+          "tolerance": 0.1,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "monotonic_increment",
+          "expected": 1.0,
+          "observed": 1.0,
+          "tolerance": 0.001,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "zero_dropped_blocks",
+          "expected": 0,
+          "observed": 0,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        }
+      ],
+      "artifacts": {
+        "session_id": "session_20261017_113430_00889599",
+        "raw_wav": "experiments\\virtual-bench\\ascending_sample_counter\\session_20261017_113430_00889599\\raw.wav"
+      },
+      "telemetry_observed": {
+        "packets_received": 8,
+        "samples_received": 4096,
+        "sequence_gaps": 0,
+        "repeated_packets": 0,
+        "out_of_order_packets": 0,
+        "crc_failures": 0,
+        "malformed_frames": 0,
+        "timestamp_regressions": 0,
+        "disconnect_count": 0,
+        "reconnect_count": 0
+      },
+      "error_message": null,
+      "parameters": {
+        "start_val": 500,
+        "step": 1,
+        "total_samples": 4096
+      }
+    },
+    {
+      "scenario_id": "boundary_conditions",
+      "title": "Silence, Half-Scale Sine & Full-Scale Extremes",
+      "category": "dynamic_range",
+      "passed": true,
+      "status_label": "SOFTWARE_KNOWN_ANSWER",
+      "duration_ms": 33.79,
+      "metrics": [
+        {
+          "name": "silence_peak",
+          "expected": 0.0,
+          "observed": 0.0,
+          "tolerance": 1e-07,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "half_scale_peak",
+          "expected": 0.5,
+          "observed": 0.49999988079071045,
+          "tolerance": 0.01,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "full_scale_negative",
+          "expected": -1.0,
+          "observed": -1.0,
+          "tolerance": 1e-07,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "full_scale_positive",
+          "expected": 1.0,
+          "observed": 0.9999998807907104,
+          "tolerance": 1e-05,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "no_nan_or_inf",
+          "expected": true,
+          "observed": true,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        }
+      ],
+      "artifacts": {
+        "session_id": "session_20261017_113430_692d46f1",
+        "raw_wav": "experiments\\virtual-bench\\boundary_conditions\\session_20261017_113430_692d46f1\\raw.wav"
+      },
+      "telemetry_observed": {
+        "packets_received": 3,
+        "samples_received": 1536,
+        "sequence_gaps": 0,
+        "repeated_packets": 0,
+        "out_of_order_packets": 0,
+        "crc_failures": 0,
+        "malformed_frames": 0,
+        "timestamp_regressions": 0,
+        "disconnect_count": 0,
+        "reconnect_count": 0
+      },
+      "error_message": null,
+      "parameters": {
+        "min_neg": -8388608,
+        "max_pos": 8388607,
+        "blocks": 3
+      }
+    },
+    {
+      "scenario_id": "clipped_and_impulse",
+      "title": "Unit Impulse Response & Clipped Pulse Sequences",
+      "category": "transient_dsp",
+      "passed": true,
+      "status_label": "SOFTWARE_KNOWN_ANSWER",
+      "duration_ms": 31.64,
+      "metrics": [
+        {
+          "name": "impulse_index",
+          "expected": 32,
+          "observed": 32,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "impulse_peak_val",
+          "expected": 1.0,
+          "observed": 0.9999998807907104,
+          "tolerance": 1e-05,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "clipped_square_rms",
+          "expected": 1.0,
+          "observed": 0.999022901058197,
+          "tolerance": 0.05,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "total_recorded_samples",
+          "expected": 1024,
+          "observed": 1024,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        }
+      ],
+      "artifacts": {
+        "session_id": "session_20261017_113430_55069d92",
+        "raw_wav": "experiments\\virtual-bench\\clipped_and_impulse\\session_20261017_113430_55069d92\\raw.wav"
+      },
+      "telemetry_observed": {
+        "packets_received": 2,
+        "samples_received": 1024,
+        "sequence_gaps": 0,
+        "repeated_packets": 0,
+        "out_of_order_packets": 0,
+        "crc_failures": 0,
+        "malformed_frames": 0,
+        "timestamp_regressions": 0,
+        "disconnect_count": 0,
+        "reconnect_count": 0
+      },
+      "error_message": null,
+      "parameters": {
+        "impulse_loc": 32,
+        "square_freq_hz": 50.0
+      }
+    },
+    {
+      "scenario_id": "injected_gaps_duplicates",
+      "title": "Explicit Sequence Gaps & Duplicate Packets",
+      "category": "fault_injection",
+      "passed": true,
+      "status_label": "SOFTWARE_KNOWN_ANSWER",
+      "duration_ms": 42.05,
+      "metrics": [
+        {
+          "name": "packets_received",
+          "expected": 5,
+          "observed": 5,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "sequence_gaps",
+          "expected": 2,
+          "observed": 2,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "repeated_packets",
+          "expected": 1,
+          "observed": 1,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "total_samples_recorded",
+          "expected": 2560,
+          "observed": 2560,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        }
+      ],
+      "artifacts": {
+        "session_id": "session_20261017_113430_c99c946d"
+      },
+      "telemetry_observed": {
+        "packets_received": 5,
+        "samples_received": 2560,
+        "sequence_gaps": 2,
+        "repeated_packets": 1,
+        "out_of_order_packets": 0,
+        "crc_failures": 0,
+        "malformed_frames": 0,
+        "timestamp_regressions": 0,
+        "disconnect_count": 0,
+        "reconnect_count": 0
+      },
+      "error_message": null,
+      "parameters": {
+        "sequence_plan": [
+          0,
+          1,
+          4,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "scenario_id": "timestamp_regression",
+      "title": "Timestamp Rollback & Rollover Anomaly",
+      "category": "fault_injection",
+      "passed": true,
+      "status_label": "SOFTWARE_KNOWN_ANSWER",
+      "duration_ms": 48.14,
+      "metrics": [
+        {
+          "name": "timestamp_regressions",
+          "expected": 1,
+          "observed": 1,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "packets_received",
+          "expected": 4,
+          "observed": 4,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "session_samples_intact",
+          "expected": 2048,
+          "observed": 2048,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        }
+      ],
+      "artifacts": {
+        "session_id": "session_20261017_113430_51ca95f0"
+      },
+      "telemetry_observed": {
+        "packets_received": 4,
+        "samples_received": 2048,
+        "sequence_gaps": 0,
+        "repeated_packets": 0,
+        "out_of_order_packets": 0,
+        "crc_failures": 0,
+        "malformed_frames": 0,
+        "timestamp_regressions": 1,
+        "disconnect_count": 0,
+        "reconnect_count": 0
+      },
+      "error_message": null,
+      "parameters": {
+        "timestamp_plan": [
+          0.0,
+          0.05,
+          0.02,
+          0.06
+        ]
+      }
+    },
+    {
+      "scenario_id": "corrupt_inputs_rejection",
+      "title": "CRC Failures & Out-Of-Range Sample Rejection",
+      "category": "packet_security",
+      "passed": true,
+      "status_label": "SOFTWARE_KNOWN_ANSWER",
+      "duration_ms": 35.63,
+      "metrics": [
+        {
+          "name": "crc_failures_counted",
+          "expected": 1,
+          "observed": 1,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "bad_packet_excluded_from_samples",
+          "expected": 1024,
+          "observed": 1024,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "out_of_range_sample_rejected",
+          "expected": true,
+          "observed": true,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        }
+      ],
+      "artifacts": {
+        "session_id": "session_20261017_113430_d1fb8265"
+      },
+      "telemetry_observed": {
+        "packets_received": 2,
+        "samples_received": 1024,
+        "sequence_gaps": 1,
+        "repeated_packets": 0,
+        "out_of_order_packets": 0,
+        "crc_failures": 1,
+        "malformed_frames": 0,
+        "timestamp_regressions": 0,
+        "disconnect_count": 0,
+        "reconnect_count": 0
+      },
+      "error_message": null,
+      "parameters": {}
+    },
+    {
+      "scenario_id": "lifecycle_interruption_reconnect",
+      "title": "Clean Stop, Abrupt Cable Disconnect & Recovery",
+      "category": "lifecycle_recovery",
+      "passed": true,
+      "status_label": "SOFTWARE_KNOWN_ANSWER",
+      "duration_ms": 92.02,
+      "metrics": [
+        {
+          "name": "interrupted_state_reached",
+          "expected": true,
+          "observed": true,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "session_1_termination_reason",
+          "expected": "device_disconnected",
+          "observed": "device_disconnected",
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "session_1_samples_preserved",
+          "expected": 1024,
+          "observed": 1024,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "reconnect_handshake_ready",
+          "expected": "ready",
+          "observed": "streaming",
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "session_2_completed_cleanly",
+          "expected": "completed",
+          "observed": "completed",
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        },
+        {
+          "name": "session_2_samples",
+          "expected": 1536,
+          "observed": 1536,
+          "tolerance": null,
+          "passed": true,
+          "unit": "",
+          "notes": ""
+        }
+      ],
+      "artifacts": {
+        "session_1": "session_20261017_113430_bb59d988",
+        "session_2": "session_20261017_113430_73c5f375"
+      },
+      "telemetry_observed": {
+        "packets_received": 5,
+        "samples_received": 2560,
+        "sequence_gaps": 0,
+        "repeated_packets": 0,
+        "out_of_order_packets": 1,
+        "crc_failures": 0,
+        "malformed_frames": 0,
+        "timestamp_regressions": 1,
+        "disconnect_count": 1,
+        "reconnect_count": 1
+      },
+      "error_message": null,
+      "parameters": {}
+    }
+  ],
+  "environment_summary": {
+    "python_version": "3.11.9",
+    "platform": "win32",
+    "seed": "42"
+  }
+}
