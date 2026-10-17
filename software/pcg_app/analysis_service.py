@@ -198,18 +198,21 @@ class AnalysisService:
         sessions_dir: str | Path = "experiments/sessions",
         models_dir: Optional[str | Path] = None,
         benchmarks_dir: Optional[str | Path] = None,
+        metrology_dir: Optional[str | Path] = None,
     ) -> None:
         self.assets_dir = Path(assets_dir)
         self.analysis_dir = Path(analysis_dir)
         self.sessions_dir = Path(sessions_dir)
         self.models_dir = Path(models_dir) if models_dir is not None else self.analysis_dir.parent / "models"
         self.benchmarks_dir = Path(benchmarks_dir) if benchmarks_dir is not None else self.analysis_dir.parent / "benchmarks"
+        self.metrology_dir = Path(metrology_dir) if metrology_dir is not None else self.analysis_dir.parent / "metrology"
 
         self.assets_dir.mkdir(parents=True, exist_ok=True)
         self.analysis_dir.mkdir(parents=True, exist_ok=True)
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self.benchmarks_dir.mkdir(parents=True, exist_ok=True)
+        self.metrology_dir.mkdir(parents=True, exist_ok=True)
 
     # =========================================================================
     # Reference WAV Asset Management
@@ -1264,3 +1267,81 @@ class AnalysisService:
                 return json.load(f)
         except Exception:
             return None
+
+    # =========================================================================
+    # Metrology Automation & Laboratory Report Pipeline (Sprint 08)
+    # =========================================================================
+
+    def get_metrology_template(self) -> dict[str, Any]:
+        """Return the master template configuration for the 6 mandatory measurements."""
+        from pcg_core.metrology.cli import create_template_config
+        return create_template_config()
+
+    def run_metrology_experiment(self, config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Execute a metrology characterization experiment and persist reports."""
+        from pcg_core.metrology import MetrologyExperimentConfig, MetrologyRunner
+
+        config = MetrologyExperimentConfig.from_dict(config_dict)
+        valid_id = validate_identifier(config.experiment_id, "experiment_id", self.metrology_dir)
+        output_dir = self.metrology_dir / valid_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        runner = MetrologyRunner(config)
+        report = runner.run(output_dir=output_dir)
+        return report.to_dict()
+
+    def list_metrology_reports(self) -> list[dict[str, Any]]:
+        """List summary metadata of all persisted advisor metrology reports."""
+        reports: list[dict[str, Any]] = []
+        for report_file in self.metrology_dir.glob("*/metrology_report.json"):
+            try:
+                with open(report_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    reports.append({
+                        "report_id": data.get("report_id", report_file.parent.name),
+                        "created_at_utc": data.get("created_at_utc", ""),
+                        "apparatus_id": data.get("apparatus_id", ""),
+                        "author": data.get("author", ""),
+                        "overall_hardware_status": data.get("overall_hardware_status", ""),
+                        "workflow_statuses": {
+                            "w1_frf": data.get("workflow_1_frequency_response", {}).get("status"),
+                            "w2_snr": data.get("workflow_2_snr_level_ratio", {}).get("status"),
+                            "w3_repeatability": data.get("workflow_3_repeatability", {}).get("status"),
+                            "w4_mains": data.get("workflow_4_mains_interference", {}).get("status"),
+                            "w5_latency": data.get("workflow_5_latency", {}).get("status"),
+                            "w6_continuity": data.get("workflow_6_dropped_samples", {}).get("status"),
+                        },
+                    })
+            except Exception:
+                pass
+
+        reports.sort(key=lambda r: r.get("created_at_utc", ""), reverse=True)
+        return reports
+
+    def get_metrology_report(self, report_id: str) -> Optional[dict[str, Any]]:
+        """Load a persisted metrology report JSON safely."""
+        valid_id = validate_identifier(report_id, "report_id", self.metrology_dir)
+        report_file = self.metrology_dir / valid_id / "metrology_report.json"
+        if not report_file.exists():
+            return None
+        with open(report_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def get_metrology_summary_csv(self, report_id: str) -> Optional[str]:
+        """Load the tabular summary CSV for an advisor report safely."""
+        valid_id = validate_identifier(report_id, "report_id", self.metrology_dir)
+        csv_file = self.metrology_dir / valid_id / "metrology_summary.csv"
+        if not csv_file.exists():
+            return None
+        with open(csv_file, "r", encoding="utf-8") as f:
+            return f.read()
+
+    def get_metrology_summary_markdown(self, report_id: str) -> Optional[str]:
+        """Load the human-readable Markdown summary report safely."""
+        valid_id = validate_identifier(report_id, "report_id", self.metrology_dir)
+        md_file = self.metrology_dir / valid_id / "metrology_report.md"
+        if not md_file.exists():
+            return None
+        with open(md_file, "r", encoding="utf-8") as f:
+            return f.read()
+
