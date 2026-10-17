@@ -102,12 +102,14 @@ The table below maps all 9 acceptance test cases defined in `W04_C_application-r
 The following concrete items cannot be implemented on the host without joint Module B agreement:
 
 1. **Wire Framing Parser Implementation:**
-   - Blocked until **DW03-12** (CDC-ACM vs Vendor Bulk) and frame header layout are agreed. Once agreed, a concrete `CDCByteStreamDecoder` implementing `DevicePacketDecoder` will be written and tested.
+   - Blocked until **DW03-12** (CDC-ACM vs Vendor Bulk), frame header layout (16-byte illustrative concept), and sync magic (`0xAA55`) are formally approved. Once agreed, a concrete `CDCByteStreamDecoder` implementing `DevicePacketDecoder` will be written and tested. No production decoder is implemented against the unapproved layout.
 2. **Bit Alignment Inside 32-Bit Container:**
-   - Blocked until Module B confirms whether I2S DMA produces LSB-aligned sign-extended words or MSB-aligned left-justified words.
-3. **CRC Polarity & Polynomial:**
-   - Blocked until **DW03-09** is closed (CRC-16-CCITT proposed by Module C).
-4. **USB Vendor / Product ID (VID/PID):**
+   - Blocked until Module B confirms whether I2S DMA produces LSB-aligned sign-extended words (normalizing by $2^{23}$) or MSB-aligned left-justified words (normalizing by $2^{31}$).
+3. **CRC Policy & Parameters (DW03-09):**
+   - Blocked until **DW03-09** is closed. CRC-16-CCITT is proposed by Module C, but its polynomial, initialization, reflection, coverage, byte order, and error handling remain unfinalized.
+4. **Hardware Acquisition Profile Reconciliation:**
+   - The purchased microphone is the **INMP441 breakout module** (sourced due to PUI EB-R lead-time constraints). The host strictly preserves the existing PUI Rev-A profile (`rev_a_pui_dmm4026`) and 4 kHz development profile (`dev_4khz_legacy`). A separate INMP441 profile will be introduced only after Module B supplies verified I2S driver configuration and DMA alignment evidence.
+5. **USB Vendor / Product ID (VID/PID):**
    - Host candidate discovery (`poll_candidates`) is truthful and pending until Espressif Native USB descriptors (or default VID:PID `0x303A:0x1001`) are declared by firmware.
 
 ---
