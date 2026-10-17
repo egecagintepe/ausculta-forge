@@ -412,12 +412,36 @@ class StreamManager:
             raise ValueError("Cannot record: no active stream or source is selected.")
 
         source = source_label or self.active_source_name
-        dev_info = self.device_runtime.get_state_dict() if self.source_type == "hardware" else None
+        is_hardware = (self.source_type == "hardware")
+        dev_info = self.device_runtime.get_state_dict() if is_hardware else None
+
+        if is_hardware:
+            if self.device_runtime.capabilities:
+                wire_fmt = (
+                    f"{self.device_runtime.capabilities.sample_format}_"
+                    f"{self.device_runtime.capabilities.meaningful_data_bits}bit_in_"
+                    f"{self.device_runtime.capabilities.sample_container_bits}bit_slot"
+                )
+            else:
+                wire_fmt = (
+                    f"signed_pcm_{self.device_runtime.profile.meaningful_data_bits}bit_in_"
+                    f"{self.device_runtime.profile.sample_container_bits}bit_container"
+                )
+        else:
+            wire_fmt = "synthetic_or_offline_float32"
+
+        processing_profile = {
+            "filter_preset": self.filter_preset,
+            "low_hz": self.filter_low_hz,
+            "high_hz": self.filter_high_hz,
+        }
 
         sid = self.recorder.start(
             source=source,
             acquisition_mode=self.source_type,
             device_info=dev_info,
+            wire_format=wire_fmt,
+            processing_profile=processing_profile,
         )
         self._recording_started_wall = time.time()
         return sid

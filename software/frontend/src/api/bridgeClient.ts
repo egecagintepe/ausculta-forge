@@ -96,6 +96,23 @@ export interface RecordingStateData {
   sample_rate_hz: number;
 }
 
+export interface SessionIntegrityCheck {
+  session_id: string;
+  is_valid: boolean;
+  status: string;
+  sha256_match: boolean;
+  expected_sha256: string;
+  actual_sha256: string;
+  sample_count_match: boolean;
+  metadata_samples: number;
+  wav_samples: number;
+  sample_rate_match: boolean;
+  metadata_sample_rate: number;
+  wav_sample_rate: number;
+  termination_reason: string;
+  details: string;
+}
+
 export interface SessionItem {
   session_id: string;
   started_at_utc: string;
@@ -118,6 +135,12 @@ export interface SessionItem {
   acquisition_mode?: string;
   termination_reason?: string;
   device_info?: Record<string, unknown>;
+  schema_version?: string;
+  storage_format?: string;
+  wire_format?: string;
+  storage_disclaimer?: string;
+  processing_profile?: Record<string, unknown>;
+  status?: string;
 }
 
 type FrameCallback = (frame: SignalFrameData) => void;
@@ -365,10 +388,41 @@ class BridgeClient {
 
   public async replaySession(sessionId: string): Promise<boolean> {
     try {
-      const resp = await fetch(`${this.apiUrl}/sessions/${sessionId}/replay`, { method: 'POST' });
+      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}/replay`, { method: 'POST' });
       return resp.ok;
     } catch {
       return false;
+    }
+  }
+
+  public async verifySession(sessionId: string): Promise<SessionIntegrityCheck | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}/verify`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public async deleteSession(sessionId: string): Promise<boolean> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}`, {
+        method: 'DELETE',
+      });
+      return resp.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  public async getSessionManifest(sessionId: string): Promise<Record<string, unknown> | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}/manifest`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
     }
   }
 
