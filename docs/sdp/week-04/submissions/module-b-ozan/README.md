@@ -29,3 +29,9 @@ No firmware build, board enumeration, sensor capture, throughput, continuity, SN
 - GPIO4/5/6 are provisional I²S candidates only; GPIO35–37 are not available for general use on the octal-PSRAM N16R8 module.
 - SoC USB D−/D+ are GPIO19/GPIO20, but the USB-C port used for the selected device controller must be identified on the real board.
 - Do not order / wire around assumed pinout. Keep CRC, USB class and final wire format open until B/C agreement.
+## Rev03 Office deliverables — actual purchase baseline
+
+- [Procurement, BOM and test matrix — Rev03 (XLSX)](W04_B_procurement-bom-test_REV03.xlsx)
+- [System design and technical specification — Rev03 (DOCX)](W04_B_system-design-technical-specification_REV03.docx)
+
+These Week-4 Rev03 source documents reflect the reported purchases (INMP441 instead of PUI EB-R, ESP32-S3 N16R8 instead of the N8R8 candidate, and the actual ordered quantities). They do not claim physical delivery, board pinout verification, firmware execution or G1 test success.
