@@ -11,6 +11,8 @@
 ## Deliverables
 
 - [W04 embedded requirements freeze](W04_B_embedded-requirements-freeze.md) — measurable requirements; board, USB and B/C closure gates explicitly retained.
+- [REV03 procurement/BOM workbook](W04_B_procurement-bom-test_REV03.xlsx) — updated procurement and test tracking workbook.
+- [REV03 system design technical specification](W04_B_system-design-technical-specification_REV03.docx) — updated Module B system design specification.
 - [Week-4 procurement closeout](../../procurement-closeout.md) — actual order summary and 12 Group-A category audit.
 - [Date-stamped order ledger](../../W04_B_actual-orders_2026-10-16_v01.csv) — reported amounts/statuses with unresolved lines called out.
 - [B→C protocol proposal](W04_B_to_C_protocol-proposal_v01.md) — for Ege's review; not final.

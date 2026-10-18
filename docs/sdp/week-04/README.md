@@ -15,6 +15,8 @@
 
 - [Embedded requirements freeze](submissions/module-b-ozan/W04_B_embedded-requirements-freeze.md) — measurable requirements and explicit evidence gaps.
 - [Procurement closeout](procurement-closeout.md) — order summary and 12 Group-A category check.
+- [REV03 procurement/BOM workbook](submissions/module-b-ozan/W04_B_procurement-bom-test_REV03.xlsx) — Office workbook for updated procurement and test tracking.
+- [REV03 system design technical specification](submissions/module-b-ozan/W04_B_system-design-technical-specification_REV03.docx) — updated Module B technical specification.
 - [Date-stamped order ledger (CSV)](W04_B_actual-orders_2026-10-16_v01.csv) — public-safe, no payment receipt or personal information.
 - [B→C protocol proposal v0](submissions/module-b-ozan/W04_B_to_C_protocol-proposal_v01.md) — prepared for Ege's joint review; not frozen.
 - [Week-5 G1 bring-up plan](../week-05/submissions/module-b-ozan/W05_B_g1-bringup-plan_v01.md) — plan only; no physical G1 pass claimed.
