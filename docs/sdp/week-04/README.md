@@ -29,3 +29,9 @@ Document completion does not mean USB enumeration, firmware, sensor capture or p
 - Commit evidence files from the relevant owner account where possible.
 - Do not upload receipts containing personal address, phone, tax/identity numbers, payment card details or shipping labels.
 - Do not fabricate measurements or delivery confirmation.
+## Module B source Office deliverables
+
+- [System design / technical specification — Rev03](submissions/module-b-ozan/W04_B_system-design-technical-specification_REV03.docx)
+- [Procurement / BOM / test matrix — Rev03](submissions/module-b-ozan/W04_B_procurement-bom-test_REV03.xlsx)
+
+These are the Week-4 purchase-aligned source documents; the earlier Week-3 Rev02 deliverables remain preserved in the Week-3 folder.
