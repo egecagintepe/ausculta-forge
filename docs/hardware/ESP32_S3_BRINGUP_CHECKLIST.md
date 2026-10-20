@@ -91,10 +91,14 @@
 ### Gate 5: Host Runtime Handshake & Ingestion
 - [ ] **5.1 Launch AuscultaForge Python Host Backend:**
   ```powershell
-  .venv\Scripts\python.exe -m uvicorn software.pcg_app.app:app --port 8000
+  # Option A: Recommended CLI server entrypoint
+  .venv\Scripts\python.exe -m pcg_app.server --host 127.0.0.1 --port 8000
+
+  # Option B: Direct Uvicorn launch using application factory
+  .venv\Scripts\python.exe -m uvicorn pcg_app.app:create_app --factory --host 127.0.0.1 --port 8000
   ```
 - [ ] **5.2 Handshake Verification:**
-  - Trigger device scan via API or UI (`POST /api/device/detect`).
+  - Trigger device scan via API or UI (`POST /api/device/poll`).
   - Verify device transitions cleanly through lifecycle states:
     $$\text{ABSENT} \longrightarrow \text{DETECTED} \longrightarrow \text{OPENING} \longrightarrow \text{HANDSHAKING} \longrightarrow \text{READY}$$
   - Verify `capabilities` response reflects 48000 Hz, 1 channel, 32-bit container, 24-bit data.
@@ -147,7 +151,12 @@ For official advisor Gate G1 milestone sign-off, archive the following artifacts
 ```powershell
 # In repository root:
 .\.venv\Scripts\Activate.ps1
-python -m uvicorn software.pcg_app.app:app --host 127.0.0.1 --port 8000 --reload
+
+# Option A: Recommended CLI server entrypoint
+python -m pcg_app.server --host 127.0.0.1 --port 8000
+
+# Option B: Direct Uvicorn launch using application factory
+python -m uvicorn pcg_app.app:create_app --factory --host 127.0.0.1 --port 8000 --reload
 ```
 - Status & Capabilities: `http://127.0.0.1:8000/api/status`
 - API Documentation: `http://127.0.0.1:8000/docs`
