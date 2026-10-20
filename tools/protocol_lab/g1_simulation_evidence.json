@@ -1,0 +1,161 @@
+{
+  "report_title": "AuscultaForge Protocol Forge G1 Simulation Acceptance Evidence",
+  "timestamp_utc": "2026-10-20T19:03:46Z",
+  "disclaimer": "CRITICAL ARCHITECTURAL NOTICE: This report represents a 100% SOFTWARE SIMULATION executing on host CPU (C11 + Python). A software simulation passing NEVER constitutes or marks physical ESP32-S3 G1 milestone pass. Physical G1 requires physical ESP32-S3 hardware streaming real DMA samples over physical USB.",
+  "host_platform": "win32",
+  "python_version": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+  "c_compiler_audit": {
+    "schema": "auscultaforge.protocol_forge.c_audit.v1",
+    "version": "1.0.0",
+    "type_audit": {
+      "sizeof_ProfileAHeader": 16,
+      "sizeof_ProfileBHeader": 40,
+      "sizeof_int16": 2,
+      "sizeof_int32": 4,
+      "sizeof_uint32": 4,
+      "sizeof_uint64": 8,
+      "is_little_endian": true,
+      "twos_complement_ok": true,
+      "sign_extension_24to32_ok": true
+    },
+    "limits": {
+      "int24_min": -8388608,
+      "int24_max": 8388607,
+      "int32_min": -2147483648,
+      "int32_max": 2147483647
+    }
+  },
+  "parameters": {
+    "sample_rate_hz": 48000,
+    "duration_seconds": 10.0,
+    "samples_per_frame": 256,
+    "total_samples_expected": 480000,
+    "total_frames_expected": 1875,
+    "payload_bytes_per_frame": 1024,
+    "header_bytes_per_frame": 40,
+    "trailer_bytes_per_frame": 4,
+    "frame_total_bytes": 1068,
+    "payload_data_rate_bps": 1536000,
+    "total_wire_data_rate_bps": 1602000
+  },
+  "benchmarks": {
+    "nominal_sine_100hz": {
+      "signal_type": "sine_100hz",
+      "is_fuzz": false,
+      "duration_nominal_s": 10.0,
+      "wall_clock_duration_s": 0.038923100000829436,
+      "throughput_samples_per_sec": 12332008.498546401,
+      "throughput_kb_per_sec": 48171.90819744688,
+      "decoder_stats": {
+        "total_samples": 480000,
+        "total_frames": 1875,
+        "crc_errors": 0,
+        "sequence_gaps": 0,
+        "duplicate_frames": 0,
+        "timestamp_regressions": 0,
+        "garbage_bytes_discarded": 0
+      },
+      "g1_accounting_validation": {
+        "passed": true,
+        "expected_samples": 480000,
+        "actual_samples": 480000,
+        "sample_discrepancy": 0,
+        "expected_frames": 1875,
+        "actual_frames": 1875,
+        "frame_discrepancy": 0,
+        "corrupted_frames": 0,
+        "sequence_gaps": 0,
+        "duplicate_frames": 0,
+        "timestamp_regressions": 0,
+        "garbage_bytes_discarded": 0
+      },
+      "spectral_validation": {
+        "passed": true,
+        "peak_freq_hz": 100.0,
+        "freq_error_hz": 0.0,
+        "snr_db": 57.44639698121365,
+        "peak_positive": 4194304.0,
+        "peak_negative": -4194304.0,
+        "rms": 2965820.6567165074,
+        "crest_factor": 1.414213631057368,
+        "crest_factor_error": 6.868427293582613e-08,
+        "sample_count": 480000,
+        "duration_s": 10.0
+      },
+      "ramp_validation": {}
+    },
+    "monotonic_ramp_counter": {
+      "signal_type": "ramp",
+      "is_fuzz": false,
+      "duration_nominal_s": 10.0,
+      "wall_clock_duration_s": 0.03718349999689963,
+      "throughput_samples_per_sec": 12908951.552167563,
+      "throughput_kb_per_sec": 50425.59200065454,
+      "decoder_stats": {
+        "total_samples": 480000,
+        "total_frames": 1875,
+        "crc_errors": 0,
+        "sequence_gaps": 0,
+        "duplicate_frames": 0,
+        "timestamp_regressions": 0,
+        "garbage_bytes_discarded": 0
+      },
+      "g1_accounting_validation": {
+        "passed": true,
+        "expected_samples": 480000,
+        "actual_samples": 480000,
+        "sample_discrepancy": 0,
+        "expected_frames": 1875,
+        "actual_frames": 1875,
+        "frame_discrepancy": 0,
+        "corrupted_frames": 0,
+        "sequence_gaps": 0,
+        "duplicate_frames": 0,
+        "timestamp_regressions": 0,
+        "garbage_bytes_discarded": 0
+      },
+      "spectral_validation": {},
+      "ramp_validation": {
+        "passed": true,
+        "gaps": 0,
+        "first_invalid_index": null,
+        "sample_count": 480000
+      }
+    },
+    "simulated_error_injection": {
+      "signal_type": "sine_100hz",
+      "is_fuzz": true,
+      "duration_nominal_s": 10.0,
+      "wall_clock_duration_s": 0.03663339999911841,
+      "throughput_samples_per_sec": 13095808.743156385,
+      "throughput_kb_per_sec": 51155.50290295463,
+      "decoder_stats": {
+        "total_samples": 479744,
+        "total_frames": 1874,
+        "crc_errors": 1,
+        "sequence_gaps": 2,
+        "duplicate_frames": 1,
+        "timestamp_regressions": 1,
+        "garbage_bytes_discarded": 17
+      },
+      "g1_accounting_validation": {
+        "passed": false,
+        "expected_samples": 480000,
+        "actual_samples": 479744,
+        "sample_discrepancy": -256,
+        "expected_frames": 1875,
+        "actual_frames": 1874,
+        "frame_discrepancy": -1,
+        "corrupted_frames": 1,
+        "sequence_gaps": 2,
+        "duplicate_frames": 1,
+        "timestamp_regressions": 1,
+        "garbage_bytes_discarded": 17
+      },
+      "spectral_validation": {},
+      "ramp_validation": {}
+    }
+  },
+  "status": "SOFTWARE_SIMULATION_PASSED",
+  "physical_g1_milestone_status": "PENDING_PHYSICAL_HARDWARE_ARRIVAL"
+}
