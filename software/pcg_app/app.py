@@ -159,6 +159,9 @@ def create_app(
         pipeline_buffer_delay_ms: Optional[float] = 30.0
         max_display_points: Optional[int] = 300
 
+    class MetrologyRunRequest(BaseModel):
+        config: dict[str, Any]
+
 
     # REST Endpoints
     @app.get("/api/status")
@@ -535,6 +538,57 @@ def create_app(
             if not report:
                 raise HTTPException(status_code=404, detail=f"Validation benchmark not found: {benchmark_id}")
             return report
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # =========================================================================
+    # Advisor Metrology Automation Endpoints (Sprint 08)
+    # =========================================================================
+
+    @app.get("/api/scientific/metrology/template")
+    def api_get_metrology_template() -> dict[str, Any]:
+        return analysis.get_metrology_template()
+
+    @app.post("/api/scientific/metrology/run")
+    def api_run_metrology_experiment(req: MetrologyRunRequest) -> dict[str, Any]:
+        try:
+            return analysis.run_metrology_experiment(req.config)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Metrology execution failed: {e}")
+
+    @app.get("/api/scientific/metrology/reports")
+    def api_list_metrology_reports() -> list[dict[str, Any]]:
+        return analysis.list_metrology_reports()
+
+    @app.get("/api/scientific/metrology/reports/{report_id}")
+    def api_get_metrology_report(report_id: str) -> dict[str, Any]:
+        try:
+            report = analysis.get_metrology_report(report_id)
+            if not report:
+                raise HTTPException(status_code=404, detail=f"Metrology report not found: {report_id}")
+            return report
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.get("/api/scientific/metrology/reports/{report_id}/csv")
+    def api_get_metrology_csv(report_id: str) -> Response:
+        try:
+            csv_data = analysis.get_metrology_summary_csv(report_id)
+            if csv_data is None:
+                raise HTTPException(status_code=404, detail=f"CSV summary not found for report: {report_id}")
+            return Response(content=csv_data, media_type="text/csv")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.get("/api/scientific/metrology/reports/{report_id}/markdown")
+    def api_get_metrology_markdown(report_id: str) -> Response:
+        try:
+            md_data = analysis.get_metrology_summary_markdown(report_id)
+            if md_data is None:
+                raise HTTPException(status_code=404, detail=f"Markdown report not found for: {report_id}")
+            return Response(content=md_data, media_type="text/markdown")
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
