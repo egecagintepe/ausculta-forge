@@ -104,3 +104,7 @@ experiments/virtual-bench/*
 !experiments/virtual-bench/acceptance_report.json
 !experiments/virtual-bench/.gitkeep
 
+# Compiled binaries and object files
+*.exe
+*.o
+*.obj
