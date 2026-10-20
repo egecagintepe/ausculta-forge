@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, asdict
+import binascii
 from datetime import datetime, timezone
 from enum import Enum
 import queue
@@ -481,6 +482,124 @@ class ReferenceFramedPacketDecoder(DevicePacketDecoder):
                 crc_ok=True,
                 meaningful_bits=self.meaningful_bits,
                 sample_rate_hz=self.sample_rate_hz,
+            )
+            packets.append(pkt)
+
+        return packets
+
+
+class ProposedProfileBPacketDecoder(DevicePacketDecoder):
+    """Experimental 40-byte header Profile B packet decoder for B->C protocol laboratory.
+
+    STATUS: PROPOSED / EXPERIMENTAL LABORATORY.
+    Does NOT replace ReferenceFramedPacketDecoder without Module B joint sign-off.
+    """
+
+    MAGIC: bytes = b"\x31\x43\x53\xaf"  # 0xAF534331 in little-endian ("1CSA")
+    HEADER_SIZE: int = 40
+    TRAILER_SIZE: int = 4  # CRC-32
+
+    def __init__(self, meaningful_bits: int = 24, sample_rate_hz: int = 48000) -> None:
+        self.meaningful_bits = meaningful_bits
+        self.sample_rate_hz = sample_rate_hz
+        self._buffer = bytearray()
+        self._malformed_count = 0
+        self._crc_failure_count = 0
+
+    def reset(self) -> None:
+        self._buffer.clear()
+
+    @property
+    def buffer_len(self) -> int:
+        return len(self._buffer)
+
+    @property
+    def malformed_count(self) -> int:
+        return self._malformed_count
+
+    @property
+    def crc_failure_count(self) -> int:
+        return self._crc_failure_count
+
+    def feed_bytes(self, chunk: bytes) -> list[DeviceSamplePacket]:
+        if not chunk:
+            return []
+
+        self._buffer.extend(chunk)
+        packets: list[DeviceSamplePacket] = []
+
+        while len(self._buffer) >= self.HEADER_SIZE:
+            magic_idx = self._buffer.find(self.MAGIC)
+            if magic_idx == -1:
+                if len(self._buffer) > 3:
+                    del self._buffer[:-3]
+                break
+
+            if magic_idx > 0:
+                del self._buffer[:magic_idx]
+                if len(self._buffer) < self.HEADER_SIZE:
+                    break
+
+            header_bytes = bytes(self._buffer[:self.HEADER_SIZE])
+            (
+                magic,
+                ver,
+                mtype,
+                flags,
+                seq,
+                rate,
+                ts_us,
+                idx_start,
+                count,
+                bits,
+                cont,
+                chan,
+                enc,
+                drops,
+            ) = struct.unpack("<4sBBHIIQQHBBBBH", header_bytes)
+
+            if ver != 1 or count == 0 or count > 2048:
+                self._malformed_count += 1
+                del self._buffer[:4]
+                continue
+
+            payload_len = count * 4
+            total_frame_len = self.HEADER_SIZE + payload_len + self.TRAILER_SIZE
+
+            if len(self._buffer) < total_frame_len:
+                break
+
+            frame_bytes = bytes(self._buffer[:total_frame_len])
+            del self._buffer[:total_frame_len]
+
+            crc_received = struct.unpack("<I", frame_bytes[-self.TRAILER_SIZE:])[0]
+            crc_computed = binascii.crc32(frame_bytes[:-self.TRAILER_SIZE]) & 0xFFFFFFFF
+
+            if crc_received != crc_computed:
+                self._crc_failure_count += 1
+                pkt = DeviceSamplePacket(
+                    sequence=seq,
+                    timestamp_s=float(ts_us) / 1_000_000.0,
+                    raw_samples=np.zeros(0, dtype=np.int32),
+                    flags=flags,
+                    crc_ok=False,
+                    meaningful_bits=bits,
+                    sample_rate_hz=rate,
+                )
+                packets.append(pkt)
+                continue
+
+            payload_bytes = frame_bytes[self.HEADER_SIZE:-self.TRAILER_SIZE]
+            raw_samples = np.frombuffer(payload_bytes, dtype="<i4")
+
+            pkt = DeviceSamplePacket(
+                sequence=seq,
+                timestamp_s=float(ts_us) / 1_000_000.0,
+                raw_samples=raw_samples,
+                flags=flags,
+                crc_ok=True,
+                meaningful_bits=bits,
+                sample_rate_hz=rate,
             )
             packets.append(pkt)
 

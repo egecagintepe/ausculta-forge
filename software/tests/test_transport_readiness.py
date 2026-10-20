@@ -41,6 +41,7 @@ from pcg_app.device_runtime import (
     TransportSupervisor,
     InjectableTestTransport,
     ReferenceFramedPacketDecoder,
+    ProposedProfileBPacketDecoder,
     build_test_frame,
     crc16_ccitt,
     TransportError,
@@ -357,7 +358,10 @@ def test_abrupt_disconnect_finalizes_session_and_preserves_samples(tmp_path: Pat
 
     # Simulate abrupt physical cable pull!
     transport.simulate_disconnect()
-    time.sleep(0.1)
+    for _ in range(10):
+        if runtime.state == DeviceState.INTERRUPTED:
+            break
+        time.sleep(0.05)
 
     # Verify runtime state transitioned to INTERRUPTED
     assert runtime.state == DeviceState.INTERRUPTED
@@ -468,3 +472,30 @@ def test_pui_reference_profile_preservation():
     assert REV_A_BASELINE_PROFILE.sample_container_bits == 32
     assert REV_A_BASELINE_PROFILE.meaningful_data_bits == 24
     assert "PUI DMM-4026" in REV_A_BASELINE_PROFILE.description
+
+
+def test_proposed_profile_b_decoder_compatibility():
+    """Verify ProposedProfileBPacketDecoder decodes 40-byte header Profile B frames seamlessly."""
+    decoder = ProposedProfileBPacketDecoder(meaningful_bits=24, sample_rate_hz=48000)
+    samples = np.full(256, 123456, dtype=np.int32)
+    payload = samples.astype("<i4").tobytes()
+    import binascii
+    import struct
+    header = struct.pack(
+        "<4sBBHIIQQHBBBBH",
+        b"\x31\x43\x53\xaf",  # 0xAF534331
+        1, 1, 1,
+        77, 48000, 1500000, 7700, 256, 24, 32, 1, 1, 0
+    )
+    crc = binascii.crc32(header + payload) & 0xFFFFFFFF
+    wire_frame = header + payload + struct.pack("<I", crc)
+
+    packets = decoder.feed_bytes(wire_frame)
+    assert len(packets) == 1
+    pkt = packets[0]
+    assert pkt.sequence == 77
+    assert pkt.timestamp_s == 1.5
+    assert pkt.crc_ok is True
+    assert len(pkt.raw_samples) == 256
+    assert pkt.raw_samples[0] == 123456
+
