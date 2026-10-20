@@ -6,18 +6,21 @@
 **Interface Reviewer:** Ozan (Module B Owner)  
 **Location:** `tools/esp32_bench_example/`  
 **Target Hardware:** ESP32-S3-DevKitC-1 (N16R8: 16 MB Octal Flash, 8 MB Octal PSRAM)  
-**Execution Status:** **NOT EXECUTED** (Local ESP-IDF SDK not installed on host; physical hardware pending delivery)
+**Execution Status:** **UNVERIFIED / NOT EXECUTED ON HARDWARE** (Local ESP-IDF SDK not installed on host; physical hardware pending delivery)
 
 ---
 
 ## 1. Ownership & Architectural Boundary Notice
 
 > [!IMPORTANT]
-> **CROSS-MODULE COLLABORATION NOTICE:**
-> 1. This directory contains an isolated, non-production reference example prepared by Module C to accelerate physical bring-up when the ESP32-S3 development board arrives.
+> **CROSS-MODULE COLLABORATION & HARDWARE READINESS NOTICE:**
+> 1. This directory contains an isolated, non-production reference example prepared by Module C to explore synthetic bring-up patterns.
 > 2. It is **NOT** a replacement for Module B's production firmware under `firmware/`. Ozan (Module B) retains sole ownership and decision authority over the production embedded firmware codebase.
-> 3. No final USB wire framing (magic words, sequence headers, CRC-16) is finalized or advertised here. That remains subject to joint approval under **DW03-09** and **DW03-12**.
+> 3. No final USB wire framing (magic words, sequence headers, CRC-16) or integer bit alignment (LSB vs MSB) is finalized or advertised here. That remains **UNAPPROVED** and subject to joint approval under **DW03-09** and **DW03-12**.
 > 4. Cross-compilation and physical flashing were **NOT EXECUTED** on this workstation because ESP-IDF is not locally installed and the physical MCU board is in transit.
+> 5. **DirencNet Board Verification Required:** The purchased DirencNet N16R8 module must be physically verified upon arrival (checking whether it is a true dual-USB DevKitC-1 with native OTG USB port wired out or a single-port / CH340 variant) before assuming dual-USB enumeration.
+> 6. **48 kHz Sampling Timing Limitation:** `512 samples + vTaskDelay(11 ms)` in software task loop is an approximation and DOES NOT guarantee a strict 48.000 kHz sampling rate due to FreeRTOS tick jitter. Production hardware sampling MUST be governed by I2S DMA interrupts.
+> 7. **Backpressure & Queue Writes:** USB CDC-ACM writes must handle short writes, backpressure, and track dropped bytes.
 
 ---
 

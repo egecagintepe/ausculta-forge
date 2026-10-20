@@ -1,18 +1,28 @@
 # W10 Module C — Embedded Interoperability, C Golden Vectors & Hardware Bring-Up Readiness (v01)
 
 **Course:** EEE495 — Senior Design Project I  
-**Week:** 10 — Sprint 10  
+**Sprint / Scope:** Software Sprint 10 (Module C Agile Iteration — Note: Academic Calendar is currently Week 04/05)  
 **Module:** C — Computer Application & Quality Assessment  
 **Author:** Ege Çağın Tepe (Module C Owner)  
 **Review Target:** Ozan (Module B Owner — Embedded Acquisition & Hardware Integration)  
-**Status:** IMPLEMENTED / READY FOR MODULE B REVIEW  
+**Status:** IMPLEMENTED (Software & Golden Vectors) / UNVERIFIED (Hardware Bring-Up & Cross-Compilation Pending Delivery)  
 **Scope:** Cross-module interoperability tools, portable C golden vectors, hardware bring-up readiness, and interface decision audit. Does NOT replace or modify Module B's production firmware.
+
+---
+
+> [!IMPORTANT]
+> **HARDWARE READINESS & ENGINEERING TRUTHFULNESS NOTICE:**
+> 1. **Academic Calendar Distinction:** "Sprint 10" denotes internal software sprint sequencing, not the academic Week 10 closeout. Current semester progress is aligned with Week 04/05 gates.
+> 2. **DirencNet Board Verification Required:** The purchased DirencNet N16R8 module must be physically verified upon arrival (checking whether it is a true dual-USB DevKitC-1 with native OTG USB port wired out or a single-port / CH340 variant) before assuming dual-USB enumeration.
+> 3. **Timing Limitation:** `512 samples + vTaskDelay(11 ms)` in the experimental bench code is an approximation subject to FreeRTOS tick jitter; real physical 48 kHz sampling must be driven by hardware I2S DMA interrupts.
+> 4. **Production Firmware Ownership:** Ozan retains complete ownership over `firmware/`. No production firmware has been modified.
+> 5. **Unapproved Wire Contracts:** Wire framing, CRC polynomial, and bit alignment (LSB vs MSB) remain unapproved proposals pending physical bench measurements.
 
 ---
 
 ## 1. Executive Summary & Interface Decision Audit
 
-This document constitutes Module C's deliverable for Sprint 10. The mission of this sprint is to deliver embedded-facing reference tools and verification frameworks to ensure rapid, zero-friction integration when the ESP32-S3 development board and INMP441 microphone arrive on the physical bench.
+This document constitutes Module C's deliverable for Software Sprint 10. The mission of this sprint is to deliver embedded-facing reference tools and verification frameworks to ensure rapid, zero-friction integration when the ESP32-S3 development board and INMP441 microphone arrive on the physical bench.
 
 ### Decision Audit Matrix: B→C Interface Decisions
 

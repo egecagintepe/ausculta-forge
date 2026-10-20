@@ -7,15 +7,26 @@
  * Author: Ege Çağın Tepe (Module C)
  * Interface Reviewer: Ozan (Module B)
  *
- * CRITICAL BOUNDARY DISCLAIMER:
- * ----------------------------
- * 1. This file is an isolated, NON-PRODUCTION experimental example prepared by Module C
- *    to demonstrate deterministic synthetic 100 Hz generation and USB streaming patterns.
- * 2. It does NOT replace or supersede Ozan's production firmware under `firmware/`.
- * 3. Final USB framing (headers, magic words, CRC-16) is NOT implemented or frozen here,
- *    pending joint B->C sign-off under DW03-09 and DW03-12.
- * 4. Cross-compilation and flashing of this example was NOT EXECUTED during this sprint
- *    because the ESP-IDF toolchain is not installed on this host and physical hardware is pending.
+ * CRITICAL HARDWARE & ARCHITECTURAL BOUNDARY DISCLAIMER:
+ * -----------------------------------------------------
+ * 1. STATUS: UNVERIFIED / NOT EXECUTED ON HARDWARE.
+ *    This file is an isolated, NON-PRODUCTION experimental example prepared by Module C.
+ *    Cross-compilation and flashing were NOT executed because the ESP-IDF toolchain is
+ *    not installed on this workstation and physical hardware is awaiting arrival.
+ * 2. PRODUCTION FIRMWARE OWNERSHIP:
+ *    This code does NOT replace or supersede Ozan's production firmware under `firmware/`.
+ *    Ozan retains full ownership and architectural authority over embedded firmware.
+ * 3. WIRE PROTOCOL UNAPPROVED:
+ *    Final USB wire framing (headers, magic words, CRC-16 polynomial) and integer
+ *    alignment (LSB vs MSB) remain UNAPPROVED proposals pending joint sign-off (DW03-09, DW03-12).
+ * 4. BOARD VERIFICATION REQUIRED:
+ *    The purchased DirencNet N16R8 board must NOT be assumed to be an official dual-USB
+ *    Espressif DevKitC-1 without physical bench verification of port routing and schematic.
+ * 5. SAMPLING RATE TIMING WARNING:
+ *    `512 samples + vTaskDelay(11 ms)` DOES NOT guarantee 48.000 kHz sampling.
+ *    FreeRTOS software task delays are subject to tick quantization (10 ms at 100 Hz tick)
+ *    and scheduling jitter. Production firmware MUST drive sampling via hardware I2S DMA
+ *    interrupts, never FreeRTOS task delays.
  */
 
 #include <stdio.h>
@@ -46,6 +57,7 @@
 static int32_t s_sine_table[SINE_TABLE_SIZE];
 static uint32_t s_sine_index = 0;
 static uint32_t s_sequence_counter = 0;
+static uint32_t s_dropped_bytes = 0;
 
 static void init_sine_lookup_table(void) {
     for (int i = 0; i < SINE_TABLE_SIZE; ++i) {
@@ -75,12 +87,17 @@ static void tinyusb_cdc_line_state_changed_callback(int itf, cdcacm_event_t *eve
 
 /**
  * @brief Synthetic streaming task generating 48 kHz blocks (512 samples every ~10.67 ms).
+ *
+ * NOTE ON TIMING:
+ * Nominal block duration is 512 / 48000 = 10.666 ms. FreeRTOS pdMS_TO_TICKS(11) is an
+ * illustrative approximation that introduces timing jitter and drift. In real hardware,
+ * I2S DMA interrupts provide the authoritative clock, not vTaskDelay.
  */
 static void synthetic_stream_task(void *pvParameters) {
     (void)pvParameters;
     int32_t sample_block[BENCH_BLOCK_SIZE];
 
-    /* Nominal block interval: 512 / 48000 = 10.666 ms */
+    /* Approximate delay for bench simulation; NOT an accurate 48 kHz hardware clock */
     const TickType_t xBlockDelay = pdMS_TO_TICKS(11);
 
     ESP_LOGI(TAG, "Starting synthetic stream task (48 kHz mono, %d samples/block)", BENCH_BLOCK_SIZE);
@@ -98,20 +115,39 @@ static void synthetic_stream_task(void *pvParameters) {
              * Once the B->C wire protocol is jointly approved (DW03-09 / DW03-12),
              * the wire packet header (magic word, sequence, timestamp, flags)
              * and trailing CRC-16 will be packetized around sample_block here.
-             *
-             * Currently, raw integer samples are streamed to verify USB throughput.
+             * Currently unapproved raw integers are used purely for local bench tests.
              */
             size_t bytes_to_send = BENCH_BLOCK_SIZE * sizeof(int32_t);
-            size_t bytes_written = tinyusb_cdcacm_write_queue(TINYUSB_CDC_ACM_0,
-                                                              (uint8_t *)sample_block,
-                                                              bytes_to_send);
+            size_t total_written = 0;
+            int retries = 0;
+
+            /* Handle partial writes, USB backpressure, and track short writes */
+            while (total_written < bytes_to_send && retries < 3) {
+                size_t written = tinyusb_cdcacm_write_queue(
+                    TINYUSB_CDC_ACM_0,
+                    ((const uint8_t *)sample_block) + total_written,
+                    bytes_to_send - total_written
+                );
+                total_written += written;
+                if (total_written < bytes_to_send) {
+                    tud_cdc_write_flush();
+                    retries++;
+                    vTaskDelay(pdMS_TO_TICKS(1));
+                }
+            }
             tud_cdc_write_flush();
+
+            if (total_written < bytes_to_send) {
+                s_dropped_bytes += (uint32_t)(bytes_to_send - total_written);
+                ESP_LOGW(TAG, "USB queue backpressure: wrote %zu/%zu bytes. Cumulative drops: %u bytes",
+                         total_written, bytes_to_send, s_dropped_bytes);
+            }
 
             s_sequence_counter++;
 
             if (s_sequence_counter % 100 == 0) {
-                ESP_LOGD(TAG, "Streamed frame %u: %zu bytes (t=%lld us)",
-                         s_sequence_counter, bytes_written, t_start_us);
+                ESP_LOGD(TAG, "Streamed frame %u: %zu bytes (t=%lld us, drops=%u)",
+                         s_sequence_counter, total_written, t_start_us, s_dropped_bytes);
             }
         } else {
             /* Idle if host port is closed */
@@ -127,7 +163,7 @@ void app_main(void) {
     ESP_LOGI(TAG, "=================================================");
     ESP_LOGI(TAG, "AuscultaForge Module C Experimental Bring-Up Bench");
     ESP_LOGI(TAG, "Target: ESP32-S3 N16R8 (Native USB OTG CDC-ACM)");
-    ESP_LOGI(TAG, "Status: EXPERIMENTAL INTEROPERABILITY REFERENCE");
+    ESP_LOGI(TAG, "Status: UNVERIFIED / EXPERIMENTAL REFERENCE");
     ESP_LOGI(TAG, "=================================================");
 
     init_sine_lookup_table();

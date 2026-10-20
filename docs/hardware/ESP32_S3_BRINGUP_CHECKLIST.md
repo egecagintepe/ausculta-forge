@@ -4,7 +4,17 @@
 **Course:** EEE495 / EEE496 Senior Design Project — Digital Stethoscope  
 **Hardware Target:** ESP32-S3-DevKitC-1 (N16R8) + INMP441 I²S MEMS Microphone  
 **Owners:** Module B (Ozan — Embedded) & Module C (Ege — Host Software)  
-**Status:** READY FOR HARDWARE ARRIVAL BENCH EXECUTION
+**Status:** UNVERIFIED / PENDING PHYSICAL HARDWARE ARRIVAL & MODULE B APPROVAL
+
+---
+
+> [!IMPORTANT]
+> **HARDWARE READINESS & CROSS-MODULE BOUNDARY NOTICES:**
+> 1. **Software Sprint vs Academic Calendar:** This checklist was prepared under Software Sprint 10 (agile software iteration for Module C). It must **NOT** be confused with academic semester Week 10 (currently Week 04/05 of EEE495).
+> 2. **DirencNet Board Verification Required:** The purchased DirencNet N16R8 board must **NOT** be assumed to be an official Espressif DevKitC-1 with functional dual-USB routing without physical bench inspection. Many commercial clones feature only a single USB port or wire a CH340 USB-UART bridge without routing out the native USB OTG PHY. Physical inspection of connectors and traces is mandatory before Gate 2.
+> 3. **Unapproved Wire Framing & Alignment:** Firmware packet framing (headers, magic word `0xAA55`, CRC-16 polynomial) and integer alignment (LSB vs MSB) remain **UNAPPROVED PROPOSALS** pending joint sign-off with Module B (Ozan under DW03-09/12). Production firmware ownership remains strictly with Ozan under `firmware/`.
+> 4. **48 kHz Sampling Rate Limitation:** `512 samples + vTaskDelay(11 ms)` in experimental tasks is an approximation subject to FreeRTOS tick jitter. Production hardware sampling MUST be governed by I2S DMA interrupts to guarantee true 48.000 kHz sampling.
+> 5. **USB Backpressure & Data Loss:** USB queue writes must handle short writes and buffer backpressure rather than assuming lossless transmission.
 
 ---
 
@@ -12,7 +22,7 @@
 
 | Hardware Item | Exact Specification | Role in System | Port / Header Identification |
 |---|---|---|---|
-| **MCU Board** | **ESP32-S3-DevKitC-1-N16R8** (Espressif ESP32-S3-WROOM-1 module, 16 MB Octal SPI Flash, 8 MB Octal PSRAM) | Central audio acquisition controller, I²S DMA master, Native USB peripheral | Contains **two Type-C USB ports**:<br>1. **"UART" / "COM" Port:** Connected to onboard CP2102N / CH343 USB-to-UART bridge. Used for firmware flashing, reset, and serial debug monitor.<br>2. **"USB" Port:** Connected directly to ESP32-S3 internal USB OTG PHY (`GPIO 19` D-, `GPIO 20` D+). **This is the mandatory acoustic streaming port.** |
+| **MCU Board** | **ESP32-S3-DevKitC-1-N16R8 (DirencNet Order — Requires Physical Verification)** | Central audio acquisition controller, I²S DMA master, Native USB peripheral | **Requires physical confirmation on arrival:**<br>1. **"UART" / "COM" Port:** USB-to-UART bridge for firmware flashing and serial debug.<br>2. **"USB" Port:** Direct connection to ESP32-S3 internal USB OTG PHY (`GPIO 19` D-, `GPIO 20` D+). If board is a single-port clone, USB OTG streaming requires a custom breakout cable to GPIO 19/20. |
 | **Acoustic Sensor** | **INMP441 Omnidirectional MEMS Microphone Breakout Board** | Heart sound capture from phantom chestpiece | 6-pin 0.1" header: `VDD`, `GND`, `SD`, `SCK`, `WS`, `L/R` |
 | **Interconnect** | Breadboard jumper wires / 30 AWG stranded wire (< 10 cm recommended) | I²S digital bus connection between INMP441 and ESP32-S3 | Keep signal traces short to minimize high-frequency I²S edge reflections and clock jitter |
 
@@ -84,12 +94,12 @@
   .venv\Scripts\python.exe -m uvicorn software.pcg_app.app:app --port 8000
   ```
 - [ ] **5.2 Handshake Verification:**
-  - Trigger device scan via API or UI (`POST /api/v1/device/detect`).
+  - Trigger device scan via API or UI (`POST /api/device/detect`).
   - Verify device transitions cleanly through lifecycle states:
     $$\text{ABSENT} \longrightarrow \text{DETECTED} \longrightarrow \text{OPENING} \longrightarrow \text{HANDSHAKING} \longrightarrow \text{READY}$$
   - Verify `capabilities` response reflects 48000 Hz, 1 channel, 32-bit container, 24-bit data.
 - [ ] **5.3 Stream Initiation:**
-  - Call `POST /api/v1/device/start-stream`.
+  - Call `POST /api/stream/start` (or click "Connect & Stream" in Live Workstation UI).
   - Verify state transitions to `STREAMING`.
   - Verify WebSocket `signal_frame` messages broadcast to frontend at steady 30–60 Hz rate.
 
@@ -139,7 +149,7 @@ For official advisor Gate G1 milestone sign-off, archive the following artifacts
 .\.venv\Scripts\Activate.ps1
 python -m uvicorn software.pcg_app.app:app --host 127.0.0.1 --port 8000 --reload
 ```
-- Health Check: `http://127.0.0.1:8000/api/v1/health`
+- Status & Capabilities: `http://127.0.0.1:8000/api/status`
 - API Documentation: `http://127.0.0.1:8000/docs`
 
 ### Step 2: Start React Frontend
@@ -152,11 +162,12 @@ npm run dev
 
 ### Step 3: Run Full Automated Verification Suite
 ```powershell
-# Run all 283+ backend tests
+# Run all backend unit and regression tests
 python -m pytest software/tests
 
-# Run frontend lint and build
+# Run frontend lint and production build
 cd software/frontend
 npm run lint
 npm run build
+npm test
 ```
