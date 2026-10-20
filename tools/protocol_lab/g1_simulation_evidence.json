@@ -1,7 +1,8 @@
 {
   "report_title": "AuscultaForge Protocol Forge G1 Simulation Acceptance Evidence",
-  "timestamp_utc": "2026-10-20T19:03:46Z",
+  "timestamp_utc": "2026-10-20T19:31:27Z",
   "disclaimer": "CRITICAL ARCHITECTURAL NOTICE: This report represents a 100% SOFTWARE SIMULATION executing on host CPU (C11 + Python). A software simulation passing NEVER constitutes or marks physical ESP32-S3 G1 milestone pass. Physical G1 requires physical ESP32-S3 hardware streaming real DMA samples over physical USB.",
+  "physical_measurements_notice": "All physical hardware metrics (SFDR, THD, hardware CRC execution cycles, oscilloscope jitter, physical USB bus occupancy) are marked NOT MEASURED. Software simulation throughput numbers reflect pipe I/O on host CPU and do NOT represent physical USB transfer.",
   "host_platform": "win32",
   "python_version": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
   "c_compiler_audit": {
@@ -43,15 +44,16 @@
       "signal_type": "sine_100hz",
       "is_fuzz": false,
       "duration_nominal_s": 10.0,
-      "wall_clock_duration_s": 0.038923100000829436,
-      "throughput_samples_per_sec": 12332008.498546401,
-      "throughput_kb_per_sec": 48171.90819744688,
+      "wall_clock_duration_s": 0.02812160000030417,
+      "throughput_samples_per_sec": 17068730.086296946,
+      "throughput_kb_per_sec": 66674.72689959744,
       "decoder_stats": {
         "total_samples": 480000,
         "total_frames": 1875,
         "crc_errors": 0,
         "sequence_gaps": 0,
         "duplicate_frames": 0,
+        "reordered_frames": 0,
         "timestamp_regressions": 0,
         "garbage_bytes_discarded": 0
       },
@@ -88,15 +90,16 @@
       "signal_type": "ramp",
       "is_fuzz": false,
       "duration_nominal_s": 10.0,
-      "wall_clock_duration_s": 0.03718349999689963,
-      "throughput_samples_per_sec": 12908951.552167563,
-      "throughput_kb_per_sec": 50425.59200065454,
+      "wall_clock_duration_s": 0.031245500002114568,
+      "throughput_samples_per_sec": 15362212.15751118,
+      "throughput_kb_per_sec": 60008.64124027805,
       "decoder_stats": {
         "total_samples": 480000,
         "total_frames": 1875,
         "crc_errors": 0,
         "sequence_gaps": 0,
         "duplicate_frames": 0,
+        "reordered_frames": 0,
         "timestamp_regressions": 0,
         "garbage_bytes_discarded": 0
       },
@@ -126,15 +129,16 @@
       "signal_type": "sine_100hz",
       "is_fuzz": true,
       "duration_nominal_s": 10.0,
-      "wall_clock_duration_s": 0.03663339999911841,
-      "throughput_samples_per_sec": 13095808.743156385,
-      "throughput_kb_per_sec": 51155.50290295463,
+      "wall_clock_duration_s": 0.028870100002677646,
+      "throughput_samples_per_sec": 16617330.73163947,
+      "throughput_kb_per_sec": 64911.44817046668,
       "decoder_stats": {
         "total_samples": 479744,
         "total_frames": 1874,
         "crc_errors": 1,
         "sequence_gaps": 2,
         "duplicate_frames": 1,
+        "reordered_frames": 0,
         "timestamp_regressions": 1,
         "garbage_bytes_discarded": 17
       },
@@ -155,6 +159,14 @@
       "spectral_validation": {},
       "ramp_validation": {}
     }
+  },
+  "physical_hardware_metrics": {
+    "sfdr_db": "NOT MEASURED",
+    "thd_db": "NOT MEASURED",
+    "esp32_hardware_crc_cycles": "NOT MEASURED",
+    "oscilloscope_jitter_ns": "NOT MEASURED",
+    "physical_usb_bus_utilization": "NOT MEASURED",
+    "physical_g1_status": "PENDING_PHYSICAL_HARDWARE"
   },
   "status": "SOFTWARE_SIMULATION_PASSED",
   "physical_g1_milestone_status": "PENDING_PHYSICAL_HARDWARE_ARRIVAL"

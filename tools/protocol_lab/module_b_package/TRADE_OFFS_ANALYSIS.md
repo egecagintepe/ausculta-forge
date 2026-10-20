@@ -38,7 +38,7 @@
 | **Overhead @ 187.5 fps** | 375 bytes/s (0.19%) | 750 bytes/s (0.39%) | 750 bytes/s (0.39%) |
 | **Collision Probability** | $1 \text{ in } 65,536$ ($1.5 \times 10^{-5}$) | $1 \text{ in } 4,294,967,296$ ($2.3 \times 10^{-10}$) | Weak on short bursts / zero bytes |
 | **Burst Error Detection** | Catches all burst errors $\le 16$ bits | Catches all burst errors $\le 32$ bits | Poor burst detection |
-| **ESP32-S3 Computational Cost** | Precomputed table: ~4.2 microseconds per 1,024B frame on 240 MHz Xtensa core (<0.08% CPU). | Precomputed table: ~4.5 microseconds per 1,024B frame (<0.09% CPU). | ~2.1 microseconds per frame. |
+| **ESP32-S3 Computational Cost** | Theoretical estimate (~10 cycles/byte @ 240 MHz): ~4.2 $\mu$s per frame (<0.1% CPU). *Physical time on silicon: NOT MEASURED (pending test bench).* | Theoretical estimate (~10 cycles/byte @ 240 MHz): ~4.5 $\mu$s per frame (<0.1% CPU). *Physical time on silicon: NOT MEASURED (pending test bench).* | Theoretical estimate: ~2.1 $\mu$s per frame. *Physical time on silicon: NOT MEASURED.* |
 | **Host Python Speed** | Pure Python: ~150 $\mu$s; C extension: ~5 $\mu$s. | Built-in C `binascii.crc32()`: **~1.2 $\mu$s** (hardware accelerated). | Python `zlib.adler32()`: ~1.5 $\mu$s. |
 | **Recommendation** | Acceptable baseline for simple frames. | **STRONGLY RECOMMENDED:** The extra 2 bytes per frame adds only 0.20% overhead, but provides cryptographically rigorous burst protection and 10x faster validation in Python via built-in `binascii.crc32`. | Not recommended for audio frames with long zero runs. |
 

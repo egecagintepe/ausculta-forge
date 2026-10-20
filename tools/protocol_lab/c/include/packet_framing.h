@@ -6,6 +6,12 @@
  * Module: C (Computer Application / Software Integration)
  * Author: Ege Çağın Tepe (Module C)
  * Reviewer: Ozan (Module B)
+ *
+ * PORTABLE WIRE ENCODING SPECIFICATION:
+ * -------------------------------------
+ * All header and trailer fields are explicitly encoded and decoded
+ * field-by-field in little-endian order. Zero reliance on compiler struct
+ * packing (#pragma pack) or host architecture endianness.
  */
 
 #ifndef PACKET_FRAMING_H
@@ -37,20 +43,35 @@ uint32_t crc32_compute(const uint8_t *data, size_t length);
 uint32_t adler32_compute(const uint8_t *data, size_t length);
 
 /* ========================================================================= */
-/* 2. Packet Building (Serialization)                                        */
+/* 2. Explicit Field-by-Field Header Encoders & Decoders                     */
+/* ========================================================================= */
+
+/**
+ * @brief Explicitly encode a Profile B header to little-endian bytes (40 bytes).
+ */
+ProtocolStatus packet_encode_header_profile_b(const ProfileBHeader *hdr, uint8_t *out_bytes);
+
+/**
+ * @brief Explicitly decode little-endian bytes to a Profile B header (40 bytes).
+ */
+ProtocolStatus packet_decode_header_profile_b(const uint8_t *in_bytes, ProfileBHeader *hdr);
+
+/**
+ * @brief Explicitly encode a Profile A header to little-endian bytes (16 bytes).
+ */
+ProtocolStatus packet_encode_header_profile_a(const ProfileAHeader *hdr, uint8_t *out_bytes);
+
+/**
+ * @brief Explicitly decode little-endian bytes to a Profile A header (16 bytes).
+ */
+ProtocolStatus packet_decode_header_profile_a(const uint8_t *in_bytes, ProfileAHeader *hdr);
+
+/* ========================================================================= */
+/* 3. Packet Building (Serialization)                                        */
 /* ========================================================================= */
 
 /**
  * @brief Build a Profile A packet (16-byte header + N*4B payload + 2B CRC-16).
- *
- * @param sequence Monotonic sequence counter.
- * @param timestamp_us 32-bit microsecond timestamp.
- * @param samples Array of int32_t samples.
- * @param count Number of samples (e.g. 512).
- * @param flags Status flags.
- * @param out_buffer Output byte buffer (must have at least 16 + count*4 + 2 bytes).
- * @param out_size Output pointer for total packet size.
- * @return PROTOCOL_OK or error.
  */
 ProtocolStatus packet_build_profile_a(
     uint32_t sequence,
@@ -65,21 +86,6 @@ ProtocolStatus packet_build_profile_a(
 
 /**
  * @brief Build a Profile B packet (40-byte header + N*4B payload + 4B CRC-32).
- *
- * @param sequence_id Monotonic frame sequence.
- * @param timestamp_us Monotonic microsecond timestamp (64-bit).
- * @param sample_index_start Cumulative absolute sample index (64-bit).
- * @param samples Array of int32_t samples.
- * @param count Number of samples (e.g. 256).
- * @param sample_rate_hz Sampling rate (e.g. 48000).
- * @param meaningful_bits Transducer bits (e.g. 24).
- * @param flags Frame flags.
- * @param encoding Sample encoding (e.g. ENCODING_SIGNED_PCM_LSB_ALIGNED).
- * @param mcu_drops Dropped sample counter.
- * @param out_buffer Output byte buffer (must have at least 40 + count*4 + 4 bytes).
- * @param max_buffer_size Capacity of out_buffer.
- * @param out_size Output pointer for total packet size.
- * @return PROTOCOL_OK or error.
  */
 ProtocolStatus packet_build_profile_b(
     uint32_t sequence_id,
@@ -98,7 +104,7 @@ ProtocolStatus packet_build_profile_b(
 );
 
 /* ========================================================================= */
-/* 3. Packet Parsing (Deserialization & Stream Reassembly)                   */
+/* 4. Packet Parsing (Deserialization & Stream Reassembly)                   */
 /* ========================================================================= */
 
 /**
@@ -138,15 +144,12 @@ typedef struct {
 ProtocolStatus parser_init(StreamPacketParser *parser);
 
 /**
+ * @brief Reset parser internal state and statistics.
+ */
+ProtocolStatus parser_reset(StreamPacketParser *parser);
+
+/**
  * @brief Feed raw wire bytes into the parser and retrieve any completed frames.
- *
- * @param parser Parser instance.
- * @param in_bytes Chunk of newly received raw bytes.
- * @param in_len Number of bytes in chunk.
- * @param out_frames Output array of DecodedFrame.
- * @param max_frames Capacity of out_frames array.
- * @param frames_emitted Output pointer for number of frames decoded.
- * @return PROTOCOL_OK or error.
  */
 ProtocolStatus parser_feed_bytes(
     StreamPacketParser *parser,
@@ -158,7 +161,7 @@ ProtocolStatus parser_feed_bytes(
 );
 
 /**
- * @brief Update stream quality statistics for a newly parsed frame.
+ * @brief Update stream quality statistics for a newly parsed frame (RFC 3550 sequence logic).
  */
 void update_stream_quality_stats(StreamQualityStats *stats, const DecodedFrame *frame);
 

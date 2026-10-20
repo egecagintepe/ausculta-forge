@@ -3,7 +3,7 @@
 
 CC ?= gcc
 CFLAGS ?= -std=c11 -Wall -Wextra -Werror -pedantic -O2 -Iinclude
-LDFLAGS ?= -lm
+LDFLAGS ?= -lm -lpthread
 
 SRC = src/waveform_gen.c src/ring_buffer.c src/packet_framing.c
 TEST_SRC = tests/test_c_protocol_core.c $(SRC)

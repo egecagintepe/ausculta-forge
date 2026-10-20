@@ -24,11 +24,14 @@ from protocol_codec import (
     PROFILE_B_HEADER_SIZE,
     PROFILE_B_SAMPLES_PER_FRAME,
     NOMINAL_SAMPLE_RATE_HZ,
+    MAX_DECODER_BUFFER_BYTES,
 )
 from protocol_validator import ProtocolValidator
 
 C_DIR = Path(__file__).resolve().parent.parent / "c"
-RUNNER_EXE = C_DIR / "g1_sim_runner.exe"
+RUNNER_EXE = C_DIR / "bin" / "g1_sim_runner.exe"
+if not RUNNER_EXE.exists():
+    RUNNER_EXE = C_DIR / "g1_sim_runner.exe"
 
 
 class TestProtocolLaboratory:
@@ -94,6 +97,52 @@ class TestProtocolLaboratory:
         assert pkt.mcu_buffer_drops == 5
         np.testing.assert_array_equal(pkt.raw_samples, samples)
 
+    def test_cross_language_explicit_field_offsets_golden_vector(self):
+        """Verify Profile B 40-byte header exact byte offsets against C11 layout."""
+        samples = np.zeros(256, dtype=np.int32)
+        wire_packet = build_profile_b_packet(
+            sequence_id=0xA1B2C3D4,
+            timestamp_us=0x0102030405060708,
+            sample_index_start=0x1122334455667788,
+            samples=samples,
+            sample_rate_hz=48000,
+            meaningful_bits=24,
+            flags=0x1234,
+            encoding=1,
+            mcu_drops=7,
+        )
+
+        hdr = wire_packet[:40]
+        assert len(hdr) == 40
+        # Offset 0..3: magic 0xAF534331 ("1CSA" in LE)
+        assert hdr[0:4] == b"\x31\x43\x53\xaf"
+        # Offset 4: version
+        assert hdr[4] == 1
+        # Offset 5: msg_type
+        assert hdr[5] == 1
+        # Offset 6..7: flags 0x1234 (LE)
+        assert hdr[6:8] == b"\x34\x12"
+        # Offset 8..11: sequence 0xA1B2C3D4 (LE)
+        assert hdr[8:12] == b"\xd4\xc3\xb2\xa1"
+        # Offset 12..15: sample_rate 48000 (LE)
+        assert hdr[12:16] == b"\x80\xbb\x00\x00"
+        # Offset 16..23: timestamp 0x0102030405060708 (LE)
+        assert hdr[16:24] == b"\x08\x07\x06\x05\x04\x03\x02\x01"
+        # Offset 24..31: sample_index 0x1122334455667788 (LE)
+        assert hdr[24:32] == b"\x88\x77\x66\x55\x44\x33\x22\x11"
+        # Offset 32..33: sample_count 256 (LE)
+        assert hdr[32:34] == b"\x00\x01"
+        # Offset 34: meaningful_bits (24)
+        assert hdr[34] == 24
+        # Offset 35: container_bits (32)
+        assert hdr[35] == 32
+        # Offset 36: channels (1)
+        assert hdr[36] == 1
+        # Offset 37: encoding (1)
+        assert hdr[37] == 1
+        # Offset 38..39: mcu_buffer_drops 7 (LE)
+        assert hdr[38:40] == b"\x07\x00"
+
     def test_c_executable_to_python_decoder_parity(self):
         """Execute compiled C runner and verify byte-level deserialization parity."""
         if not RUNNER_EXE.exists():
@@ -106,7 +155,6 @@ class TestProtocolLaboratory:
         decoder = StreamingProtocolDecoder()
         packets = decoder.feed_bytes(raw_output)
 
-        # 0.1s at 48 kHz = 4800 samples = 18.75 -> 18 frames of 256 samples (4608 samples)
         assert len(packets) == 18
         for i, pkt in enumerate(packets):
             assert pkt.crc_ok is True
@@ -142,6 +190,72 @@ class TestProtocolLaboratory:
         assert received_packets[1].sequence_id == 2
         np.testing.assert_array_equal(received_packets[0].raw_samples, samples1)
         np.testing.assert_array_equal(received_packets[1].raw_samples, samples2)
+
+    def test_partial_final_frame_decoding(self):
+        """Verify decoder cleanly parses a partial final frame (e.g. 100 samples)."""
+        samples = np.arange(100, dtype=np.int32) * 3
+        wire_data = build_profile_b_packet(
+            sequence_id=5, timestamp_us=50000, sample_index_start=1000, samples=samples
+        )
+        assert len(wire_data) == 40 + 100 * 4 + 4
+
+        decoder = StreamingProtocolDecoder()
+        packets = decoder.feed_bytes(wire_data)
+        assert len(packets) == 1
+        assert packets[0].sample_count == 100
+        assert packets[0].crc_ok is True
+        np.testing.assert_array_equal(packets[0].raw_samples, samples)
+
+    def test_concatenated_frames(self):
+        """Verify multiple concatenated frames in a single chunk are all emitted."""
+        s = np.zeros(256, dtype=np.int32)
+        blob = b"".join(
+            build_profile_b_packet(sequence_id=i, timestamp_us=i*1000, sample_index_start=i*256, samples=s)
+            for i in range(5)
+        )
+        decoder = StreamingProtocolDecoder()
+        packets = decoder.feed_bytes(blob)
+        assert len(packets) == 5
+        for i, pkt in enumerate(packets):
+            assert pkt.sequence_id == i
+
+    def test_sequence_wraparound_rfc3550(self):
+        """Verify sequence wraparound across 0xFFFFFFFF has zero sequence gaps."""
+        s = np.zeros(256, dtype=np.int32)
+        p1 = build_profile_b_packet(sequence_id=0xFFFFFFFF, timestamp_us=1000, sample_index_start=0, samples=s)
+        p2 = build_profile_b_packet(sequence_id=0, timestamp_us=2000, sample_index_start=256, samples=s)
+
+        decoder = StreamingProtocolDecoder()
+        decoder.feed_bytes(p1)
+        decoder.feed_bytes(p2)
+
+        assert decoder.total_frames_received == 2
+        assert decoder.total_sequence_gaps == 0
+        assert decoder.total_duplicate_frames == 0
+        assert decoder.total_reordered_frames == 0
+
+    def test_out_of_order_frame_rfc3550(self):
+        """Verify reordered frames increment total_reordered_frames and do NOT inflate gaps."""
+        s = np.zeros(256, dtype=np.int32)
+        p_seq15 = build_profile_b_packet(sequence_id=15, timestamp_us=15000, sample_index_start=3840, samples=s)
+        p_seq10 = build_profile_b_packet(sequence_id=10, timestamp_us=10000, sample_index_start=2560, samples=s)
+
+        decoder = StreamingProtocolDecoder()
+        decoder.feed_bytes(p_seq15)
+        decoder.feed_bytes(p_seq10)
+
+        assert decoder.total_frames_received == 2
+        assert decoder.total_reordered_frames == 1
+        assert decoder.total_sequence_gaps == 0
+
+    def test_decoder_memory_safety_bound(self):
+        """Verify decoder buffer is strictly bounded when fed arbitrary garbage."""
+        decoder = StreamingProtocolDecoder()
+        huge_garbage = b"\x77" * (MAX_DECODER_BUFFER_BYTES * 2)
+        decoder.feed_bytes(huge_garbage)
+
+        assert decoder.buffer_len <= MAX_DECODER_BUFFER_BYTES
+        assert decoder.garbage_bytes_discarded > 0
 
     def test_crc_corruption_trapped(self):
         """Verify that corrupted frames fail CRC check and update error counters."""

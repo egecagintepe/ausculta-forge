@@ -12,14 +12,15 @@ Demonstrates:
 1. Exact sample accounting (480,000 samples across 1,875 frames @ 256 samples/frame).
 2. Closed-form mathematical known-answer verification (100 Hz pure sine).
 3. Monotonic sample ramp counter continuity.
-4. Robust detection of simulated errors (drops, CRC corruption, duplicate frames, noise).
-5. Comprehensive JSON evidence generation.
+4. Robust detection of simulated errors (drops, CRC corruption, duplicate frames, noise, regressions).
+5. Comprehensive, truthful JSON evidence generation.
 
 CRITICAL HARDWARE DISCLAIMER:
 -----------------------------
 This execution is a SOFTWARE SIMULATION running purely on host CPU.
 Passing this software simulation does NOT satisfy or mark physical ESP32-S3 G1 PASS.
 Physical G1 requires physical ESP32-S3 hardware streaming real DMA samples over physical USB.
+Physical metrics (SFDR, THD, hardware CRC cycles, physical USB bus occupancy) are marked NOT MEASURED.
 """
 
 import json
@@ -43,14 +44,19 @@ from protocol_codec import (
 from protocol_validator import ProtocolValidator
 
 C_DIR = Path(__file__).resolve().parent.parent / "c"
-RUNNER_EXE = C_DIR / "g1_sim_runner.exe"
+RUNNER_EXE = C_DIR / "bin" / "g1_sim_runner.exe"
+if not RUNNER_EXE.exists():
+    RUNNER_EXE = C_DIR / "g1_sim_runner.exe"
 OUTPUT_REPORT = Path(__file__).resolve().parent.parent / "g1_simulation_evidence.json"
 
 
 def ensure_runner_compiled() -> Path:
     """Ensure g1_sim_runner.exe is compiled with GCC."""
     if not RUNNER_EXE.exists():
-        print(f"[BUILD] Compiling {RUNNER_EXE.name} using gcc...")
+        bin_dir = C_DIR / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        target = bin_dir / "g1_sim_runner.exe"
+        print(f"[BUILD] Compiling {target.name} using gcc...")
         cmd = [
             "gcc",
             "-std=c11",
@@ -61,7 +67,7 @@ def ensure_runner_compiled() -> Path:
             "-O2",
             "-Iinclude",
             "-o",
-            str(RUNNER_EXE),
+            str(target),
             "src/g1_sim_runner.c",
             "src/waveform_gen.c",
             "src/ring_buffer.c",
@@ -71,7 +77,8 @@ def ensure_runner_compiled() -> Path:
         res = subprocess.run(cmd, cwd=str(C_DIR), capture_output=True, text=True)
         if res.returncode != 0:
             raise RuntimeError(f"Failed to compile C runner:\n{res.stderr}")
-        print(f"[BUILD] Successfully compiled {RUNNER_EXE.name}")
+        print(f"[BUILD] Successfully compiled {target.name}")
+        return target
     return RUNNER_EXE
 
 
@@ -125,6 +132,7 @@ def run_g1_stream_test(
     print(f"  CRC Failures: {decoder.total_frames_corrupted}")
     print(f"  Sequence Gaps: {decoder.total_sequence_gaps}")
     print(f"  Duplicate Frames: {decoder.total_duplicate_frames}")
+    print(f"  Reordered Frames: {decoder.total_reordered_frames}")
     print(f"  Timestamp Regressions: {decoder.total_timestamp_regressions}")
     print(f"  Garbage Discarded: {decoder.garbage_bytes_discarded} bytes")
 
@@ -134,7 +142,7 @@ def run_g1_stream_test(
 
     if not is_fuzz and signal_type == "sine_100hz" and len(all_samples) > 0:
         spectral_metrics = ProtocolValidator.validate_sine_100hz(all_samples, NOMINAL_SAMPLE_RATE_HZ, 100.0)
-        print(f"  Spectral Validation: Peak={spectral_metrics['peak_freq_hz']:.2f} Hz, SNR={spectral_metrics['snr_db']:.1f} dB, Crest={spectral_metrics['crest_factor']:.3f} (Passed: {spectral_metrics['passed']})")
+        print(f"  Spectral Validation: Peak={spectral_metrics['peak_freq_hz']:.2f} Hz, SNR={spectral_metrics['snr_db']:.2f} dB, Crest={spectral_metrics['crest_factor']:.4f} (Passed: {spectral_metrics['passed']})")
 
     if not is_fuzz and signal_type == "ramp" and len(all_samples) > 0:
         ramp_metrics = ProtocolValidator.validate_ramp_counter(all_samples, 24)
@@ -166,6 +174,7 @@ def run_g1_stream_test(
             "crc_errors": decoder.total_frames_corrupted,
             "sequence_gaps": decoder.total_sequence_gaps,
             "duplicate_frames": decoder.total_duplicate_frames,
+            "reordered_frames": decoder.total_reordered_frames,
             "timestamp_regressions": decoder.total_timestamp_regressions,
             "garbage_bytes_discarded": decoder.garbage_bytes_discarded,
         },
@@ -226,6 +235,11 @@ def main():
             "or marks physical ESP32-S3 G1 milestone pass. Physical G1 requires physical ESP32-S3 "
             "hardware streaming real DMA samples over physical USB."
         ),
+        "physical_measurements_notice": (
+            "All physical hardware metrics (SFDR, THD, hardware CRC execution cycles, oscilloscope jitter, "
+            "physical USB bus occupancy) are marked NOT MEASURED. Software simulation throughput numbers reflect "
+            "pipe I/O on host CPU and do NOT represent physical USB transfer."
+        ),
         "host_platform": sys.platform,
         "python_version": sys.version,
         "c_compiler_audit": c_audit,
@@ -246,6 +260,14 @@ def main():
             "nominal_sine_100hz": sine_results,
             "monotonic_ramp_counter": ramp_results,
             "simulated_error_injection": fuzz_results,
+        },
+        "physical_hardware_metrics": {
+            "sfdr_db": "NOT MEASURED",
+            "thd_db": "NOT MEASURED",
+            "esp32_hardware_crc_cycles": "NOT MEASURED",
+            "oscilloscope_jitter_ns": "NOT MEASURED",
+            "physical_usb_bus_utilization": "NOT MEASURED",
+            "physical_g1_status": "PENDING_PHYSICAL_HARDWARE",
         },
         "status": "SOFTWARE_SIMULATION_PASSED",
         "physical_g1_milestone_status": "PENDING_PHYSICAL_HARDWARE_ARRIVAL",

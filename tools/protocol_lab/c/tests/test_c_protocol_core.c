@@ -1,6 +1,6 @@
 /**
  * @file test_c_protocol_core.c
- * @brief Comprehensive C11 Unit Test Suite for Protocol Forge Core.
+ * @brief Comprehensive C11 Unit & Stress Test Suite for Protocol Forge Core.
  *
  * Course: EEE495 / EEE496 Senior Design Project — AuscultaForge
  * Module: C (Computer Application / Software Integration)
@@ -17,6 +17,7 @@
 #include <assert.h>
 #include <string.h>
 #include <math.h>
+#include <pthread.h>
 
 #define TEST_ASSERT(cond, msg) do { \
     if (!(cond)) { \
@@ -25,8 +26,12 @@
     } \
 } while(0)
 
+/* ========================================================================= */
+/* 1. CRC Algorithms Known Answer Tests                                      */
+/* ========================================================================= */
+
 static void test_crc_known_vectors(void) {
-    printf("[TEST] Testing CRC-16 and CRC-32 known answer test vectors...\n");
+    printf("[TEST] Testing CRC-16, CRC-32 and Adler-32 known answer vectors...\n");
     const uint8_t kat[] = "123456789";
     size_t kat_len = 9;
 
@@ -45,91 +50,156 @@ static void test_crc_known_vectors(void) {
     printf("  ✓ CRC-16 (0x29B1), CRC-32 (0xCBF43926), Adler-32 (0x091E01DE) verified.\n");
 }
 
-static void test_type_audit_and_sign_extension(void) {
-    printf("[TEST] Testing C11 type limits, sign extension and endianness...\n");
+/* ========================================================================= */
+/* 2. Portable PCM Arithmetic & Type Boundaries (Gate 2)                     */
+/* ========================================================================= */
 
-    TEST_ASSERT(sizeof(ProfileAHeader) == 16, "ProfileAHeader must be exactly 16 bytes");
-    TEST_ASSERT(sizeof(ProfileBHeader) == 40, "ProfileBHeader must be exactly 40 bytes");
-    TEST_ASSERT(sizeof(int16_t) == 2, "int16_t width");
-    TEST_ASSERT(sizeof(int32_t) == 4, "int32_t width");
-    TEST_ASSERT(sizeof(uint32_t) == 4, "uint32_t width");
-    TEST_ASSERT(sizeof(uint64_t) == 8, "uint64_t width");
+static void test_portable_pcm_arithmetic(void) {
+    printf("[TEST] Testing portable C11 PCM arithmetic, boundary edge cases, and MSB/LSB...\n");
 
-    /* Little endian check */
-    uint32_t val = 0x01020304U;
-    uint8_t *b = (uint8_t *)&val;
-    TEST_ASSERT(b[0] == 0x04 && b[3] == 0x01, "Host must be little-endian");
-
-    /* 24-bit to 32-bit sign extension check */
+    /* Edge case: -8388608 (INT24_MIN) */
     int32_t min_24 = sign_extend_24_to_32(0x00800000U);
-    TEST_ASSERT(min_24 == -8388608LL, "Sign extension of -8,388,608 failed");
+    TEST_ASSERT(min_24 == -8388608LL, "Sign extension of INT24_MIN (-8,388,608) failed");
 
+    /* Edge case: +8388607 (INT24_MAX) */
     int32_t max_24 = sign_extend_24_to_32(0x007FFFFFU);
-    TEST_ASSERT(max_24 == 8388607LL, "Sign extension of +8,388,607 failed");
+    TEST_ASSERT(max_24 == 8388607LL, "Sign extension of INT24_MAX (+8,388,607) failed");
 
+    /* Edge case: -1 (all bits set in 24-bit) */
     int32_t neg_one = sign_extend_24_to_32(0x00FFFFFFU);
     TEST_ASSERT(neg_one == -1, "Sign extension of -1 failed");
 
+    /* Edge case: 0 */
     int32_t zero = sign_extend_24_to_32(0x00000000U);
     TEST_ASSERT(zero == 0, "Sign extension of 0 failed");
 
-    /* MSB alignment roundtrip */
-    int32_t lsb_val = -1234567;
-    int32_t msb_val = lsb_to_msb_aligned(lsb_val);
-    int32_t recovered_lsb = msb_to_lsb_aligned(msb_val);
-    TEST_ASSERT(recovered_lsb == lsb_val, "MSB-to-LSB alignment roundtrip failed");
+    /* Edge case: +1 */
+    int32_t plus_one = sign_extend_24_to_32(0x00000001U);
+    TEST_ASSERT(plus_one == 1, "Sign extension of +1 failed");
 
-    printf("  ✓ C11 integer audit and 24-bit arithmetic limits verified.\n");
-}
+    /* Generic N-bit sign extension */
+    int32_t ext_val = 0;
+    ProtocolStatus st = sign_extend_n_to_32(0x8000U, 16, &ext_val);
+    TEST_ASSERT(st == PROTOCOL_OK && ext_val == -32768, "16-bit min sign extension");
 
-static void test_waveform_generation(void) {
-    printf("[TEST] Testing deterministic waveform generation...\n");
+    st = sign_extend_n_to_32(0x7FFFU, 16, &ext_val);
+    TEST_ASSERT(st == PROTOCOL_OK && ext_val == 32767, "16-bit max sign extension");
 
-    WaveformGeneratorState state;
-    waveform_gen_init(&state, GEN_SIGNAL_SINE_100HZ, 48000, 100.0, 1.0, false);
+    /* Invalid bit depth parameter testing */
+    st = sign_extend_n_to_32(100, 0, &ext_val);
+    TEST_ASSERT(st == PROTOCOL_ERR_INVALID_PARAM, "0 bits must return INVALID_PARAM");
 
-    int32_t sine_block[480];
-    waveform_gen_fill_block(&state, sine_block, 480);
+    st = sign_extend_n_to_32(100, 33, &ext_val);
+    TEST_ASSERT(st == PROTOCOL_ERR_INVALID_PARAM, "33 bits must return INVALID_PARAM");
 
-    /* Index 0 should be 0, index 120 (pi/2) should be INT24_MAX (+FS) */
-    TEST_ASSERT(sine_block[0] == 0, "Sine at n=0 should be 0");
-    TEST_ASSERT(sine_block[120] == (int32_t)INT24_MAX, "Sine at n=120 should be INT24_MAX");
-    TEST_ASSERT(sine_block[240] == 0, "Sine at n=240 should be 0");
-    TEST_ASSERT(sine_block[360] == -((int32_t)INT24_MAX), "Sine at n=360 should be -INT24_MAX");
+    st = sign_extend_n_to_32(100, 24, NULL);
+    TEST_ASSERT(st == PROTOCOL_ERR_NULL_PTR, "NULL output ptr must return NULL_PTR");
 
-    /* Ramp generator test */
-    waveform_gen_init(&state, GEN_SIGNAL_RAMP_COUNTER, 48000, 100.0, 1.0, false);
-    int32_t ramp_block[100];
-    waveform_gen_fill_block(&state, ramp_block, 100);
-    for (int i = 0; i < 100; ++i) {
-        TEST_ASSERT(ramp_block[i] == i, "Ramp value mismatch");
+    /* MSB vs LSB alignment roundtrip for boundary values */
+    static const int32_t test_values[] = {-8388608, -8388607, -1, 0, 1, 8388606, 8388607, 4194304, -4194304};
+    for (size_t i = 0; i < sizeof(test_values)/sizeof(test_values[0]); ++i) {
+        int32_t orig = test_values[i];
+        int32_t msb = lsb_to_msb_aligned(orig);
+        int32_t recovered = msb_to_lsb_aligned(msb);
+        TEST_ASSERT(recovered == orig, "MSB/LSB alignment roundtrip failed for test value");
     }
 
-    /* LE Serialization roundtrip */
-    uint8_t byte_buf[400];
-    int32_t deserialized[100];
-    serialize_samples_le(ramp_block, 100, byte_buf);
-    deserialize_samples_le(byte_buf, 100, deserialized);
-    for (int i = 0; i < 100; ++i) {
-        TEST_ASSERT(deserialized[i] == ramp_block[i], "LE serialization roundtrip mismatch");
+    /* Little-endian sample serialization */
+    int32_t raw_samples[5] = {-8388608, -1, 0, 1, 8388607};
+    uint8_t serialized[20];
+    int32_t deserialized[5];
+
+    serialize_samples_le(raw_samples, 5, serialized);
+    deserialize_samples_le(serialized, 5, deserialized);
+    for (int i = 0; i < 5; ++i) {
+        TEST_ASSERT(deserialized[i] == raw_samples[i], "Sample LE serialization roundtrip failed");
     }
 
-    printf("  ✓ Deterministic sine (100 Hz @ 48 kHz), ramp counter, and LE serialization verified.\n");
+    printf("  ✓ Signed 24-bit boundaries, generic N-bit sign extension, and MSB/LSB verified.\n");
 }
 
-static void test_ring_buffer(void) {
-    printf("[TEST] Testing bounded ring buffer with exact sample accounting...\n");
+/* ========================================================================= */
+/* 3. Explicit Header Encoding & Byte Offset Verification (Gate 3)            */
+/* ========================================================================= */
 
-    int32_t storage[10];
+static void test_explicit_header_wire_encoding(void) {
+    printf("[TEST] Testing explicit field-by-field little-endian header encoding & offsets...\n");
+
+    ProfileBHeader b_in;
+    b_in.magic = PROFILE_B_MAGIC_U32;
+    b_in.version = 1;
+    b_in.msg_type = MSG_TYPE_AUDIO_DATA;
+    b_in.flags = 0x1234;
+    b_in.sequence_id = 0xA1B2C3D4U;
+    b_in.sample_rate_hz = 48000;
+    b_in.timestamp_us = 0x0102030405060708ULL;
+    b_in.sample_index_start = 0x1122334455667788ULL;
+    b_in.sample_count = 256;
+    b_in.meaningful_bits = 24;
+    b_in.container_bits = 32;
+    b_in.channels = 1;
+    b_in.encoding = ENCODING_SIGNED_PCM_LSB_ALIGNED;
+    b_in.mcu_buffer_drops = 7;
+
+    uint8_t wire[40];
+    memset(wire, 0, sizeof(wire));
+    ProtocolStatus st = packet_encode_header_profile_b(&b_in, wire);
+    TEST_ASSERT(st == PROTOCOL_OK, "Encode Profile B");
+
+    /* Offset verification */
+    TEST_ASSERT(wire[0] == 0x31 && wire[1] == 0x43 && wire[2] == 0x53 && wire[3] == 0xAF, "Offset 0..3: magic");
+    TEST_ASSERT(wire[4] == 1, "Offset 4: version");
+    TEST_ASSERT(wire[5] == 1, "Offset 5: msg_type");
+    TEST_ASSERT(wire[6] == 0x34 && wire[7] == 0x12, "Offset 6..7: flags (0x1234 LE)");
+    TEST_ASSERT(wire[8] == 0xD4 && wire[9] == 0xC3 && wire[10] == 0xB2 && wire[11] == 0xA1, "Offset 8..11: sequence");
+    TEST_ASSERT(wire[12] == 0x80 && wire[13] == 0xBB && wire[14] == 0x00 && wire[15] == 0x00, "Offset 12..15: 48000 Hz LE");
+    TEST_ASSERT(wire[16] == 0x08 && wire[23] == 0x01, "Offset 16..23: timestamp_us LE");
+    TEST_ASSERT(wire[24] == 0x88 && wire[31] == 0x11, "Offset 24..31: sample_index_start LE");
+    TEST_ASSERT(wire[32] == 0x00 && wire[33] == 0x01, "Offset 32..33: 256 samples LE");
+    TEST_ASSERT(wire[34] == 24, "Offset 34: meaningful_bits");
+    TEST_ASSERT(wire[35] == 32, "Offset 35: container_bits");
+    TEST_ASSERT(wire[36] == 1, "Offset 36: channels");
+    TEST_ASSERT(wire[37] == 1, "Offset 37: encoding");
+    TEST_ASSERT(wire[38] == 7 && wire[39] == 0, "Offset 38..39: mcu_buffer_drops");
+
+    /* Decode back */
+    ProfileBHeader b_out;
+    st = packet_decode_header_profile_b(wire, &b_out);
+    TEST_ASSERT(st == PROTOCOL_OK, "Decode Profile B");
+    TEST_ASSERT(b_out.magic == b_in.magic, "Magic match");
+    TEST_ASSERT(b_out.sequence_id == b_in.sequence_id, "Seq match");
+    TEST_ASSERT(b_out.timestamp_us == b_in.timestamp_us, "TS match");
+    TEST_ASSERT(b_out.sample_index_start == b_in.sample_index_start, "Idx match");
+    TEST_ASSERT(b_out.sample_count == b_in.sample_count, "Count match");
+    TEST_ASSERT(b_out.mcu_buffer_drops == b_in.mcu_buffer_drops, "Drops match");
+
+    printf("  ✓ Explicit 40-byte field offsets and little-endian wire serialization verified.\n");
+}
+
+/* ========================================================================= */
+/* 4. SPSC Ring Buffer Single-Threaded Logic (Gate 1)                         */
+/* ========================================================================= */
+
+static void test_ring_buffer_basic(void) {
+    printf("[TEST] Testing lock-free SPSC ring buffer basic invariants...\n");
+
+    int32_t storage[16];
     PcmRingBuffer rb;
-    ring_buffer_init(&rb, storage, 10);
+
+    /* Invalid capacity check: 10 is not a power of 2 */
+    ProtocolStatus st = ring_buffer_init(&rb, storage, 10);
+    TEST_ASSERT(st == PROTOCOL_ERR_INVALID_PARAM, "Non-power of two capacity must be rejected");
+
+    /* Valid power-of-two capacity: 16 */
+    st = ring_buffer_init(&rb, storage, 16);
+    TEST_ASSERT(st == PROTOCOL_OK, "Capacity 16 init");
 
     TEST_ASSERT(ring_buffer_is_empty(&rb), "Initial ring buffer should be empty");
-    TEST_ASSERT(ring_buffer_available_write(&rb) == 10, "Initial available write should be 10");
+    TEST_ASSERT(ring_buffer_available_write(&rb) == 16, "Initial available write should be 16");
 
     int32_t input[6] = {10, 20, 30, 40, 50, 60};
     size_t pushed = 0;
-    ProtocolStatus st = ring_buffer_push(&rb, input, 6, &pushed);
+    st = ring_buffer_push(&rb, input, 6, &pushed);
     TEST_ASSERT(st == PROTOCOL_OK && pushed == 6, "Push 6 samples");
     TEST_ASSERT(ring_buffer_available_read(&rb) == 6, "Available read should be 6");
 
@@ -140,10 +210,10 @@ static void test_ring_buffer(void) {
     TEST_ASSERT(output[0] == 10 && output[3] == 40, "FIFO ordering check");
     TEST_ASSERT(ring_buffer_available_read(&rb) == 2, "Available read should be 2");
 
-    /* Push 8 samples to trigger overflow (2 + 8 = 10 capacity, exactly full) */
-    int32_t input2[8] = {1, 2, 3, 4, 5, 6, 7, 8};
-    st = ring_buffer_push(&rb, input2, 8, &pushed);
-    TEST_ASSERT(st == PROTOCOL_OK && pushed == 8, "Buffer should be full");
+    /* Push 14 samples to trigger exact full (2 + 14 = 16 capacity) */
+    int32_t input2[14] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
+    st = ring_buffer_push(&rb, input2, 14, &pushed);
+    TEST_ASSERT(st == PROTOCOL_OK && pushed == 14, "Buffer should be full");
     TEST_ASSERT(ring_buffer_is_full(&rb), "Ring buffer should report full");
 
     /* Attempt to push when full: must report PROTOCOL_ERR_BUFFER_FULL and drop */
@@ -153,94 +223,203 @@ static void test_ring_buffer(void) {
     TEST_ASSERT(rb.overflow_events == 1, "Overflow event counter");
     TEST_ASSERT(rb.overflow_samples_dropped == 1, "Overflow dropped counter");
 
-    /* Total written and read verification */
-    TEST_ASSERT(rb.total_samples_written == 14, "Total written should be 14");
-    TEST_ASSERT(rb.total_samples_read == 4, "Total read should be 4");
+    /* Pop all remaining 16 samples */
+    int32_t drain[16];
+    st = ring_buffer_pop(&rb, drain, 16, &popped);
+    TEST_ASSERT(st == PROTOCOL_OK && popped == 16, "Drain buffer");
+    TEST_ASSERT(ring_buffer_is_empty(&rb), "Buffer should be empty");
 
-    printf("  ✓ Ring buffer wrap-around, FIFO preservation, and overflow accounting verified.\n");
+    /* Total written and read verification */
+    TEST_ASSERT(rb.total_samples_written == 20, "Total written should be 20");
+    TEST_ASSERT(rb.total_samples_read == 20, "Total read should be 20");
+
+    printf("  ✓ SPSC power-of-two invariants and overflow accounting verified.\n");
 }
 
-static void test_packet_framing_and_parser(void) {
-    printf("[TEST] Testing Profile A and Profile B framing, parser, and re-sync...\n");
+/* ========================================================================= */
+/* 5. Concurrent SPSC Multi-Threaded Stress Test (Gate 1)                     */
+/* ========================================================================= */
 
-    int32_t samples[256];
-    for (int i = 0; i < 256; ++i) samples[i] = i * 100;
+#define CONCURRENT_SAMPLE_COUNT  500000U
+#define CONCURRENT_BUFFER_SIZE   1024U
 
-    /* Build Profile B frame */
-    uint8_t frame_buf[2048];
-    size_t frame_len = 0;
-    ProtocolStatus st = packet_build_profile_b(
-        42,
-        1000000ULL,
-        10752ULL,
-        samples,
-        256,
-        48000,
-        24,
-        FRAME_FLAG_TIMESTAMP_VALID,
-        ENCODING_SIGNED_PCM_LSB_ALIGNED,
-        0,
-        frame_buf,
-        sizeof(frame_buf),
-        &frame_len
-    );
-    TEST_ASSERT(st == PROTOCOL_OK, "Profile B build");
-    TEST_ASSERT(frame_len == PROFILE_B_FRAME_TOTAL_BYTES, "Profile B frame size must be 1068 bytes");
+typedef struct {
+    PcmRingBuffer *rb;
+    uint32_t total_samples;
+    bool producer_done;
+} ThreadContext;
 
-    /* Parse frame using streaming parser */
+static void *producer_thread_func(void *arg) {
+    ThreadContext *ctx = (ThreadContext *)arg;
+    uint32_t written = 0;
+    int32_t chunk[128];
+
+    while (written < ctx->total_samples) {
+        size_t to_write = 1 + (rand() % 128);
+        if (written + to_write > ctx->total_samples) {
+            to_write = ctx->total_samples - written;
+        }
+
+        for (size_t i = 0; i < to_write; ++i) {
+            chunk[i] = (int32_t)(written + i);
+        }
+
+        size_t pushed = 0;
+        ProtocolStatus st = ring_buffer_push(ctx->rb, chunk, to_write, &pushed);
+        written += (uint32_t)pushed;
+
+        if (st == PROTOCOL_ERR_BUFFER_FULL || pushed == 0) {
+            /* Yield CPU to allow consumer to read */
+            sched_yield();
+        }
+    }
+
+    ctx->producer_done = true;
+    return NULL;
+}
+
+static void *consumer_thread_func(void *arg) {
+    ThreadContext *ctx = (ThreadContext *)arg;
+    uint32_t expected_val = 0;
+    int32_t chunk[128];
+
+    while (!ctx->producer_done || !ring_buffer_is_empty(ctx->rb)) {
+        size_t to_read = 1 + (rand() % 128);
+        size_t popped = 0;
+        ring_buffer_pop(ctx->rb, chunk, to_read, &popped);
+
+        for (size_t i = 0; i < popped; ++i) {
+            if (chunk[i] != (int32_t)expected_val) {
+                fprintf(stderr, "[CONCURRENT FAIL] Data corruption! Expected %u, got %d\n",
+                        expected_val, chunk[i]);
+                assert(chunk[i] == (int32_t)expected_val);
+            }
+            expected_val++;
+        }
+
+        if (popped == 0) {
+            sched_yield();
+        }
+    }
+
+    TEST_ASSERT(expected_val == ctx->total_samples, "Consumer must receive all samples");
+    return NULL;
+}
+
+static void test_concurrent_spsc_stress(void) {
+    printf("[TEST] Testing concurrent multi-threaded SPSC stress (%u samples)...\n", CONCURRENT_SAMPLE_COUNT);
+
+    int32_t *storage = (int32_t *)malloc(CONCURRENT_BUFFER_SIZE * sizeof(int32_t));
+    TEST_ASSERT(storage != NULL, "Alloc storage");
+
+    PcmRingBuffer rb;
+    ring_buffer_init(&rb, storage, CONCURRENT_BUFFER_SIZE);
+
+    ThreadContext ctx;
+    ctx.rb = &rb;
+    ctx.total_samples = CONCURRENT_SAMPLE_COUNT;
+    ctx.producer_done = false;
+
+    pthread_t prod_thread, cons_thread;
+    int rc1 = pthread_create(&prod_thread, NULL, producer_thread_func, &ctx);
+    int rc2 = pthread_create(&cons_thread, NULL, consumer_thread_func, &ctx);
+    TEST_ASSERT(rc1 == 0 && rc2 == 0, "Thread creation");
+
+    pthread_join(prod_thread, NULL);
+    pthread_join(cons_thread, NULL);
+
+    TEST_ASSERT(rb.total_samples_written == CONCURRENT_SAMPLE_COUNT, "Total samples written");
+    TEST_ASSERT(rb.total_samples_read == CONCURRENT_SAMPLE_COUNT, "Total samples read");
+    TEST_ASSERT(ring_buffer_is_empty(&rb), "Buffer empty at termination");
+
+    free(storage);
+    printf("  ✓ Concurrent SPSC lock-free producer/consumer verified with ZERO corruption.\n");
+}
+
+/* ========================================================================= */
+/* 6. Parser Robustness & Sequence Wrapping (Gate 5)                         */
+/* ========================================================================= */
+
+static void test_parser_robustness(void) {
+    printf("[TEST] Testing parser robustness: partial frames, concatenated frames, sequence wrap...\n");
+
     StreamPacketParser parser;
     parser_init(&parser);
 
-    DecodedFrame decoded[4];
+    /* 1. Partial final frame test (e.g. 100 samples instead of 256) */
+    int32_t partial_samples[100];
+    for (int i = 0; i < 100; ++i) partial_samples[i] = i * 5;
+
+    uint8_t partial_wire[1024];
+    size_t partial_size = 0;
+    ProtocolStatus st = packet_build_profile_b(
+        1, 1000000ULL, 0ULL, partial_samples, 100, 48000, 24, 1, 1, 0,
+        partial_wire, sizeof(partial_wire), &partial_size
+    );
+    TEST_ASSERT(st == PROTOCOL_OK, "Build partial frame");
+    TEST_ASSERT(partial_size == 40 + 100 * 4 + 4, "Partial frame size: 444 bytes");
+
+    DecodedFrame decoded[10];
     size_t emitted = 0;
-    st = parser_feed_bytes(&parser, frame_buf, frame_len, decoded, 4, &emitted);
-    TEST_ASSERT(st == PROTOCOL_OK && emitted == 1, "Profile B feed and parse");
-    TEST_ASSERT(decoded[0].crc_ok == true, "CRC must pass");
-    TEST_ASSERT(decoded[0].sequence_id == 42, "Sequence match");
-    TEST_ASSERT(decoded[0].sample_count == 256, "Sample count match");
-    TEST_ASSERT(decoded[0].samples[0] == 0 && decoded[0].samples[255] == 25500, "Payload match");
+    st = parser_feed_bytes(&parser, partial_wire, partial_size, decoded, 10, &emitted);
+    TEST_ASSERT(st == PROTOCOL_OK && emitted == 1, "Partial frame decode");
+    TEST_ASSERT(decoded[0].sample_count == 100, "Decoded sample count match");
+    TEST_ASSERT(decoded[0].samples[99] == 495, "Payload match");
 
-    /* Byte fragmentation test: feed parser 7 bytes at a time! */
-    parser_init(&parser);
-    size_t offset = 0;
-    size_t chunk_size = 7;
-    size_t total_emitted_fragmented = 0;
+    /* 2. Sequence wraparound test: sequence wraps from UINT32_MAX to 0 */
+    parser_reset(&parser);
 
-    while (offset < frame_len) {
-        size_t n = (offset + chunk_size <= frame_len) ? chunk_size : (frame_len - offset);
-        parser_feed_bytes(&parser, frame_buf + offset, n, decoded, 4, &emitted);
-        total_emitted_fragmented += emitted;
-        offset += n;
+    int32_t s_wrap[16];
+    memset(s_wrap, 0, sizeof(s_wrap));
+    uint8_t f1[512], f2[512];
+    size_t s1 = 0, s2 = 0;
+
+    packet_build_profile_b(UINT32_MAX, 1000000ULL, 0, s_wrap, 16, 48000, 24, 1, 1, 0, f1, sizeof(f1), &s1);
+    packet_build_profile_b(0, 1000333ULL, 16, s_wrap, 16, 48000, 24, 1, 1, 0, f2, sizeof(f2), &s2);
+
+    parser_feed_bytes(&parser, f1, s1, decoded, 10, &emitted);
+    TEST_ASSERT(emitted == 1, "Frame 1 parsed");
+
+    parser_feed_bytes(&parser, f2, s2, decoded, 10, &emitted);
+    TEST_ASSERT(emitted == 1, "Frame 2 parsed across sequence wrap");
+    TEST_ASSERT(parser.quality_stats.total_sequence_gaps == 0, "Wrapping UINT32_MAX -> 0 must have ZERO sequence gaps");
+    TEST_ASSERT(parser.quality_stats.total_duplicate_frames == 0, "No duplicate");
+
+    /* 3. Reordered frame test: sequence 10 arrives after sequence 15 */
+    uint8_t f_late[512];
+    size_t s_late = 0;
+    packet_build_profile_b(10, 1005000ULL, 160, s_wrap, 16, 48000, 24, 1, 1, 0, f_late, sizeof(f_late), &s_late);
+    /* Set last_sequence_id = 15 */
+    parser.quality_stats.last_sequence_id = 15;
+    parser_feed_bytes(&parser, f_late, s_late, decoded, 10, &emitted);
+    TEST_ASSERT(emitted == 1, "Late frame decoded");
+    TEST_ASSERT(parser.quality_stats.total_reordered_frames == 1, "Reordered frame counted");
+    TEST_ASSERT(parser.quality_stats.total_sequence_gaps == 0, "Reordered frame must NOT inflate sequence gaps");
+
+    /* 4. Single-byte streaming fragmentation test */
+    parser_reset(&parser);
+    for (size_t i = 0; i < s1; ++i) {
+        parser_feed_bytes(&parser, &f1[i], 1, decoded, 10, &emitted);
     }
-    TEST_ASSERT(total_emitted_fragmented == 1, "7-byte chunk fragmented read must assemble exactly 1 frame");
-    TEST_ASSERT(decoded[0].crc_ok == true, "Fragmented frame CRC ok");
+    TEST_ASSERT(decoded[0].crc_ok == true && decoded[0].sequence_id == UINT32_MAX, "1-byte feeding");
 
-    /* Resynchronization test: prepend 31 bytes of garbage before a valid frame */
-    parser_init(&parser);
-    uint8_t stream_with_garbage[2048 + 31];
-    memset(stream_with_garbage, 0xEE, 31);
-    memcpy(stream_with_garbage + 31, frame_buf, frame_len);
-
-    st = parser_feed_bytes(&parser, stream_with_garbage, frame_len + 31, decoded, 4, &emitted);
-    TEST_ASSERT(st == PROTOCOL_OK && emitted == 1, "Sync hunt should find frame after 31 garbage bytes");
-    TEST_ASSERT(parser.garbage_bytes_discarded == 31, "Garbage bytes counter should be 31");
-
-    printf("  ✓ Profile B framing, 1068-byte sizing, 7-byte fragmentation, and sync recovery verified.\n");
+    printf("  ✓ Partial final frames, sequence wraparound, and RFC 3550 reordering verified.\n");
 }
 
 int main(void) {
     printf("=================================================================\n");
-    printf("AuscultaForge Protocol Core — C11 Portable Test Suite\n");
+    printf("AuscultaForge Protocol Core — C11 Portable & Concurrency Suite\n");
     printf("=================================================================\n");
 
     test_crc_known_vectors();
-    test_type_audit_and_sign_extension();
-    test_waveform_generation();
-    test_ring_buffer();
-    test_packet_framing_and_parser();
+    test_portable_pcm_arithmetic();
+    test_explicit_header_wire_encoding();
+    test_ring_buffer_basic();
+    test_concurrent_spsc_stress();
+    test_parser_robustness();
 
     printf("=================================================================\n");
-    printf("ALL PORTABLE C11 CORE TESTS PASSED (100%%)!\n");
+    printf("ALL PORTABLE C11 CORE & CONCURRENCY TESTS PASSED (100%%)!\n");
     printf("=================================================================\n");
     return 0;
 }

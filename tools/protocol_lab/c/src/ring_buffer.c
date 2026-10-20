@@ -1,6 +1,6 @@
 /**
  * @file ring_buffer.c
- * @brief Bounded Circular Buffer Implementation with Precise Accounting.
+ * @brief Lock-Free SPSC Circular Buffer Implementation using C11 Atomics.
  *
  * Course: EEE495 / EEE496 Senior Design Project — AuscultaForge
  * Module: C (Computer Application / Software Integration)
@@ -17,13 +17,19 @@ ProtocolStatus ring_buffer_init(
     size_t capacity
 ) {
     if (!rb || !storage) return PROTOCOL_ERR_NULL_PTR;
-    if (capacity == 0) return PROTOCOL_ERR_INVALID_PARAM;
+
+    /* Capacity must be a power of two >= 2 for lock-free modulo wrapping */
+    if (capacity < 2 || (capacity & (capacity - 1)) != 0) {
+        return PROTOCOL_ERR_INVALID_PARAM;
+    }
 
     rb->storage = storage;
     rb->capacity = capacity;
-    rb->head = 0;
-    rb->tail = 0;
-    rb->count = 0;
+    rb->mask = capacity - 1;
+
+    atomic_init(&rb->head, 0);
+    atomic_init(&rb->tail, 0);
+
     rb->total_samples_written = 0;
     rb->total_samples_read = 0;
     rb->overflow_events = 0;
@@ -36,9 +42,10 @@ ProtocolStatus ring_buffer_init(
 
 ProtocolStatus ring_buffer_reset(PcmRingBuffer *rb) {
     if (!rb) return PROTOCOL_ERR_NULL_PTR;
-    rb->head = 0;
-    rb->tail = 0;
-    rb->count = 0;
+
+    atomic_store_explicit(&rb->head, 0, memory_order_relaxed);
+    atomic_store_explicit(&rb->tail, 0, memory_order_relaxed);
+
     return PROTOCOL_OK;
 }
 
@@ -54,7 +61,12 @@ ProtocolStatus ring_buffer_push(
         return PROTOCOL_OK;
     }
 
-    size_t free_slots = rb->capacity - rb->count;
+    /* Producer loads its own head relaxed, loads consumer's tail with acquire */
+    size_t h = atomic_load_explicit(&rb->head, memory_order_relaxed);
+    size_t t = atomic_load_explicit(&rb->tail, memory_order_acquire);
+
+    size_t occupied = h - t;
+    size_t free_slots = (occupied < rb->capacity) ? (rb->capacity - occupied) : 0;
     size_t to_write = (count <= free_slots) ? count : free_slots;
 
     if (to_write < count) {
@@ -62,15 +74,13 @@ ProtocolStatus ring_buffer_push(
         rb->overflow_samples_dropped += (uint32_t)(count - to_write);
     }
 
+    /* Write samples into preallocated circular memory */
     for (size_t i = 0; i < to_write; ++i) {
-        rb->storage[rb->head] = samples[i];
-        rb->head = (rb->head + 1);
-        if (rb->head >= rb->capacity) {
-            rb->head = 0;
-        }
+        rb->storage[(h + i) & rb->mask] = samples[i];
     }
 
-    rb->count += to_write;
+    /* Publish newly written samples to Consumer using release semantics */
+    atomic_store_explicit(&rb->head, h + to_write, memory_order_release);
     rb->total_samples_written += to_write;
 
     if (samples_pushed) {
@@ -92,7 +102,11 @@ ProtocolStatus ring_buffer_pop(
         return PROTOCOL_OK;
     }
 
-    size_t available = rb->count;
+    /* Consumer loads its own tail relaxed, loads producer's head with acquire */
+    size_t t = atomic_load_explicit(&rb->tail, memory_order_relaxed);
+    size_t h = atomic_load_explicit(&rb->head, memory_order_acquire);
+
+    size_t available = h - t;
     size_t to_read = (count <= available) ? count : available;
 
     if (to_read < count) {
@@ -100,15 +114,13 @@ ProtocolStatus ring_buffer_pop(
         rb->underflow_samples_starved += (uint32_t)(count - to_read);
     }
 
+    /* Read samples from circular memory */
     for (size_t i = 0; i < to_read; ++i) {
-        out_samples[i] = rb->storage[rb->tail];
-        rb->tail = (rb->tail + 1);
-        if (rb->tail >= rb->capacity) {
-            rb->tail = 0;
-        }
+        out_samples[i] = rb->storage[(t + i) & rb->mask];
     }
 
-    rb->count -= to_read;
+    /* Publish newly freed space to Producer using release semantics */
+    atomic_store_explicit(&rb->tail, t + to_read, memory_order_release);
     rb->total_samples_read += to_read;
 
     if (samples_popped) {
@@ -130,21 +142,19 @@ ProtocolStatus ring_buffer_peek(
         return PROTOCOL_OK;
     }
 
-    size_t available = rb->count;
-    size_t to_peek = (count <= available) ? count : available;
-    size_t current_tail = rb->tail;
+    size_t t = atomic_load_explicit(&rb->tail, memory_order_relaxed);
+    size_t h = atomic_load_explicit(&rb->head, memory_order_acquire);
 
-    for (size_t i = 0; i < to_peek; ++i) {
-        out_samples[i] = rb->storage[current_tail];
-        current_tail = (current_tail + 1);
-        if (current_tail >= rb->capacity) {
-            current_tail = 0;
-        }
+    size_t available = h - t;
+    size_t to_read = (count <= available) ? count : available;
+
+    for (size_t i = 0; i < to_read; ++i) {
+        out_samples[i] = rb->storage[(t + i) & rb->mask];
     }
 
     if (samples_peeked) {
-        *samples_peeked = to_peek;
+        *samples_peeked = to_read;
     }
 
-    return (to_peek == count) ? PROTOCOL_OK : PROTOCOL_ERR_BUFFER_EMPTY;
+    return (to_read == count) ? PROTOCOL_OK : PROTOCOL_ERR_BUFFER_EMPTY;
 }

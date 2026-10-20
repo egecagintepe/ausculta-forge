@@ -23,10 +23,16 @@ PROFILE_B_HEADER_SIZE = 40
 PROFILE_B_TRAILER_SIZE = 4
 
 NOMINAL_SAMPLE_RATE_HZ = 48000
+NOMINAL_MEANINGFUL_BITS = 24
+NOMINAL_CONTAINER_BITS = 32
+NOMINAL_CHANNELS = 1
 PROFILE_B_SAMPLES_PER_FRAME = 256
 INT24_MAX = 8388607
 INT24_MIN = -8388608
 INT24_SCALE = 8388608.0
+
+MAX_DECODER_BUFFER_BYTES = 65536  # Safety bound preventing unbounded memory accumulation
+
 
 
 def crc16_ccitt(data: bytes, init: int = 0xFFFF, poly: int = 0x1021) -> int:
@@ -132,7 +138,8 @@ class StreamingProtocolDecoder:
     - Recovers stream lock automatically after encountering arbitrary line noise.
     - Slices combined / concatenated packets arriving in a single socket/pipe read.
     - Validates CRC-16 (Profile A) and CRC-32 (Profile B).
-    - Maintains exact sample-level continuity and error telemetry.
+    - Maintains exact sample-level continuity and error telemetry using RFC 3550 sequence logic.
+    - Strictly bounds internal memory accumulation to MAX_DECODER_BUFFER_BYTES.
     """
 
     def __init__(self) -> None:
@@ -146,6 +153,7 @@ class StreamingProtocolDecoder:
         self.total_frames_corrupted: int = 0
         self.total_sequence_gaps: int = 0
         self.total_duplicate_frames: int = 0
+        self.total_reordered_frames: int = 0
         self.total_timestamp_regressions: int = 0
         self.garbage_bytes_discarded: int = 0
         self.malformed_headers: int = 0
@@ -154,9 +162,13 @@ class StreamingProtocolDecoder:
         self.last_sample_index: Optional[int] = None
 
     def reset(self) -> None:
-        """Clear internal buffer and reset statistics."""
+        """Clear internal buffer and reset statistics for session reset/reconnection."""
         self._buffer.clear()
         self.reset_stats()
+
+    @property
+    def buffer_len(self) -> int:
+        return len(self._buffer)
 
     def feed_bytes(self, chunk: bytes) -> List[DecodedPacket]:
         """Feed arbitrary chunk of raw bytes and return all assembled frames."""
@@ -164,6 +176,13 @@ class StreamingProtocolDecoder:
             return []
 
         self._buffer.extend(chunk)
+
+        # Enforce memory safety bound
+        if len(self._buffer) > MAX_DECODER_BUFFER_BYTES:
+            excess = len(self._buffer) - MAX_DECODER_BUFFER_BYTES
+            self.garbage_bytes_discarded += excess
+            del self._buffer[:excess]
+
         packets: List[DecodedPacket] = []
 
         while len(self._buffer) >= 4:
@@ -238,8 +257,18 @@ class StreamingProtocolDecoder:
                     packets.append(pkt)
                     continue
 
-                raw_samples = np.frombuffer(frame_bytes[PROFILE_B_HEADER_SIZE:-PROFILE_B_TRAILER_SIZE], dtype="<i4")
-                norm = np.clip(raw_samples.astype(np.float32) / float(1 << (bits - 1)), -1.0, 1.0).astype(np.float32)
+                # Parse payload
+                payload_bytes_raw = frame_bytes[PROFILE_B_HEADER_SIZE:-PROFILE_B_TRAILER_SIZE]
+                raw_samples = np.frombuffer(payload_bytes_raw, dtype="<i4").copy()
+
+                # Conversion to float32
+                if enc == 2:  # MSB aligned
+                    lsb_samples = np.right_shift(raw_samples, 8)
+                else:
+                    lsb_samples = raw_samples
+
+                scale = float(1 << (bits - 1))
+                norm_samples = np.clip(lsb_samples.astype(np.float32) / scale, -1.0, 1.0)
 
                 pkt = DecodedPacket(
                     sequence_id=seq,
@@ -254,17 +283,17 @@ class StreamingProtocolDecoder:
                     is_profile_b=True,
                     crc_ok=True,
                     raw_samples=raw_samples,
-                    normalized_samples=norm,
+                    normalized_samples=norm_samples,
                 )
                 self._update_quality_stats(pkt)
                 packets.append(pkt)
 
             else:
-                # Profile A
+                # Profile A (16-byte header)
                 if len(self._buffer) < PROFILE_A_HEADER_SIZE:
                     break
 
-                magic, ver, mtype, seq, ts_us, count, flags = struct.unpack(
+                magic, ver, mtype, seq, ts_32, count, flags = struct.unpack(
                     "<2sBBIIHH",
                     bytes(self._buffer[:PROFILE_A_HEADER_SIZE]),
                 )
@@ -290,11 +319,11 @@ class StreamingProtocolDecoder:
                     self.total_frames_corrupted += 1
                     pkt = DecodedPacket(
                         sequence_id=seq,
-                        timestamp_us=ts_us,
-                        sample_index_start=seq * count,
+                        timestamp_us=ts_32,
+                        sample_index_start=0,
                         sample_count=count,
                         sample_rate_hz=NOMINAL_SAMPLE_RATE_HZ,
-                        meaningful_bits=24,
+                        meaningful_bits=NOMINAL_MEANINGFUL_BITS,
                         flags=flags,
                         encoding=1,
                         mcu_buffer_drops=0,
@@ -306,23 +335,24 @@ class StreamingProtocolDecoder:
                     packets.append(pkt)
                     continue
 
-                raw_samples = np.frombuffer(frame_bytes[PROFILE_A_HEADER_SIZE:-PROFILE_A_TRAILER_SIZE], dtype="<i4")
-                norm = np.clip(raw_samples.astype(np.float32) / float(1 << 23), -1.0, 1.0).astype(np.float32)
+                payload_bytes_raw = frame_bytes[PROFILE_A_HEADER_SIZE:-PROFILE_A_TRAILER_SIZE]
+                raw_samples = np.frombuffer(payload_bytes_raw, dtype="<i4").copy()
+                norm_samples = np.clip(raw_samples.astype(np.float32) / float(INT24_SCALE), -1.0, 1.0)
 
                 pkt = DecodedPacket(
                     sequence_id=seq,
-                    timestamp_us=ts_us,
-                    sample_index_start=seq * count,
+                    timestamp_us=ts_32,
+                    sample_index_start=0,
                     sample_count=count,
                     sample_rate_hz=NOMINAL_SAMPLE_RATE_HZ,
-                    meaningful_bits=24,
+                    meaningful_bits=NOMINAL_MEANINGFUL_BITS,
                     flags=flags,
                     encoding=1,
                     mcu_buffer_drops=0,
                     is_profile_b=False,
                     crc_ok=True,
                     raw_samples=raw_samples,
-                    normalized_samples=norm,
+                    normalized_samples=norm_samples,
                 )
                 self._update_quality_stats(pkt)
                 packets.append(pkt)
@@ -339,14 +369,21 @@ class StreamingProtocolDecoder:
             self.last_sample_index = pkt.sample_index_start
             return
 
-        # Sequence gap / duplicate check
-        if pkt.sequence_id == self.last_sequence_id:
+        # RFC 3550 signed sequence difference check
+        delta = (pkt.sequence_id - self.last_sequence_id)
+        if delta >= 0x80000000:
+            delta -= 0x100000000
+        elif delta < -0x80000000:
+            delta += 0x100000000
+
+        if delta == 1:
+            pass  # Strictly sequential
+        elif delta > 1:
+            self.total_sequence_gaps += (delta - 1)
+        elif delta == 0:
             self.total_duplicate_frames += 1
         else:
-            expected_seq = (self.last_sequence_id + 1) & 0xFFFFFFFF
-            if pkt.sequence_id != expected_seq:
-                gap = (pkt.sequence_id - self.last_sequence_id - 1) & 0xFFFFFFFF
-                self.total_sequence_gaps += gap
+            self.total_reordered_frames += 1
 
         # Timestamp regression check
         if self.last_timestamp_us is not None and pkt.timestamp_us < self.last_timestamp_us:

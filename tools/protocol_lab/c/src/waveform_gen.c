@@ -176,7 +176,13 @@ ProtocolStatus serialize_samples_le(
     if (!in_samples || !out_bytes) return PROTOCOL_ERR_NULL_PTR;
 
     for (size_t i = 0; i < count; ++i) {
-        uint32_t u = (uint32_t)in_samples[i];
+        int32_t s = in_samples[i];
+        uint32_t u;
+        if (s < 0) {
+            u = (uint32_t)((int64_t)s + 0x100000000LL);
+        } else {
+            u = (uint32_t)s;
+        }
         out_bytes[i * 4 + 0] = (uint8_t)(u & 0xFFU);
         out_bytes[i * 4 + 1] = (uint8_t)((u >> 8) & 0xFFU);
         out_bytes[i * 4 + 2] = (uint8_t)((u >> 16) & 0xFFU);
@@ -198,7 +204,11 @@ ProtocolStatus deserialize_samples_le(
         uint32_t b2 = (uint32_t)in_bytes[i * 4 + 2];
         uint32_t b3 = (uint32_t)in_bytes[i * 4 + 3];
         uint32_t u = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
-        out_samples[i] = (int32_t)u;
+        if (u & 0x80000000U) {
+            out_samples[i] = (int32_t)((int64_t)u - 0x100000000LL);
+        } else {
+            out_samples[i] = (int32_t)u;
+        }
     }
     return PROTOCOL_OK;
 }

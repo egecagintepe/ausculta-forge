@@ -1,11 +1,18 @@
 /**
  * @file waveform_gen.h
- * @brief Deterministic Waveform Generators & Bit-Alignment Utilities.
+ * @brief Deterministic Waveform Generators & Portable PCM Arithmetic.
  *
  * Course: EEE495 / EEE496 Senior Design Project — AuscultaForge
  * Module: C (Computer Application / Software Integration)
  * Author: Ege Çağın Tepe (Module C)
  * Reviewer: Ozan (Module B)
+ *
+ * PORTABLE C11 ARITHMETIC RULES:
+ * ------------------------------
+ * 1. ZERO implementation-defined right shifts on negative signed integers.
+ * 2. ZERO unsafe pointer aliasing / type punning.
+ * 3. Exact mathematical two's complement sign extension using standard in-range conversion.
+ * 4. Explicit byte-by-byte little-endian serialization.
  */
 
 #ifndef WAVEFORM_GEN_H
@@ -58,11 +65,6 @@ ProtocolStatus waveform_gen_init(
 
 /**
  * @brief Fill an output buffer with deterministic 32-bit container samples.
- *
- * @param state Generator state.
- * @param out_samples Output array of int32_t.
- * @param count Number of samples to generate.
- * @return PROTOCOL_OK or error code.
  */
 ProtocolStatus waveform_gen_fill_block(
     WaveformGeneratorState *state,
@@ -72,11 +74,6 @@ ProtocolStatus waveform_gen_fill_block(
 
 /**
  * @brief Serialize an array of int32_t samples to little-endian bytes.
- *
- * @param in_samples Source int32_t array.
- * @param count Number of samples.
- * @param out_bytes Destination byte buffer (must have at least count * 4 bytes).
- * @return PROTOCOL_OK or error code.
  */
 ProtocolStatus serialize_samples_le(
     const int32_t *in_samples,
@@ -94,30 +91,93 @@ ProtocolStatus deserialize_samples_le(
 );
 
 /**
- * @brief Sign-extend a raw 24-bit integer word into a signed 32-bit int.
+ * @brief Portably sign-extend a raw 24-bit integer into a signed 32-bit int.
+ *
+ * Uses strictly conforming integer arithmetic (no implementation-defined right shift).
+ * Range mapping:
+ *   [0x000000, 0x7FFFFF] -> [0, +8388607]
+ *   [0x800000, 0xFFFFFF] -> [-8388608, -1]
  */
 static inline int32_t sign_extend_24_to_32(uint32_t raw_24) {
-    return (int32_t)((raw_24 & 0x00FFFFFFU) << 8) >> 8;
+    uint32_t u = raw_24 & 0x00FFFFFFU;
+    if (u & 0x00800000U) {
+        return (int32_t)((int64_t)u - 0x01000000LL);
+    }
+    return (int32_t)u;
+}
+
+/**
+ * @brief Portably sign-extend a generic N-bit signed integer word to int32_t.
+ *
+ * @param raw_val Unsigned raw word containing the N-bit value.
+ * @param meaningful_bits Bit depth (1 to 32).
+ * @param out_val Pointer to receive converted int32_t.
+ * @return PROTOCOL_OK or PROTOCOL_ERR_INVALID_PARAM if bits < 1 or bits > 32.
+ */
+static inline ProtocolStatus sign_extend_n_to_32(
+    uint32_t raw_val,
+    uint8_t meaningful_bits,
+    int32_t *out_val
+) {
+    if (!out_val) return PROTOCOL_ERR_NULL_PTR;
+    if (meaningful_bits < 1 || meaningful_bits > 32) return PROTOCOL_ERR_INVALID_PARAM;
+
+    if (meaningful_bits == 32) {
+        if (raw_val & 0x80000000U) {
+            *out_val = (int32_t)((int64_t)raw_val - 0x100000000LL);
+        } else {
+            *out_val = (int32_t)raw_val;
+        }
+        return PROTOCOL_OK;
+    }
+
+    uint32_t mask = (1U << meaningful_bits) - 1U;
+    uint32_t sign_bit = 1U << (meaningful_bits - 1U);
+    uint32_t u = raw_val & mask;
+    if (u & sign_bit) {
+        int64_t modulus = (int64_t)1LL << meaningful_bits;
+        *out_val = (int32_t)((int64_t)u - modulus);
+    } else {
+        *out_val = (int32_t)u;
+    }
+    return PROTOCOL_OK;
 }
 
 /**
  * @brief Convert LSB-aligned 24-bit signed integer to MSB-aligned (left-justified) 32-bit word.
+ *
+ * Places 24 meaningful bits into bits [31..8], zeroing bits [7..0].
  */
 static inline int32_t lsb_to_msb_aligned(int32_t lsb_val) {
-    return (int32_t)((uint32_t)(lsb_val & 0x00FFFFFFU) << 8);
+    uint32_t u24 = ((uint32_t)lsb_val) & 0x00FFFFFFU;
+    uint32_t u32 = u24 << 8;
+    if (u32 & 0x80000000U) {
+        return (int32_t)((int64_t)u32 - 0x100000000LL);
+    }
+    return (int32_t)u32;
 }
 
 /**
  * @brief Convert MSB-aligned 32-bit word back to LSB-aligned 24-bit signed integer.
+ *
+ * Shifts bits [31..8] down to [23..0] and performs portable sign extension.
  */
 static inline int32_t msb_to_lsb_aligned(int32_t msb_val) {
-    return (int32_t)msb_val >> 8;
+    uint32_t u32;
+    if (msb_val < 0) {
+        u32 = (uint32_t)((int64_t)msb_val + 0x100000000LL);
+    } else {
+        u32 = (uint32_t)msb_val;
+    }
+    uint32_t u24 = (u32 >> 8) & 0x00FFFFFFU;
+    return sign_extend_24_to_32(u24);
 }
 
 /**
  * @brief Convert an integer sample to normalized float32 [-1.0, +1.0].
  */
 static inline float sample_to_float32(int32_t sample, uint8_t meaningful_bits, bool msb_aligned) {
+    if (meaningful_bits < 1 || meaningful_bits > 32) return 0.0f;
     int32_t lsb_val = msb_aligned ? msb_to_lsb_aligned(sample) : sample;
     double scale = (double)(1LL << (meaningful_bits - 1));
     double norm = (double)lsb_val / scale;

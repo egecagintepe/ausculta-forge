@@ -123,10 +123,10 @@ typedef enum {
 /* 3. Wire Framing Structs                                                   */
 /* ========================================================================= */
 
-#pragma pack(push, 1)
-
 /**
- * @brief Profile A: 16-Byte Reference Header (Little-Endian).
+ * @brief Profile A: 16-Byte Reference Header.
+ *
+ * Wire encoding is performed field-by-field in little-endian byte order.
  */
 typedef struct {
     uint8_t  magic[2];          /* 0x55, 0xAA (0xAA55) */
@@ -139,11 +139,10 @@ typedef struct {
 } ProfileAHeader;
 
 /**
- * @brief Profile B: Proposed 40-Byte Expanded Header (Little-Endian).
+ * @brief Profile B: Proposed 40-Byte Expanded Header.
  *
- * All multi-byte members are placed on natural alignment boundaries
- * (uint64 on 8B, uint32 on 4B, uint16 on 2B) to ensure 100% identical layout
- * across x86_64, ARM, and ESP32-S3 (Xtensa LX7).
+ * Wire encoding is performed field-by-field in little-endian byte order.
+ * All members are defined on natural alignment boundaries.
  */
 typedef struct {
     uint32_t magic;             /* 4B: 0xAF534331 ("1CSA" in LE) */
@@ -162,12 +161,6 @@ typedef struct {
     uint16_t mcu_buffer_drops;  /* 2B: Dropped sample counter */
 } ProfileBHeader;
 
-#pragma pack(pop)
-
-/* Compile-time verification of struct sizes */
-typedef char assert_profile_a_size[(sizeof(ProfileAHeader) == PROFILE_A_HEADER_SIZE) ? 1 : -1];
-typedef char assert_profile_b_size[(sizeof(ProfileBHeader) == PROFILE_B_HEADER_SIZE) ? 1 : -1];
-
 /* ========================================================================= */
 /* 4. Stream Quality Accounting Record                                       */
 /* ========================================================================= */
@@ -179,6 +172,7 @@ typedef struct {
     uint32_t total_frames_corrupted;
     uint32_t total_sequence_gaps;
     uint32_t total_duplicate_frames;
+    uint32_t total_reordered_frames;
     uint32_t total_buffer_overflows;
     uint32_t total_timestamp_regressions;
     uint32_t last_sequence_id;

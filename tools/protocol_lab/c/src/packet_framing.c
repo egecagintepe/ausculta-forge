@@ -74,7 +74,187 @@ uint32_t adler32_compute(const uint8_t *data, size_t length) {
 }
 
 /* ========================================================================= */
-/* 2. Packet Builders                                                        */
+/* 2. Explicit Field-by-Field Header Encoders & Decoders                     */
+/* ========================================================================= */
+
+ProtocolStatus packet_encode_header_profile_b(const ProfileBHeader *hdr, uint8_t *out_bytes) {
+    if (!hdr || !out_bytes) return PROTOCOL_ERR_NULL_PTR;
+
+    /* Offset 0..3: magic (0xAF534331 in little-endian: "1CSA") */
+    out_bytes[0] = (uint8_t)(hdr->magic & 0xFFU);
+    out_bytes[1] = (uint8_t)((hdr->magic >> 8) & 0xFFU);
+    out_bytes[2] = (uint8_t)((hdr->magic >> 16) & 0xFFU);
+    out_bytes[3] = (uint8_t)((hdr->magic >> 24) & 0xFFU);
+
+    /* Offset 4: version */
+    out_bytes[4] = hdr->version;
+
+    /* Offset 5: msg_type */
+    out_bytes[5] = hdr->msg_type;
+
+    /* Offset 6..7: flags (uint16_t LE) */
+    out_bytes[6] = (uint8_t)(hdr->flags & 0xFFU);
+    out_bytes[7] = (uint8_t)((hdr->flags >> 8) & 0xFFU);
+
+    /* Offset 8..11: sequence_id (uint32_t LE) */
+    out_bytes[8]  = (uint8_t)(hdr->sequence_id & 0xFFU);
+    out_bytes[9]  = (uint8_t)((hdr->sequence_id >> 8) & 0xFFU);
+    out_bytes[10] = (uint8_t)((hdr->sequence_id >> 16) & 0xFFU);
+    out_bytes[11] = (uint8_t)((hdr->sequence_id >> 24) & 0xFFU);
+
+    /* Offset 12..15: sample_rate_hz (uint32_t LE) */
+    out_bytes[12] = (uint8_t)(hdr->sample_rate_hz & 0xFFU);
+    out_bytes[13] = (uint8_t)((hdr->sample_rate_hz >> 8) & 0xFFU);
+    out_bytes[14] = (uint8_t)((hdr->sample_rate_hz >> 16) & 0xFFU);
+    out_bytes[15] = (uint8_t)((hdr->sample_rate_hz >> 24) & 0xFFU);
+
+    /* Offset 16..23: timestamp_us (uint64_t LE) */
+    out_bytes[16] = (uint8_t)(hdr->timestamp_us & 0xFFU);
+    out_bytes[17] = (uint8_t)((hdr->timestamp_us >> 8) & 0xFFU);
+    out_bytes[18] = (uint8_t)((hdr->timestamp_us >> 16) & 0xFFU);
+    out_bytes[19] = (uint8_t)((hdr->timestamp_us >> 24) & 0xFFU);
+    out_bytes[20] = (uint8_t)((hdr->timestamp_us >> 32) & 0xFFU);
+    out_bytes[21] = (uint8_t)((hdr->timestamp_us >> 40) & 0xFFU);
+    out_bytes[22] = (uint8_t)((hdr->timestamp_us >> 48) & 0xFFU);
+    out_bytes[23] = (uint8_t)((hdr->timestamp_us >> 56) & 0xFFU);
+
+    /* Offset 24..31: sample_index_start (uint64_t LE) */
+    out_bytes[24] = (uint8_t)(hdr->sample_index_start & 0xFFU);
+    out_bytes[25] = (uint8_t)((hdr->sample_index_start >> 8) & 0xFFU);
+    out_bytes[26] = (uint8_t)((hdr->sample_index_start >> 16) & 0xFFU);
+    out_bytes[27] = (uint8_t)((hdr->sample_index_start >> 24) & 0xFFU);
+    out_bytes[28] = (uint8_t)((hdr->sample_index_start >> 32) & 0xFFU);
+    out_bytes[29] = (uint8_t)((hdr->sample_index_start >> 40) & 0xFFU);
+    out_bytes[30] = (uint8_t)((hdr->sample_index_start >> 48) & 0xFFU);
+    out_bytes[31] = (uint8_t)((hdr->sample_index_start >> 56) & 0xFFU);
+
+    /* Offset 32..33: sample_count (uint16_t LE) */
+    out_bytes[32] = (uint8_t)(hdr->sample_count & 0xFFU);
+    out_bytes[33] = (uint8_t)((hdr->sample_count >> 8) & 0xFFU);
+
+    /* Offset 34: meaningful_bits */
+    out_bytes[34] = hdr->meaningful_bits;
+
+    /* Offset 35: container_bits */
+    out_bytes[35] = hdr->container_bits;
+
+    /* Offset 36: channels */
+    out_bytes[36] = hdr->channels;
+
+    /* Offset 37: encoding */
+    out_bytes[37] = hdr->encoding;
+
+    /* Offset 38..39: mcu_buffer_drops (uint16_t LE) */
+    out_bytes[38] = (uint8_t)(hdr->mcu_buffer_drops & 0xFFU);
+    out_bytes[39] = (uint8_t)((hdr->mcu_buffer_drops >> 8) & 0xFFU);
+
+    return PROTOCOL_OK;
+}
+
+ProtocolStatus packet_decode_header_profile_b(const uint8_t *in_bytes, ProfileBHeader *hdr) {
+    if (!in_bytes || !hdr) return PROTOCOL_ERR_NULL_PTR;
+
+    hdr->magic = (uint32_t)in_bytes[0] |
+                 ((uint32_t)in_bytes[1] << 8) |
+                 ((uint32_t)in_bytes[2] << 16) |
+                 ((uint32_t)in_bytes[3] << 24);
+
+    hdr->version = in_bytes[4];
+    hdr->msg_type = in_bytes[5];
+
+    hdr->flags = (uint16_t)in_bytes[6] | ((uint16_t)in_bytes[7] << 8);
+
+    hdr->sequence_id = (uint32_t)in_bytes[8] |
+                       ((uint32_t)in_bytes[9] << 8) |
+                       ((uint32_t)in_bytes[10] << 16) |
+                       ((uint32_t)in_bytes[11] << 24);
+
+    hdr->sample_rate_hz = (uint32_t)in_bytes[12] |
+                          ((uint32_t)in_bytes[13] << 8) |
+                          ((uint32_t)in_bytes[14] << 16) |
+                          ((uint32_t)in_bytes[15] << 24);
+
+    hdr->timestamp_us = (uint64_t)in_bytes[16] |
+                        ((uint64_t)in_bytes[17] << 8) |
+                        ((uint64_t)in_bytes[18] << 16) |
+                        ((uint64_t)in_bytes[19] << 24) |
+                        ((uint64_t)in_bytes[20] << 32) |
+                        ((uint64_t)in_bytes[21] << 40) |
+                        ((uint64_t)in_bytes[22] << 48) |
+                        ((uint64_t)in_bytes[23] << 56);
+
+    hdr->sample_index_start = (uint64_t)in_bytes[24] |
+                              ((uint64_t)in_bytes[25] << 8) |
+                              ((uint64_t)in_bytes[26] << 16) |
+                              ((uint64_t)in_bytes[27] << 24) |
+                              ((uint64_t)in_bytes[28] << 32) |
+                              ((uint64_t)in_bytes[29] << 40) |
+                              ((uint64_t)in_bytes[30] << 48) |
+                              ((uint64_t)in_bytes[31] << 56);
+
+    hdr->sample_count = (uint16_t)in_bytes[32] | ((uint16_t)in_bytes[33] << 8);
+    hdr->meaningful_bits = in_bytes[34];
+    hdr->container_bits = in_bytes[35];
+    hdr->channels = in_bytes[36];
+    hdr->encoding = in_bytes[37];
+    hdr->mcu_buffer_drops = (uint16_t)in_bytes[38] | ((uint16_t)in_bytes[39] << 8);
+
+    return PROTOCOL_OK;
+}
+
+ProtocolStatus packet_encode_header_profile_a(const ProfileAHeader *hdr, uint8_t *out_bytes) {
+    if (!hdr || !out_bytes) return PROTOCOL_ERR_NULL_PTR;
+
+    out_bytes[0] = hdr->magic[0];
+    out_bytes[1] = hdr->magic[1];
+    out_bytes[2] = hdr->version;
+    out_bytes[3] = hdr->msg_type;
+
+    out_bytes[4] = (uint8_t)(hdr->sequence & 0xFFU);
+    out_bytes[5] = (uint8_t)((hdr->sequence >> 8) & 0xFFU);
+    out_bytes[6] = (uint8_t)((hdr->sequence >> 16) & 0xFFU);
+    out_bytes[7] = (uint8_t)((hdr->sequence >> 24) & 0xFFU);
+
+    out_bytes[8]  = (uint8_t)(hdr->timestamp_us & 0xFFU);
+    out_bytes[9]  = (uint8_t)((hdr->timestamp_us >> 8) & 0xFFU);
+    out_bytes[10] = (uint8_t)((hdr->timestamp_us >> 16) & 0xFFU);
+    out_bytes[11] = (uint8_t)((hdr->timestamp_us >> 24) & 0xFFU);
+
+    out_bytes[12] = (uint8_t)(hdr->sample_count & 0xFFU);
+    out_bytes[13] = (uint8_t)((hdr->sample_count >> 8) & 0xFFU);
+
+    out_bytes[14] = (uint8_t)(hdr->flags & 0xFFU);
+    out_bytes[15] = (uint8_t)((hdr->flags >> 8) & 0xFFU);
+
+    return PROTOCOL_OK;
+}
+
+ProtocolStatus packet_decode_header_profile_a(const uint8_t *in_bytes, ProfileAHeader *hdr) {
+    if (!in_bytes || !hdr) return PROTOCOL_ERR_NULL_PTR;
+
+    hdr->magic[0] = in_bytes[0];
+    hdr->magic[1] = in_bytes[1];
+    hdr->version = in_bytes[2];
+    hdr->msg_type = in_bytes[3];
+
+    hdr->sequence = (uint32_t)in_bytes[4] |
+                    ((uint32_t)in_bytes[5] << 8) |
+                    ((uint32_t)in_bytes[6] << 16) |
+                    ((uint32_t)in_bytes[7] << 24);
+
+    hdr->timestamp_us = (uint32_t)in_bytes[8] |
+                        ((uint32_t)in_bytes[9] << 8) |
+                        ((uint32_t)in_bytes[10] << 16) |
+                        ((uint32_t)in_bytes[11] << 24);
+
+    hdr->sample_count = (uint16_t)in_bytes[12] | ((uint16_t)in_bytes[13] << 8);
+    hdr->flags = (uint16_t)in_bytes[14] | ((uint16_t)in_bytes[15] << 8);
+
+    return PROTOCOL_OK;
+}
+
+/* ========================================================================= */
+/* 3. Packet Builders                                                        */
 /* ========================================================================= */
 
 ProtocolStatus packet_build_profile_a(
@@ -103,12 +283,13 @@ ProtocolStatus packet_build_profile_a(
     header.sample_count = count;
     header.flags = flags;
 
-    memcpy(out_buffer, &header, PROFILE_A_HEADER_SIZE);
+    packet_encode_header_profile_a(&header, out_buffer);
 
-    /* Serialize samples little-endian */
+    /* Serialize samples little-endian without type punning */
     uint8_t *payload_ptr = out_buffer + PROFILE_A_HEADER_SIZE;
     for (size_t i = 0; i < count; ++i) {
-        uint32_t u = (uint32_t)samples[i];
+        int32_t s = samples[i];
+        uint32_t u = (s < 0) ? (uint32_t)((int64_t)s + 0x100000000LL) : (uint32_t)s;
         payload_ptr[i * 4 + 0] = (uint8_t)(u & 0xFFU);
         payload_ptr[i * 4 + 1] = (uint8_t)((u >> 8) & 0xFFU);
         payload_ptr[i * 4 + 2] = (uint8_t)((u >> 16) & 0xFFU);
@@ -164,12 +345,13 @@ ProtocolStatus packet_build_profile_b(
     header.encoding = encoding;
     header.mcu_buffer_drops = mcu_drops;
 
-    memcpy(out_buffer, &header, PROFILE_B_HEADER_SIZE);
+    packet_encode_header_profile_b(&header, out_buffer);
 
-    /* Serialize samples little-endian */
+    /* Serialize samples little-endian without type punning */
     uint8_t *payload_ptr = out_buffer + PROFILE_B_HEADER_SIZE;
     for (size_t i = 0; i < count; ++i) {
-        uint32_t u = (uint32_t)samples[i];
+        int32_t s = samples[i];
+        uint32_t u = (s < 0) ? (uint32_t)((int64_t)s + 0x100000000LL) : (uint32_t)s;
         payload_ptr[i * 4 + 0] = (uint8_t)(u & 0xFFU);
         payload_ptr[i * 4 + 1] = (uint8_t)((u >> 8) & 0xFFU);
         payload_ptr[i * 4 + 2] = (uint8_t)((u >> 16) & 0xFFU);
@@ -191,10 +373,16 @@ ProtocolStatus packet_build_profile_b(
 }
 
 /* ========================================================================= */
-/* 3. Streaming Parser                                                       */
+/* 4. Streaming Parser                                                       */
 /* ========================================================================= */
 
 ProtocolStatus parser_init(StreamPacketParser *parser) {
+    if (!parser) return PROTOCOL_ERR_NULL_PTR;
+    memset(parser, 0, sizeof(StreamPacketParser));
+    return PROTOCOL_OK;
+}
+
+ProtocolStatus parser_reset(StreamPacketParser *parser) {
     if (!parser) return PROTOCOL_ERR_NULL_PTR;
     memset(parser, 0, sizeof(StreamPacketParser));
     return PROTOCOL_OK;
@@ -243,6 +431,7 @@ ProtocolStatus parser_feed_bytes(
                     break;
                 }
             }
+
             /* Check Profile A magic: 0x55, 0xAA */
             if (parser->buffer[i + 0] == PROFILE_A_MAGIC_BYTE0 &&
                 parser->buffer[i + 1] == PROFILE_A_MAGIC_BYTE1) {
@@ -253,7 +442,7 @@ ProtocolStatus parser_feed_bytes(
         }
 
         if (!found_profile_b && !found_profile_a) {
-            /* No sync magic anywhere in buffer: discard up to the last 3 bytes */
+            /* No magic found in buffer: preserve trailing 3 bytes for boundary matches */
             if (parser->buffer_len > 3) {
                 size_t discarded = parser->buffer_len - 3;
                 parser->garbage_bytes_discarded += (uint32_t)discarded;
@@ -263,8 +452,8 @@ ProtocolStatus parser_feed_bytes(
             break;
         }
 
+        /* Discard any pre-sync garbage bytes */
         if (sync_idx > 0) {
-            /* Discard garbage preceding sync magic */
             parser->garbage_bytes_discarded += (uint32_t)sync_idx;
             memmove(parser->buffer, parser->buffer + sync_idx, parser->buffer_len - sync_idx);
             parser->buffer_len -= sync_idx;
@@ -273,12 +462,12 @@ ProtocolStatus parser_feed_bytes(
         /* 2. Process discovered frame */
         if (found_profile_b) {
             if (parser->buffer_len < PROFILE_B_HEADER_SIZE) {
-                /* Incomplete header: wait for more bytes */
+                /* Incomplete header: wait for subsequent bytes */
                 break;
             }
 
             ProfileBHeader header;
-            memcpy(&header, parser->buffer, PROFILE_B_HEADER_SIZE);
+            packet_decode_header_profile_b(parser->buffer, &header);
 
             if (header.version != PROTOCOL_VERSION_MAJOR || header.sample_count == 0 || header.sample_count > 1024) {
                 /* Malformed header: slide 4 bytes and search again */
@@ -312,7 +501,7 @@ ProtocolStatus parser_feed_bytes(
             df->sample_count = header.sample_count;
             df->sample_rate_hz = header.sample_rate_hz;
             df->meaningful_bits = header.meaningful_bits;
-            df->flags = header.flags;
+            df->flags = (uint8_t)header.flags;
             df->encoding = header.encoding;
             df->mcu_buffer_drops = header.mcu_buffer_drops;
             df->is_profile_b = true;
@@ -334,14 +523,19 @@ ProtocolStatus parser_feed_bytes(
                 uint32_t b1 = (uint32_t)payload_ptr[i * 4 + 1];
                 uint32_t b2 = (uint32_t)payload_ptr[i * 4 + 2];
                 uint32_t b3 = (uint32_t)payload_ptr[i * 4 + 3];
-                df->samples[i] = (int32_t)(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
+                uint32_t u = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+                if (u & 0x80000000U) {
+                    df->samples[i] = (int32_t)((int64_t)u - 0x100000000LL);
+                } else {
+                    df->samples[i] = (int32_t)u;
+                }
             }
 
             parser->valid_packets_parsed++;
             update_stream_quality_stats(&parser->quality_stats, df);
             (*frames_emitted)++;
 
-            /* Consume entire frame */
+            /* Consume entire valid frame */
             memmove(parser->buffer, parser->buffer + total_frame_len, parser->buffer_len - total_frame_len);
             parser->buffer_len -= total_frame_len;
 
@@ -351,7 +545,7 @@ ProtocolStatus parser_feed_bytes(
             }
 
             ProfileAHeader header;
-            memcpy(&header, parser->buffer, PROFILE_A_HEADER_SIZE);
+            packet_decode_header_profile_a(parser->buffer, &header);
 
             if (header.version != 1 || header.sample_count == 0 || header.sample_count > 1024) {
                 parser->malformed_headers++;
@@ -374,7 +568,7 @@ ProtocolStatus parser_feed_bytes(
             DecodedFrame *df = &out_frames[*frames_emitted];
             df->sequence_id = header.sequence;
             df->timestamp_us = (uint64_t)header.timestamp_us;
-            df->sample_index_start = (uint64_t)header.sequence * (uint64_t)header.sample_count;
+            df->sample_index_start = 0;
             df->sample_count = header.sample_count;
             df->sample_rate_hz = NOMINAL_SAMPLE_RATE_HZ;
             df->meaningful_bits = NOMINAL_MEANINGFUL_BITS;
@@ -399,7 +593,12 @@ ProtocolStatus parser_feed_bytes(
                 uint32_t b1 = (uint32_t)payload_ptr[i * 4 + 1];
                 uint32_t b2 = (uint32_t)payload_ptr[i * 4 + 2];
                 uint32_t b3 = (uint32_t)payload_ptr[i * 4 + 3];
-                df->samples[i] = (int32_t)(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
+                uint32_t u = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+                if (u & 0x80000000U) {
+                    df->samples[i] = (int32_t)((int64_t)u - 0x100000000LL);
+                } else {
+                    df->samples[i] = (int32_t)u;
+                }
             }
 
             parser->valid_packets_parsed++;
@@ -417,11 +616,6 @@ ProtocolStatus parser_feed_bytes(
 void update_stream_quality_stats(StreamQualityStats *stats, const DecodedFrame *frame) {
     if (!stats || !frame) return;
 
-    if (!frame->crc_ok) {
-        stats->total_frames_corrupted++;
-        return;
-    }
-
     stats->total_frames_received++;
     stats->total_samples_received += frame->sample_count;
 
@@ -433,17 +627,17 @@ void update_stream_quality_stats(StreamQualityStats *stats, const DecodedFrame *
         return;
     }
 
-    /* Sequence gap / duplicate check */
-    if (frame->sequence_id == stats->last_sequence_id) {
+    /* Standard RFC 3550 signed sequence difference check */
+    int32_t delta = (int32_t)(frame->sequence_id - stats->last_sequence_id);
+    if (delta == 1) {
+        /* Strictly sequential frame */
+    } else if (delta > 1) {
+        stats->total_sequence_gaps += (uint32_t)(delta - 1);
+    } else if (delta == 0) {
         stats->total_duplicate_frames++;
     } else {
-        uint32_t expected_seq = stats->last_sequence_id + 1;
-        if (frame->sequence_id != expected_seq) {
-            uint32_t gap = (frame->sequence_id > stats->last_sequence_id) ?
-                           (frame->sequence_id - stats->last_sequence_id - 1) :
-                           (UINT32_MAX - stats->last_sequence_id + frame->sequence_id);
-            stats->total_sequence_gaps += gap;
-        }
+        /* delta < 0: out-of-order / reordered frame */
+        stats->total_reordered_frames++;
     }
 
     /* Timestamp regression check */
