@@ -8,9 +8,14 @@ import {
   Terminal,
   Trash2,
   Check,
-  ShieldCheck
+  ShieldCheck,
+  Folder,
+  RefreshCw,
+  HardDrive,
+  Monitor
 } from 'lucide-react';
 import { FilterPreset, FilterStrength } from '../types';
+import { bridgeClient } from '../api/bridgeClient';
 
 interface SettingsViewProps {
   isDark: boolean;
@@ -248,6 +253,72 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               >
                 Open Terminal (Ctrl+Shift+D)
               </button>
+            </div>
+          </div>
+
+          {/* 5. Desktop Workstation & Storage Configuration */}
+          <div
+            className="rounded-xl border p-5 flex flex-col gap-4 shadow-xs"
+            style={{
+              backgroundColor: 'var(--surface-card)',
+              borderColor: 'var(--border-subtle)',
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-mono-code text-xs font-bold text-[var(--on-surface)] uppercase">
+                <Monitor size={15} className="text-[var(--accent-oxblood)]" />
+                <span>Desktop Engineering Workstation</span>
+              </div>
+              <span className="font-mono-code text-[10px] px-2 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--on-surface-variant)] border border-[var(--border-subtle)]">
+                v0.1.0-alpha.1 · Windows x64
+              </span>
+            </div>
+
+            <p className="text-xs text-[var(--on-surface-variant)] leading-relaxed">
+              AuscultaForge Desktop runs as a self-contained workstation managing a native Python DSP backend with dynamic port allocation, per-instance authentication tokens, and isolated Windows user-data storage.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[var(--border-subtle)]">
+              {/* Storage Path Card */}
+              <div className="p-3 rounded-lg bg-[var(--surface-muted)] border border-[var(--border-subtle)] flex flex-col gap-2">
+                <div className="flex items-center gap-1.5 font-mono-code text-[11px] font-semibold text-[var(--on-surface)]">
+                  <HardDrive size={13} className="text-[var(--accent-metal)]" />
+                  <span>User Data Root Directory</span>
+                </div>
+                <div className="font-mono-code text-[10px] text-[var(--on-surface-variant)] break-all p-1.5 rounded bg-[var(--surface-card)] border border-[var(--border-subtle)] select-text">
+                  {bridgeClient.getStorageDir() || '%APPDATA%\\AuscultaForge (Default)'}
+                </div>
+                <div className="mt-auto pt-1">
+                  <button
+                    onClick={() => bridgeClient.openStorageDir()}
+                    className="w-full py-1.5 px-2.5 rounded text-xs font-medium border border-[var(--border-subtle)] bg-[var(--surface-card)] hover:bg-[var(--surface-muted)] text-[var(--on-surface)] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Folder size={12} />
+                    <span>Open in File Explorer</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Engine Endpoint & Security */}
+              <div className="p-3 rounded-lg bg-[var(--surface-muted)] border border-[var(--border-subtle)] flex flex-col gap-2">
+                <div className="flex items-center gap-1.5 font-mono-code text-[11px] font-semibold text-[var(--on-surface)]">
+                  <ShieldCheck size={13} className="text-[var(--status-success)]" />
+                  <span>Secure Backend Loopback</span>
+                </div>
+                <div className="font-mono-code text-[10px] text-[var(--on-surface-variant)] p-1.5 rounded bg-[var(--surface-card)] border border-[var(--border-subtle)]">
+                  <div>Endpoint: <strong className="text-[var(--on-surface)]">{bridgeClient.getEndpoint()}</strong></div>
+                  <div>Security: <span className="text-[var(--status-success)] font-semibold">Per-Process Token Authenticated</span></div>
+                </div>
+                <div className="mt-auto pt-1">
+                  <button
+                    onClick={() => bridgeClient.restartBackend()}
+                    className="w-full py-1.5 px-2.5 rounded text-xs font-medium border border-[var(--border-subtle)] bg-[var(--surface-card)] hover:bg-[var(--surface-muted)] text-[var(--on-surface)] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <RefreshCw size={12} />
+                    <span>Restart Backend Process</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
