@@ -16,12 +16,17 @@ import {
   ArrowRight,
   TrendingUp,
   ShieldCheck,
-  Radio
+  Radio,
+  Clock,
+  Volume2,
+  FileCheck
 } from 'lucide-react';
 import {
   ReferenceAssetItem,
   ScientificSessionAnalysisResult,
   SystemIdReport,
+  PhantomTemplateItem,
+  PhantomExperimentRecord,
 } from '../types';
 import { bridgeClient, SessionItem } from '../api/bridgeClient';
 import { SegmentationLab } from './SegmentationLab';
@@ -150,6 +155,25 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
   const [excitedBandMax, setExcitedBandMax] = useState<number>(1000);
   const [energyThresholdDb, setEnergyThresholdDb] = useState<number>(-30);
 
+  // Phantom Validation & Reproducible System ID State
+  const [phantomTemplates, setPhantomTemplates] = useState<PhantomTemplateItem[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('PHANTOM_LOG_SWEEP_20_500HZ_V1');
+  const [generatingStimulus, setGeneratingStimulus] = useState<boolean>(false);
+  const [phantomExperiment, setPhantomExperiment] = useState<PhantomExperimentRecord | null>(null);
+  const [runningPhantom, setRunningPhantom] = useState<boolean>(false);
+  const [phantomOutputGainDb, setPhantomOutputGainDb] = useState<number>(-6.0);
+  const [operatorNotes, setOperatorNotes] = useState<string>('');
+
+  // Load Phantom Templates on mount
+  useEffect(() => {
+    bridgeClient.listPhantomTemplates().then(templates => {
+      setPhantomTemplates(templates);
+      if (templates.length > 0) {
+        setSelectedTemplateId(templates[0].template_id);
+      }
+    }).catch(console.error);
+  }, []);
+
   // Auto-select first asset for System ID if available
   useEffect(() => {
     if (!systemIdAssetId && referenceAssets.length > 0) {
@@ -211,6 +235,94 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
       if (addToast) addToast(`System ID error: ${err.message}`, 'warning');
     } finally {
       setSystemIdRunning(false);
+    }
+  };
+
+  // Generate Phantom Stimulus & Store as Reference Asset
+  const handleGenerateStimulus = async () => {
+    const tmpl = phantomTemplates.find(t => t.template_id === selectedTemplateId);
+    const stimulusType = tmpl?.stimulus_type || 'log_sweep';
+    setGeneratingStimulus(true);
+    try {
+      const res = await bridgeClient.generatePhantomStimulus({
+        stimulus_type: stimulusType,
+        duration_s: tmpl?.recommended_duration_s || 5.0,
+        sample_rate_hz: 48000,
+        amplitude_fs: 0.8,
+        save_as_asset: true,
+      });
+      if (res.asset_id) {
+        setSystemIdAssetId(res.asset_id);
+      }
+      if (addToast) addToast(`Deterministic stimulus '${stimulusType}' generated and saved as reference asset.`, 'success');
+    } catch (err: any) {
+      if (addToast) addToast(`Stimulus generation failed: ${err.message}`, 'warning');
+    } finally {
+      setGeneratingStimulus(false);
+    }
+  };
+
+  // Run Acoustic Phantom Characterization & Latency Separation
+  const handleRunPhantomCharacterization = async () => {
+    if (!systemIdAssetId || !selectedSessionId) {
+      if (addToast) addToast('Select both a reference stimulus and a capture session.', 'warning');
+      return;
+    }
+    setRunningPhantom(true);
+    setSystemIdError(null);
+    try {
+      const exp = await bridgeClient.characterizePhantom({
+        asset_id: systemIdAssetId,
+        session_id: selectedSessionId,
+        template_id: selectedTemplateId,
+        output_gain_dbfs: phantomOutputGainDb,
+        operator_notes: operatorNotes,
+        hardware_status: 'PENDING_PHYSICAL_MEASUREMENT',
+        pipeline_buffer_delay_ms: 30.0,
+        max_display_points: 300,
+      });
+      setPhantomExperiment(exp);
+      // Map system_id result so Bode plots render seamlessly
+      setSystemIdResult({
+        schema_version: exp.schema_version,
+        analysis_id: exp.trial_id,
+        created_at_utc: exp.created_at_utc,
+        reference: {
+          asset_id: exp.stimulus.stimulus_id,
+          filename: exp.stimulus.parameters?.source_filename || exp.stimulus.stimulus_type,
+          sha256: exp.stimulus.sha256,
+          sample_rate_hz: exp.stimulus.sample_rate_hz,
+          duration_s: exp.stimulus.duration_s,
+          total_samples: exp.stimulus.total_samples,
+        },
+        capture: {
+          session_id: exp.capture.session_id || selectedSessionId,
+          wav_sha256: '',
+          sample_rate_hz: exp.capture.original_sample_rate_hz,
+          resampled: exp.capture.resampled,
+          duration_s: exp.capture.duration_s,
+          total_samples: exp.capture.total_samples,
+        },
+        system_id: exp.system_id,
+        display: {
+          frequency_hz: exp.display.frequency_hz,
+          h1_magnitude_db: exp.display.h1_magnitude_db,
+          h1_phase_rad: exp.system_id.h1_phase_rad.slice(0, exp.display.frequency_hz.length),
+          h1_phase_deg: exp.display.h1_phase_deg,
+          coherence: exp.display.coherence,
+          gxx: exp.system_id.gxx_autospectrum.slice(0, exp.display.frequency_hz.length),
+          gyy: exp.system_id.gyy_autospectrum.slice(0, exp.display.frequency_hz.length),
+          coherent_output_psd: exp.system_id.coherent_output_spectrum.slice(0, exp.display.frequency_hz.length),
+          residual_output_psd: exp.system_id.residual_output_spectrum.slice(0, exp.display.frequency_hz.length),
+          excited_energy_mask: exp.system_id.excited_frequency_mask.slice(0, exp.display.frequency_hz.length),
+        },
+      });
+      if (addToast) addToast(`Phantom characterization complete (Trial: ${exp.trial_id})`, 'success');
+    } catch (err: any) {
+      setSystemIdError(err.message || 'Phantom characterization failed');
+      if (addToast) addToast(`Phantom error: ${err.message}`, 'warning');
+    } finally {
+      setRunningPhantom(false);
     }
   };
 
@@ -1012,6 +1124,209 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
             </div>
           </div>
 
+          {/* Acoustic Phantom Characterization & Experiment Templates */}
+          <div
+            className="rounded-xl border p-4 flex flex-col gap-3 shadow-xs"
+            style={{ backgroundColor: 'var(--surface-card)', borderColor: 'var(--border-subtle)' }}
+          >
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono-code text-xs font-bold uppercase tracking-wider text-[var(--accent-oxblood)]">
+                    Acoustic Phantom Reference Playback & System Identification
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono-code font-bold bg-amber-500/20 text-amber-500 border border-amber-500/40 flex items-center gap-1">
+                    <Clock size={11} />
+                    HARDWARE: PENDING PHYSICAL MEASUREMENT
+                  </span>
+                </div>
+                <div className="text-xs font-mono-code text-[var(--on-surface-variant)]">
+                  Chain: PC Audio Out → PAM8403 Amp → 12Ω Exciter → Silicone Phantom → Chestpiece → INMP441 → ESP32-S3 → PC
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleGenerateStimulus}
+                  disabled={generatingStimulus}
+                  className="px-3 py-1.5 rounded text-xs font-mono-code font-bold flex items-center gap-1.5 transition-colors cursor-pointer bg-[var(--surface-muted)] text-[var(--on-surface)] border border-[var(--border-subtle)] hover:bg-[var(--surface-subtle)] disabled:opacity-40"
+                >
+                  <Volume2 size={13} className={generatingStimulus ? 'animate-spin' : ''} />
+                  <span>{generatingStimulus ? 'Generating...' : 'Generate Stimulus WAV'}</span>
+                </button>
+                <button
+                  onClick={handleRunPhantomCharacterization}
+                  disabled={runningPhantom || !systemIdAssetId || !selectedSessionId}
+                  className="px-3.5 py-1.5 rounded text-xs font-mono-code font-bold flex items-center gap-1.5 transition-colors cursor-pointer bg-[var(--accent-oxblood)] text-white hover:opacity-90 disabled:opacity-40 shadow-xs"
+                >
+                  <Cpu size={13} className={runningPhantom ? 'animate-spin' : ''} />
+                  <span>{runningPhantom ? 'Characterizing...' : 'Characterize Phantom & System ID'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Template selector & details */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-[var(--border-subtle)]">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-mono-code text-[var(--on-surface-variant)] uppercase font-bold">
+                  Experiment Template (Kaan's Setup)
+                </label>
+                <select
+                  value={selectedTemplateId}
+                  onChange={e => setSelectedTemplateId(e.target.value)}
+                  className="px-2.5 py-1.5 rounded text-xs font-mono-code border bg-[var(--surface-muted)] text-[var(--on-surface)]"
+                  style={{ borderColor: 'var(--border-subtle)' }}
+                >
+                  {phantomTemplates.map(t => (
+                    <option key={t.template_id} value={t.template_id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+                {(() => {
+                  const curTmpl = phantomTemplates.find(t => t.template_id === selectedTemplateId);
+                  return curTmpl ? (
+                    <span className="text-[10px] font-mono-code text-[var(--on-surface-variant)] italic">
+                      {curTmpl.description}
+                    </span>
+                  ) : null;
+                })()}
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-mono-code text-[var(--on-surface-variant)] uppercase font-bold">
+                  Output Gain & Operator Notes
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-mono-code text-[var(--on-surface-variant)]">Gain:</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={phantomOutputGainDb}
+                      onChange={e => setPhantomOutputGainDb(Number(e.target.value))}
+                      className="w-16 px-1.5 py-1 rounded text-xs font-mono-code border bg-[var(--surface-muted)] text-[var(--on-surface)]"
+                      style={{ borderColor: 'var(--border-subtle)' }}
+                    />
+                    <span className="text-xs font-mono-code text-[var(--on-surface-variant)]">dBFS</span>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Operator notes (e.g. gel thickness, contact force)..."
+                    value={operatorNotes}
+                    onChange={e => setOperatorNotes(e.target.value)}
+                    className="flex-1 px-2 py-1 rounded text-xs font-mono-code border bg-[var(--surface-muted)] text-[var(--on-surface)]"
+                    style={{ borderColor: 'var(--border-subtle)' }}
+                  />
+                </div>
+              </div>
+
+              {/* Operator Checklist */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-mono-code text-[var(--on-surface-variant)] uppercase font-bold flex items-center gap-1">
+                  <FileCheck size={11} />
+                  <span>Operator Checklist</span>
+                </label>
+                <div className="text-[10px] font-mono-code text-[var(--on-surface-variant)] max-h-20 overflow-y-auto leading-relaxed pl-1 border-l-2 border-[var(--border-subtle)]">
+                  {(() => {
+                    const curTmpl = phantomTemplates.find(t => t.template_id === selectedTemplateId);
+                    return curTmpl?.checklist?.map((item, idx) => (
+                      <div key={idx} className="flex items-start gap-1">
+                        <span className="text-[var(--accent-oxblood)] font-bold">•</span>
+                        <span>{item}</span>
+                      </div>
+                    )) || <div>No checklist available</div>;
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Latency & Quality Decomposition (Shown when phantomExperiment is available) */}
+          {phantomExperiment && (
+            <div
+              className="rounded-xl border p-4 flex flex-col gap-3 shadow-xs"
+              style={{ backgroundColor: 'var(--surface-card)', borderColor: 'var(--border-subtle)' }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-mono-code text-xs font-bold uppercase tracking-wider text-[var(--accent-metal)]">
+                  Latency Decomposition & Signal Integrity ({phantomExperiment.trial_id})
+                </span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono-code font-bold border ${
+                  phantomExperiment.alignment.sync_status === 'SYNCHRONIZED'
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                    : phantomExperiment.alignment.sync_status === 'MARGINAL_SYNC'
+                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                    : 'bg-red-500/20 text-red-400 border-red-500/40'
+                }`}>
+                  SYNC: {phantomExperiment.alignment.sync_status} (NCC: {phantomExperiment.alignment.normalized_cross_correlation.toFixed(4)})
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div className="rounded-lg border p-2.5 flex flex-col gap-0.5 bg-[var(--surface-muted)]" style={{ borderColor: 'var(--border-subtle)' }}>
+                  <span className="text-[10px] font-mono-code uppercase text-[var(--on-surface-variant)] font-bold">
+                    Acoustic Lag (τ_acoustic)
+                  </span>
+                  <div className="text-base font-mono-code font-bold text-[var(--on-surface)]">
+                    {phantomExperiment.latency.estimated_acoustic_lag_ms.toFixed(2)} ms
+                  </div>
+                  <span className="text-[9px] font-mono-code text-[var(--on-surface-variant)]">
+                    Phantom medium wave arrival
+                  </span>
+                </div>
+
+                <div className="rounded-lg border p-2.5 flex flex-col gap-0.5 bg-[var(--surface-muted)]" style={{ borderColor: 'var(--border-subtle)' }}>
+                  <span className="text-[10px] font-mono-code uppercase text-[var(--on-surface-variant)] font-bold">
+                    Buffer Delay (τ_buffer)
+                  </span>
+                  <div className="text-base font-mono-code font-bold text-[var(--on-surface)]">
+                    {phantomExperiment.latency.playback_pipeline_buffer_delay_ms.toFixed(2)} ms
+                  </div>
+                  <span className="text-[9px] font-mono-code text-[var(--on-surface-variant)]">
+                    Host audio output driver latency
+                  </span>
+                </div>
+
+                <div className="rounded-lg border p-2.5 flex flex-col gap-0.5 bg-[var(--surface-muted)]" style={{ borderColor: 'var(--border-subtle)' }}>
+                  <span className="text-[10px] font-mono-code uppercase text-[var(--on-surface-variant)] font-bold">
+                    Total Estimated Latency
+                  </span>
+                  <div className="text-base font-mono-code font-bold text-[var(--accent-oxblood)]">
+                    {phantomExperiment.latency.total_end_to_end_latency_estimate_ms.toFixed(2)} ms
+                  </div>
+                  <span className="text-[9px] font-mono-code text-[var(--on-surface-variant)]">
+                    τ_acoustic + τ_buffer
+                  </span>
+                </div>
+
+                <div className="rounded-lg border p-2.5 flex flex-col gap-0.5 bg-[var(--surface-muted)]" style={{ borderColor: 'var(--border-subtle)' }}>
+                  <span className="text-[10px] font-mono-code uppercase text-[var(--on-surface-variant)] font-bold">
+                    Excitation Coverage (20–500Hz)
+                  </span>
+                  <div className={`text-sm font-mono-code font-bold ${
+                    phantomExperiment.alignment.excitation_coverage.status === 'FULL_COVERAGE'
+                      ? 'text-emerald-400'
+                      : phantomExperiment.alignment.excitation_coverage.status === 'PARTIAL_COVERAGE'
+                      ? 'text-amber-400'
+                      : 'text-red-400'
+                  }`}>
+                    {phantomExperiment.alignment.excitation_coverage.status}
+                  </div>
+                  <span className="text-[9px] font-mono-code text-[var(--on-surface-variant)]">
+                    {(phantomExperiment.alignment.excitation_coverage.coverage_fraction * 100).toFixed(1)}% of passband bins
+                  </span>
+                </div>
+              </div>
+
+              {/* Latency separation note */}
+              <div className="text-[10px] font-mono-code text-[var(--on-surface-variant)] bg-[var(--surface-muted)] p-2 rounded border border-[var(--border-subtle)] leading-relaxed">
+                <strong>Metrological Latency Notice:</strong> {phantomExperiment.latency.notes}
+              </div>
+            </div>
+          )}
+
           {/* End-to-End Transmission Metrology Notice Banner */}
           <div
             className="rounded-xl border p-3.5 flex flex-col gap-1.5 bg-blue-500/10 border-blue-500/30 text-blue-900 dark:text-blue-300 text-xs font-mono-code"
@@ -1021,8 +1336,9 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
               <span>END-TO-END PHYSICAL TRANSMISSION CHAIN METROLOGY BOUNDARY</span>
             </div>
             <div className="text-[11px] leading-relaxed">
-              In Tier-1 phantom testing (Stimulus WAV → DAC → Amplifier → Speaker/Exciter → Phantom Medium → Mechanical Coupling → Chestpiece → Sensor → ESP32 → USB → Host),
-              the H1 estimate describes the <strong>complete end-to-end transmission chain</strong>.
+              In Tier-1 phantom testing (Stimulus WAV → DAC → PAM8403 Amplifier → 12Ω Exciter → Silicone Phantom → Mechanical Coupling → Chestpiece → INMP441 Microphone → ESP32-S3 → USB → Host),
+              the H1 estimate describes the <strong>complete end-to-end electro-acoustic transmission chain</strong>.
+              Neither the exciter nor the microphone is assumed to have a flat frequency response.
               It is NOT an isolated stethoscope transfer function, NOT an anatomical chest wall response, and ordinary coherence does NOT prove causality.
             </div>
           </div>

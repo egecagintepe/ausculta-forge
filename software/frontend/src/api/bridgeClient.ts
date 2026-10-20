@@ -23,6 +23,9 @@ import {
   VirtualBenchReport,
   VirtualBenchScenarioResult,
   SpectralFrameData,
+  PhantomTemplateItem,
+  PhantomExperimentRecord,
+  PhantomExperimentSummary,
 } from '../types';
 
 export interface SignalFrameData {
@@ -643,6 +646,83 @@ class BridgeClient {
   public async getSystemIdReport(analysisId: string): Promise<SystemIdReport | null> {
     try {
       const resp = await fetch(`${this.apiUrl}/scientific/system-id/${encodeURIComponent(analysisId)}`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  // =========================================================================
+  // Phantom Reference Playback & System Identification
+  // =========================================================================
+
+  public async listPhantomTemplates(): Promise<PhantomTemplateItem[]> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/phantom/templates`);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async generatePhantomStimulus(payload: {
+    stimulus_type: string;
+    duration_s?: number;
+    sample_rate_hz?: number;
+    amplitude_fs?: number;
+    save_as_asset?: boolean;
+    custom_params?: Record<string, any>;
+  }): Promise<any> {
+    const resp = await fetch(`${this.apiUrl}/scientific/phantom/stimulus/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Failed to generate phantom stimulus' }));
+      throw new Error(err.detail || `Stimulus generation failed (${resp.status})`);
+    }
+    return await resp.json();
+  }
+
+  public async characterizePhantom(payload: {
+    asset_id: string;
+    session_id: string;
+    template_id?: string;
+    trial_id?: string;
+    output_gain_dbfs?: number;
+    operator_notes?: string;
+    hardware_status?: string;
+    pipeline_buffer_delay_ms?: number;
+    max_display_points?: number;
+  }): Promise<PhantomExperimentRecord> {
+    const resp = await fetch(`${this.apiUrl}/scientific/phantom/characterize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Phantom characterization failed' }));
+      throw new Error(err.detail || `Phantom characterization failed (${resp.status})`);
+    }
+    return await resp.json();
+  }
+
+  public async listPhantomExperiments(): Promise<PhantomExperimentSummary[]> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/phantom/experiments`);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async getPhantomExperiment(trialId: string): Promise<PhantomExperimentRecord | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/phantom/experiments/${encodeURIComponent(trialId)}`);
       if (!resp.ok) return null;
       return await resp.json();
     } catch {
