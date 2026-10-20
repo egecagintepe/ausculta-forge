@@ -108,3 +108,8 @@ experiments/virtual-bench/*
 *.exe
 *.o
 *.obj
+
+# Desktop packaging build artifacts
+software/build_backend/
+software/dist_backend/
+software/frontend/src-tauri/target/

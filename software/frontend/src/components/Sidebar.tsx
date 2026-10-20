@@ -82,10 +82,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           style={{ borderColor: 'var(--border-subtle)' }}
         >
           <div className="font-mono-code text-[10px] uppercase tracking-wider text-[var(--accent-metal)] font-bold">
-            Modality Console
+            AuscultaForge
           </div>
           <div className="font-serif-display text-lg font-semibold text-[var(--accent-oxblood)] tracking-tight">
-            Precision IV
+            Workstation
           </div>
         </button>
 
@@ -157,7 +157,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* OS / Platform Metadata */}
         <div className="flex items-center justify-between font-mono-code text-[10px] text-[var(--on-surface-variant)] pt-1 border-t border-[var(--border-subtle)]/50">
           <span className="tracking-wider">OS: WIN-X64</span>
-          <span className="font-bold">v0.1.4-PROD</span>
+          <span className="font-bold">v0.1.0-alpha.1</span>
         </div>
       </div>
     </aside>
