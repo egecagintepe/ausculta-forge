@@ -97,3 +97,9 @@ experiments/analysis-assets/*
 !experiments/analysis-assets/.gitkeep
 experiments/analysis/*
 !experiments/analysis/.gitkeep
+
+# Virtual integration bench outputs
+experiments/virtual-bench/*
+!experiments/virtual-bench/acceptance_report.json
+!experiments/virtual-bench/.gitkeep
+
