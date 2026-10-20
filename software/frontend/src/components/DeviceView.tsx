@@ -533,6 +533,11 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
             A software-only integration harness executing the complete host acquisition seam, DSP filtering, display ring-buffer publication, and session recording without requiring an ESP32-S3. All 8 scenarios test deterministic inputs against independent mathematical known-answer oracles.
           </p>
 
+          <div className="p-2.5 rounded-lg bg-[var(--status-warning)]/10 border border-[var(--status-warning)]/30 text-[11px] font-mono-code font-bold text-[var(--status-warning)] flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-pulse" />
+            <span>SOFTWARE SIMULATION — NO PHYSICAL ESP32 ATTACHED</span>
+          </div>
+
           <div className="flex items-center justify-between gap-3 pt-2 border-t border-[var(--border-subtle)]">
             <div className="flex items-center gap-2">
               <button

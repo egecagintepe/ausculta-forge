@@ -1,0 +1,25 @@
+[package]
+name = "auscultaforge-desktop"
+version = "0.1.0-alpha.1"
+description = "AuscultaForge — Smart Digital Stethoscope Desktop Engineering Workstation"
+authors = ["Ege Çağın Tepe <Module C>"]
+license = "MIT"
+repository = "https://github.com/egecagintepe/ausculta-forge"
+edition = "2024"
+rust-version = "1.90"
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.3", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.12.4", features = [] }
+tauri-plugin-log = "2"
+windows-sys = { version = "0.59", features = ["Win32_System_JobObjects", "Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }
+

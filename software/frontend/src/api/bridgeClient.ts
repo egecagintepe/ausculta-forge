@@ -1,10 +1,15 @@
 /**
  * AuscultaForge — Local Python Bridge WebSocket & REST API Client.
  *
- * Connects the React application to the local Python FastAPI backend (http://127.0.0.1:8000).
- * Decouples waveform ingestion from hardware protocols.
+ * Connects the React application to the local Python FastAPI backend.
+ * Supports:
+ * - Dynamic desktop endpoint & ephemeral port discovery via Tauri IPC
+ * - Per-process authentication token header (X-AuscultaForge-Auth) and query parameter
+ * - Automatic startup polling and reconnect lifecycle
+ * - Fallback to fixed port 8000 for standard web development mode
  */
 
+import { isTauri, invoke } from '@tauri-apps/api/core';
 import {
   FilterPreset,
   DeviceRuntimeState,
@@ -21,7 +26,6 @@ import {
   ValidationBenchmarkReport,
   VirtualBenchScenarioSummary,
   VirtualBenchReport,
-  VirtualBenchScenarioResult,
   SpectralFrameData,
   PhantomTemplateItem,
   PhantomExperimentRecord,
@@ -145,6 +149,21 @@ export interface SessionItem {
   status?: string;
 }
 
+export interface BackendDesktopConfig {
+  schema_version?: string;
+  app?: string;
+  version?: string;
+  host?: string;
+  port: number;
+  auth_token?: string | null;
+  pid: number;
+  storage_dir: string;
+  status: string;
+  http_base_url: string;
+  ws_url: string;
+  health_url?: string;
+}
+
 type FrameCallback = (frame: SignalFrameData) => void;
 type DisplayFrameCallback = (frame: DisplayFrameData) => void;
 type StreamStateCallback = (state: StreamStateData) => void;
@@ -158,8 +177,13 @@ class BridgeClient {
   private ws: WebSocket | null = null;
   private url: string = 'ws://127.0.0.1:8000/ws';
   private apiUrl: string = 'http://127.0.0.1:8000/api';
+  private authToken: string = '';
+  private storageDir: string = '';
+  private isDesktopMode: boolean = false;
+  private activeEndpoint: string = '127.0.0.1:8000';
   private shouldReconnect: boolean = true;
   private reconnectTimer: number | null = null;
+  private initPromise: Promise<boolean> | null = null;
 
   private frameListeners: Set<FrameCallback> = new Set();
   private displayFrameListeners: Set<DisplayFrameCallback> = new Set();
@@ -171,6 +195,116 @@ class BridgeClient {
   private connectionListeners: Set<ConnectionCallback> = new Set();
 
   public isConnected: boolean = false;
+
+  /**
+   * Initializes desktop backend endpoint and authentication token via Tauri IPC.
+   * If running in a standard web browser, gracefully falls back to default localhost:8000.
+   */
+  public async initDesktopBridge(): Promise<boolean> {
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = (async () => {
+      if (!isTauri()) {
+        this.isDesktopMode = false;
+        this.activeEndpoint = '127.0.0.1:8000';
+        return true;
+      }
+
+      this.isDesktopMode = true;
+      const maxAttempts = 60; // 60 * 250ms = 15 seconds
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          const cfg = await invoke<BackendDesktopConfig>('get_backend_config');
+          if (cfg && cfg.port) {
+            this.apiUrl = `${cfg.http_base_url}/api`;
+            this.url = cfg.ws_url;
+            this.authToken = cfg.auth_token || '';
+            this.storageDir = cfg.storage_dir;
+            this.activeEndpoint = `127.0.0.1:${cfg.port}`;
+            return true;
+          }
+        } catch {
+          // Backend might still be starting up, retry
+        }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+
+      console.warn('[BridgeClient] Failed to resolve backend config from Tauri within timeout');
+      return false;
+    })();
+
+    return this.initPromise;
+  }
+
+  public getEndpoint(): string {
+    return this.activeEndpoint;
+  }
+
+  public getWsUrl(): string {
+    return this.url;
+  }
+
+  public getSanitizedWsUrl(): string {
+    return this.url.replace(/([?&]token=)[^&]+/, '$1***');
+  }
+
+  public getApiUrl(): string {
+    return this.apiUrl;
+  }
+
+  public getAuthToken(): string {
+    return this.authToken;
+  }
+
+  public getStorageDir(): string {
+    return this.storageDir;
+  }
+
+  public isDesktop(): boolean {
+    return this.isDesktopMode;
+  }
+
+  public async openStorageDir(): Promise<void> {
+    if (isTauri()) {
+      try {
+        await invoke('open_storage_directory');
+      } catch (e) {
+        console.error('[BridgeClient] Failed to open storage dir:', e);
+      }
+    }
+  }
+
+  public async restartBackend(): Promise<boolean> {
+    if (isTauri()) {
+      try {
+        this.disconnect();
+        const cfg = await invoke<BackendDesktopConfig>('restart_backend');
+        if (cfg && cfg.port) {
+          this.apiUrl = `${cfg.http_base_url}/api`;
+          this.url = cfg.ws_url;
+          this.authToken = cfg.auth_token;
+          this.storageDir = cfg.storage_dir;
+          this.activeEndpoint = `127.0.0.1:${cfg.port}`;
+          this.connect();
+          return true;
+        }
+      } catch (e) {
+        console.error('[BridgeClient] Backend restart failed:', e);
+      }
+    }
+    return false;
+  }
+
+  private async request(path: string, options: RequestInit = {}): Promise<Response> {
+    const headers = new Headers(options.headers || {});
+    if (this.authToken) {
+      headers.set('X-AuscultaForge-Auth', this.authToken);
+    }
+    return fetch(`${this.apiUrl}${path}`, {
+      ...options,
+      headers,
+    });
+  }
 
   public connect(url?: string) {
     if (url) this.url = url;
@@ -370,7 +504,7 @@ class BridgeClient {
   // REST API Helpers
   public async fetchSessions(): Promise<SessionItem[]> {
     try {
-      const resp = await fetch(`${this.apiUrl}/sessions`);
+      const resp = await this.request('/sessions');
       if (!resp.ok) return [];
       return await resp.json();
     } catch {
@@ -380,7 +514,7 @@ class BridgeClient {
 
   public async fetchSession(sessionId: string): Promise<SessionItem | null> {
     try {
-      const resp = await fetch(`${this.apiUrl}/sessions/${sessionId}`);
+      const resp = await this.request(`/sessions/${encodeURIComponent(sessionId)}`);
       if (!resp.ok) return null;
       return await resp.json();
     } catch {
@@ -390,7 +524,7 @@ class BridgeClient {
 
   public async replaySession(sessionId: string): Promise<boolean> {
     try {
-      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}/replay`, { method: 'POST' });
+      const resp = await this.request(`/sessions/${encodeURIComponent(sessionId)}/replay`, { method: 'POST' });
       return resp.ok;
     } catch {
       return false;
@@ -399,7 +533,7 @@ class BridgeClient {
 
   public async verifySession(sessionId: string): Promise<SessionIntegrityCheck | null> {
     try {
-      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}/verify`);
+      const resp = await this.request(`/sessions/${encodeURIComponent(sessionId)}/verify`);
       if (!resp.ok) return null;
       return await resp.json();
     } catch {
@@ -409,7 +543,7 @@ class BridgeClient {
 
   public async deleteSession(sessionId: string): Promise<boolean> {
     try {
-      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}`, {
+      const resp = await this.request(`/sessions/${encodeURIComponent(sessionId)}`, {
         method: 'DELETE',
       });
       return resp.ok;
@@ -420,7 +554,7 @@ class BridgeClient {
 
   public async getSessionManifest(sessionId: string): Promise<Record<string, unknown> | null> {
     try {
-      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}/manifest`);
+      const resp = await this.request(`/sessions/${encodeURIComponent(sessionId)}/manifest`);
       if (!resp.ok) return null;
       return await resp.json();
     } catch {
@@ -430,7 +564,7 @@ class BridgeClient {
 
   public async fetchDeviceState(): Promise<DeviceRuntimeState | null> {
     try {
-      const resp = await fetch(`${this.apiUrl}/device/state`);
+      const resp = await this.request('/device/state');
       if (!resp.ok) return null;
       return await resp.json();
     } catch {
@@ -440,7 +574,7 @@ class BridgeClient {
 
   public async fetchDeviceEvents(): Promise<DeviceEventItem[]> {
     try {
-      const resp = await fetch(`${this.apiUrl}/device/events`);
+      const resp = await this.request('/device/events');
       if (!resp.ok) return [];
       return await resp.json();
     } catch {
@@ -450,7 +584,7 @@ class BridgeClient {
 
   public async fetchDeviceStats(): Promise<DeviceIntegrityStats | null> {
     try {
-      const resp = await fetch(`${this.apiUrl}/device/stats`);
+      const resp = await this.request('/device/stats');
       if (!resp.ok) return null;
       return await resp.json();
     } catch {
@@ -460,7 +594,7 @@ class BridgeClient {
 
   public async pollDevice(): Promise<{ candidates: unknown[]; state: DeviceRuntimeState } | null> {
     try {
-      const resp = await fetch(`${this.apiUrl}/device/poll`, { method: 'POST' });
+      const resp = await this.request('/device/poll', { method: 'POST' });
       if (!resp.ok) return null;
       const data = await resp.json();
       if (data.state) {
@@ -474,7 +608,7 @@ class BridgeClient {
 
   public async disconnectDevice(): Promise<DeviceRuntimeState | null> {
     try {
-      const resp = await fetch(`${this.apiUrl}/device/disconnect`, { method: 'POST' });
+      const resp = await this.request('/device/disconnect', { method: 'POST' });
       if (!resp.ok) return null;
       const data = await resp.json();
       this.deviceStateListeners.forEach(cb => cb(data));
@@ -490,7 +624,7 @@ class BridgeClient {
 
   public async listReferenceAssets(): Promise<ReferenceAssetItem[]> {
     try {
-      const resp = await fetch(`${this.apiUrl}/analysis/assets`);
+      const resp = await this.request('/analysis/assets');
       if (!resp.ok) return [];
       return await resp.json();
     } catch {
@@ -501,7 +635,7 @@ class BridgeClient {
   public async uploadReferenceAsset(file: File): Promise<ReferenceAssetItem> {
     const formData = new FormData();
     formData.append('file', file);
-    const resp = await fetch(`${this.apiUrl}/analysis/assets`, {
+    const resp = await this.request('/analysis/assets', {
       method: 'POST',
       body: formData,
     });
@@ -514,7 +648,7 @@ class BridgeClient {
 
   public async deleteReferenceAsset(assetId: string): Promise<boolean> {
     try {
-      const resp = await fetch(`${this.apiUrl}/analysis/assets/${encodeURIComponent(assetId)}`, {
+      const resp = await this.request(`/analysis/assets/${encodeURIComponent(assetId)}`, {
         method: 'DELETE',
       });
       return resp.ok;
@@ -525,7 +659,7 @@ class BridgeClient {
 
   public async getSessionAnalysisSummary(sessionId: string, maxPoints: number = 600): Promise<SessionAnalysisSummary | null> {
     try {
-      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}/analysis-summary?max_points=${maxPoints}`);
+      const resp = await this.request(`/sessions/${encodeURIComponent(sessionId)}/analysis-summary?max_points=${maxPoints}`);
       if (!resp.ok) return null;
       return await resp.json();
     } catch {
@@ -538,7 +672,7 @@ class BridgeClient {
     sessionId: string,
     maxPoints: number = 600
   ): Promise<AnalysisComparisonResult> {
-    const resp = await fetch(`${this.apiUrl}/analysis/compare`, {
+    const resp = await this.request('/analysis/compare', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ asset_id: assetId, session_id: sessionId, max_points: maxPoints }),
@@ -552,7 +686,7 @@ class BridgeClient {
 
   public async getComparisonReport(analysisId: string): Promise<AnalysisComparisonResult | null> {
     try {
-      const resp = await fetch(`${this.apiUrl}/analysis/${encodeURIComponent(analysisId)}`);
+      const resp = await this.request(`/analysis/${encodeURIComponent(analysisId)}`);
       if (!resp.ok) return null;
       return await resp.json();
     } catch {
@@ -561,7 +695,8 @@ class BridgeClient {
   }
 
   public getExportReportUrl(analysisId: string): string {
-    return `${this.apiUrl}/analysis/${encodeURIComponent(analysisId)}/export`;
+    const base = `${this.apiUrl}/analysis/${encodeURIComponent(analysisId)}/export`;
+    return this.authToken ? `${base}?token=${encodeURIComponent(this.authToken)}` : base;
   }
 
   // =========================================================================
@@ -570,7 +705,7 @@ class BridgeClient {
 
   public async getScientificProfiles(): Promise<any[]> {
     try {
-      const resp = await fetch(`${this.apiUrl}/scientific/profiles`);
+      const resp = await this.request('/scientific/profiles');
       if (!resp.ok) return [];
       return await resp.json();
     } catch {
@@ -584,7 +719,7 @@ class BridgeClient {
     welchNperseg: number = 2048,
     maxPoints: number = 600
   ): Promise<ScientificSessionAnalysisResult> {
-    const resp = await fetch(`${this.apiUrl}/scientific/session/${encodeURIComponent(sessionId)}/analyze`, {
+    const resp = await this.request(`/scientific/session/${encodeURIComponent(sessionId)}/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -612,7 +747,7 @@ class BridgeClient {
       max_display_points?: number;
     }
   ): Promise<SystemIdReport> {
-    const resp = await fetch(`${this.apiUrl}/scientific/system-id`, {
+    const resp = await this.request('/scientific/system-id', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -635,7 +770,7 @@ class BridgeClient {
 
   public async listSystemIdReports(): Promise<any[]> {
     try {
-      const resp = await fetch(`${this.apiUrl}/scientific/system-id/reports`);
+      const resp = await this.request('/scientific/system-id/reports');
       if (!resp.ok) return [];
       return await resp.json();
     } catch {
@@ -645,7 +780,7 @@ class BridgeClient {
 
   public async getSystemIdReport(analysisId: string): Promise<SystemIdReport | null> {
     try {
-      const resp = await fetch(`${this.apiUrl}/scientific/system-id/${encodeURIComponent(analysisId)}`);
+      const resp = await this.request(`/scientific/system-id/${encodeURIComponent(analysisId)}`);
       if (!resp.ok) return null;
       return await resp.json();
     } catch {
@@ -659,7 +794,7 @@ class BridgeClient {
 
   public async listPhantomTemplates(): Promise<PhantomTemplateItem[]> {
     try {
-      const resp = await fetch(`${this.apiUrl}/scientific/phantom/templates`);
+      const resp = await this.request('/scientific/phantom/templates');
       if (!resp.ok) return [];
       return await resp.json();
     } catch {
@@ -675,7 +810,7 @@ class BridgeClient {
     save_as_asset?: boolean;
     custom_params?: Record<string, any>;
   }): Promise<any> {
-    const resp = await fetch(`${this.apiUrl}/scientific/phantom/stimulus/generate`, {
+    const resp = await this.request('/scientific/phantom/stimulus/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -698,7 +833,7 @@ class BridgeClient {
     pipeline_buffer_delay_ms?: number;
     max_display_points?: number;
   }): Promise<PhantomExperimentRecord> {
-    const resp = await fetch(`${this.apiUrl}/scientific/phantom/characterize`, {
+    const resp = await this.request('/scientific/phantom/characterize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -712,7 +847,7 @@ class BridgeClient {
 
   public async listPhantomExperiments(): Promise<PhantomExperimentSummary[]> {
     try {
-      const resp = await fetch(`${this.apiUrl}/scientific/phantom/experiments`);
+      const resp = await this.request('/scientific/phantom/experiments');
       if (!resp.ok) return [];
       return await resp.json();
     } catch {
@@ -722,7 +857,7 @@ class BridgeClient {
 
   public async getPhantomExperiment(trialId: string): Promise<PhantomExperimentRecord | null> {
     try {
-      const resp = await fetch(`${this.apiUrl}/scientific/phantom/experiments/${encodeURIComponent(trialId)}`);
+      const resp = await this.request(`/scientific/phantom/experiments/${encodeURIComponent(trialId)}`);
       if (!resp.ok) return null;
       return await resp.json();
     } catch {
@@ -732,7 +867,7 @@ class BridgeClient {
 
   public async listSegmentationModels(): Promise<SpringerSegmentationModelSummary[]> {
     try {
-      const resp = await fetch(`${this.apiUrl}/scientific/segmentation/models`);
+      const resp = await this.request('/scientific/segmentation/models');
       if (!resp.ok) return [];
       return await resp.json();
     } catch {
@@ -746,7 +881,7 @@ class BridgeClient {
     profileId: string = 'SPRINGER_PHYSIONET_REFERENCE_V1',
     maxPoints: number = 600
   ): Promise<SpringerSegmentationReport> {
-    const resp = await fetch(`${this.apiUrl}/scientific/segmentation/segment`, {
+    const resp = await this.request('/scientific/segmentation/segment', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -765,7 +900,7 @@ class BridgeClient {
 
   public async listSegmentationReports(): Promise<any[]> {
     try {
-      const resp = await fetch(`${this.apiUrl}/scientific/segmentation/reports`);
+      const resp = await this.request('/scientific/segmentation/reports');
       if (!resp.ok) return [];
       return await resp.json();
     } catch {
@@ -775,7 +910,7 @@ class BridgeClient {
 
   public async getSegmentationReport(analysisId: string): Promise<SpringerSegmentationReport | null> {
     try {
-      const resp = await fetch(`${this.apiUrl}/scientific/segmentation/${encodeURIComponent(analysisId)}`);
+      const resp = await this.request(`/scientific/segmentation/${encodeURIComponent(analysisId)}`);
       if (!resp.ok) return null;
       return await resp.json();
     } catch {
@@ -785,7 +920,7 @@ class BridgeClient {
 
   public async listValidationBenchmarks(): Promise<ValidationBenchmarkSummary[]> {
     try {
-      const resp = await fetch(`${this.apiUrl}/scientific/validation/benchmarks`);
+      const resp = await this.request('/scientific/validation/benchmarks');
       if (!resp.ok) return [];
       return await resp.json();
     } catch {
@@ -795,7 +930,7 @@ class BridgeClient {
 
   public async getValidationBenchmark(benchmarkId: string): Promise<ValidationBenchmarkReport | null> {
     try {
-      const resp = await fetch(`${this.apiUrl}/scientific/validation/benchmarks/${encodeURIComponent(benchmarkId)}`);
+      const resp = await this.request(`/scientific/validation/benchmarks/${encodeURIComponent(benchmarkId)}`);
       if (!resp.ok) return null;
       return await resp.json();
     } catch {
@@ -805,7 +940,7 @@ class BridgeClient {
 
   public async listBenchScenarios(): Promise<VirtualBenchScenarioSummary[]> {
     try {
-      const resp = await fetch(`${this.apiUrl}/bench/scenarios`);
+      const resp = await this.request('/bench/scenarios');
       if (!resp.ok) return [];
       return await resp.json();
     } catch {
@@ -814,7 +949,7 @@ class BridgeClient {
   }
 
   public async runBenchScenario(scenarioId: string = 'all', seed: number = 42): Promise<VirtualBenchReport> {
-    const resp = await fetch(`${this.apiUrl}/bench/run`, {
+    const resp = await this.request('/bench/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scenario_id: scenarioId, seed }),

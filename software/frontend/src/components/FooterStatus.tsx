@@ -2,6 +2,7 @@ import React from 'react';
 
 interface FooterStatusProps {
   backendConnected?: boolean;
+  backendEndpoint?: string;
   deviceConnected?: boolean;
   deviceState?: string;
   sampleRate?: number;
@@ -12,6 +13,7 @@ interface FooterStatusProps {
 
 export const FooterStatus: React.FC<FooterStatusProps> = ({
   backendConnected = false,
+  backendEndpoint,
   deviceConnected = false,
   deviceState = 'absent',
   sampleRate = 4000,
@@ -61,7 +63,7 @@ export const FooterStatus: React.FC<FooterStatusProps> = ({
         <span>
           BRIDGE:{' '}
           <strong className={backendConnected ? 'text-[var(--status-success)] font-semibold' : 'text-[var(--status-warning)] font-semibold'}>
-            {backendConnected ? 'CONNECTED (127.0.0.1:8000)' : 'DISCONNECTED'}
+            {backendConnected ? `CONNECTED (${backendEndpoint || '127.0.0.1:8000'})` : 'DISCONNECTED'}
           </strong>
         </span>
         <span className="text-[var(--border-strong)]">|</span>

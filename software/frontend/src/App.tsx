@@ -192,13 +192,18 @@ export default function App() {
 
   // Connect to Python Bridge WebSocket and ingest real live stream
   useEffect(() => {
-    bridgeClient.connect();
+    let isCancelled = false;
+    bridgeClient.initDesktopBridge().then(() => {
+      if (!isCancelled) {
+        bridgeClient.connect();
+      }
+    });
 
     const unsubConn = bridgeClient.onConnectionChange((connected) => {
       setBackendConnected(connected);
       if (connected) {
-        addLog('Connected to Python DSP Bridge (ws://127.0.0.1:8000/ws)', 'info', 'Bridge');
-        addToast('Connected to Python DSP Bridge', 'success');
+        addLog(`Connected to Python DSP Bridge (${bridgeClient.getSanitizedWsUrl()})`, 'info', 'Bridge');
+        addToast(`Connected to Python DSP Bridge (${bridgeClient.getEndpoint()})`, 'success');
       } else {
         addLog('Disconnected from Python DSP Bridge. Retrying...', 'warning', 'Bridge');
         setDeviceRuntimeState({
@@ -1000,6 +1005,7 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
       {/* 4. Bottom Status Footer Strip */}
       <FooterStatus
         backendConnected={backendConnected}
+        backendEndpoint={bridgeClient.getEndpoint()}
         deviceConnected={deviceRuntimeState?.connected ?? false}
         deviceState={deviceRuntimeState?.state ?? 'absent'}
         sampleRate={sampleRate}

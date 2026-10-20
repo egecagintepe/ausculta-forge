@@ -46,6 +46,9 @@ DEFAULT_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "tauri://localhost",
+    "https://tauri.localhost",
+    "http://tauri.localhost",
 ]
 
 
@@ -56,6 +59,7 @@ def create_app(
     assets_dir: str | Path = "experiments/analysis-assets",
     analysis_dir: str | Path = "experiments/analysis",
     analysis_service: Optional[AnalysisService] = None,
+    auth_token: Optional[str] = None,
 ) -> FastAPI:
     manager = StreamManager(sessions_dir=sessions_dir, device_runtime=device_runtime)
     analysis = analysis_service or AnalysisService(
@@ -89,6 +93,37 @@ def create_app(
         allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
+
+    if auth_token:
+        from starlette.middleware.base import BaseHTTPMiddleware
+        from starlette.responses import JSONResponse
+
+        class DesktopAuthMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                if request.method == "OPTIONS" or request.url.path in (
+                    "/api/health",
+                    "/docs",
+                    "/openapi.json",
+                    "/favicon.ico",
+                ):
+                    return await call_next(request)
+
+                header_token = request.headers.get("X-AuscultaForge-Auth")
+                if not header_token:
+                    auth_header = request.headers.get("Authorization", "")
+                    if auth_header.startswith("Bearer "):
+                        header_token = auth_header[7:]
+
+                if header_token != auth_token:
+                    return JSONResponse(
+                        status_code=403,
+                        content={
+                            "detail": "Unauthorized: Invalid or missing AuscultaForge desktop authentication token"
+                        },
+                    )
+                return await call_next(request)
+
+        app.add_middleware(DesktopAuthMiddleware)
 
     # Store manager and analysis service in state
     app.state.manager = manager
@@ -164,6 +199,14 @@ def create_app(
 
 
     # REST Endpoints
+    @app.get("/api/health")
+    def get_health() -> dict[str, Any]:
+        return {
+            "status": "ok",
+            "app": "AuscultaForge",
+            "version": "0.1.0-alpha.1",
+        }
+
     @app.get("/api/status")
     def get_status() -> dict[str, Any]:
         return {
@@ -670,6 +713,12 @@ def create_app(
         if origin and origin not in origins:
             await websocket.close(code=1008)  # 1008: Policy Violation
             return
+
+        if auth_token:
+            token = websocket.query_params.get("token") or websocket.headers.get("x-auscultaforge-auth")
+            if token != auth_token:
+                await websocket.close(code=1008, reason="Unauthorized")
+                return
 
         await websocket.accept()
         manager.register_client(websocket)
