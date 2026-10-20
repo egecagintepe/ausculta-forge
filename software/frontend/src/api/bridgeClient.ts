@@ -22,6 +22,7 @@ import {
   VirtualBenchScenarioSummary,
   VirtualBenchReport,
   VirtualBenchScenarioResult,
+  SpectralFrameData,
 } from '../types';
 
 export interface SignalFrameData {
@@ -70,12 +71,7 @@ export interface DisplayFrameData {
   };
   recording_active: boolean;
   dropped_display_frames: number;
-  spectral_frame?: {
-    frequencies_hz: number[];
-    power_db: number[];
-    peak_frequency_hz: number;
-    dominant_band: string;
-  };
+  spectral_frame?: SpectralFrameData;
 }
 
 export interface StreamStateData {

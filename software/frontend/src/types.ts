@@ -120,6 +120,13 @@ export interface DiagnosticLogEvent {
   component: string;
 }
 
+export interface SpectralFrameData {
+  frequencies_hz: number[];
+  power_db: number[];
+  peak_frequency_hz: number;
+  dominant_band: string;
+}
+
 export interface AudioMetrics {
   currentPeakDb: number;
   currentRmsDb: number;

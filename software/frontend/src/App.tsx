@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { FooterStatus } from './components/FooterStatus';
@@ -26,7 +26,8 @@ import {
   StethoscopeDevice,
   DeviceRuntimeState,
   DeviceIntegrityStats,
-  DeviceEventItem
+  DeviceEventItem,
+  SpectralFrameData,
 } from './types';
 
 export default function App() {
@@ -102,6 +103,10 @@ export default function App() {
   const [recordingElapsedSeconds, setRecordingElapsedSeconds] = useState<number>(0);
   const [recordingSessionId, setRecordingSessionId] = useState<string | null>(null);
   const [activeSourceName, setActiveSourceName] = useState<string>('None');
+  const [spectralFrame, setSpectralFrame] = useState<SpectralFrameData | null>(null);
+  const [droppedDisplayFrames, setDroppedDisplayFrames] = useState<number>(0);
+  const currentSourceTypeRef = useRef<AudioSourceType>(sourceType);
+  currentSourceTypeRef.current = sourceType;
 
   // Dialogs & Modals
   const [saveAsOpen, setSaveAsOpen] = useState<boolean>(false);
@@ -217,6 +222,9 @@ export default function App() {
       if (st.filter_preset) setFilterPreset(st.filter_preset);
       if (st.sample_rate_hz) setSampleRate(st.sample_rate_hz);
       if (st.active_source_name) setActiveSourceName(st.active_source_name);
+      if (typeof st.is_paused === 'boolean') {
+        setIsPlaying(!st.is_paused && st.is_streaming);
+      }
     });
 
     const unsubRec = bridgeClient.onRecordingState((rec: RecordingStateData) => {
@@ -288,6 +296,8 @@ export default function App() {
     let latestQuality: { total_blocks: number; dropped_blocks: number; repeated_sequences: number; sequence_discontinuities: number; is_healthy: boolean } | null = null;
     let latestTimestamp = 0;
     let currentFs = 48000;
+    let latestSpectral: SpectralFrameData | null = null;
+    let latestDroppedFrames = 0;
 
     const commitDisplayUpdate = () => {
       animFrameId = null;
@@ -296,6 +306,8 @@ export default function App() {
 
       if (latestMetrics) setLiveMetrics(latestMetrics);
       if (latestQuality) setStreamQuality(latestQuality);
+      if (latestSpectral) setSpectralFrame(latestSpectral);
+      setDroppedDisplayFrames(latestDroppedFrames);
 
       setRawData(new Float32Array(rawDisplayBuf.subarray(0, totalWritten)));
       setFilteredData(new Float32Array(filtDisplayBuf.subarray(0, totalWritten)));
@@ -314,10 +326,20 @@ export default function App() {
 
     // 1. Primary decoupled display-frame listener (runs at controlled UI cadence ~25 Hz)
     const unsubDisplay = bridgeClient.onDisplayFrame((frame: DisplayFrameData) => {
+      // Guard against stream cross-talk: only write to display buffer if active source is a live stream
+      const src = currentSourceTypeRef.current;
+      if (src !== 'device' && src !== 'synthetic' && src !== 'session') {
+        return;
+      }
+
       latestMetrics = frame.metrics;
       latestQuality = frame.stream_quality;
       latestTimestamp = frame.window_end_ts;
       currentFs = frame.sample_rate_hz;
+      if (frame.spectral_frame) {
+        latestSpectral = frame.spectral_frame;
+      }
+      latestDroppedFrames = frame.dropped_display_frames || 0;
 
       const raw = frame.raw_points;
       const filt = frame.filtered_points;
@@ -899,6 +921,9 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
               onStartRecording={handleStartRecording}
               onStopRecording={handleStopRecording}
               recordingElapsedSeconds={recordingElapsedSeconds}
+              droppedDisplayFrames={droppedDisplayFrames}
+              spectralFrame={spectralFrame}
+              displayPointsPerSec={sourceType === 'file' || sourceType === 'sample' ? sampleRate : 3200}
             />
           )}
 
