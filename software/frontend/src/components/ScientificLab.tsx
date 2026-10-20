@@ -31,6 +31,7 @@ import {
 import { bridgeClient, SessionItem } from '../api/bridgeClient';
 import { SegmentationLab } from './SegmentationLab';
 import { ValidationLab } from './ValidationLab';
+import { ResearchErrorBoundary } from './ResearchErrorBoundary';
 
 interface ScientificLabProps {
   isDark: boolean;
@@ -1536,20 +1537,24 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
       {/* SECTION 5: SPRINGER LR-HSMM SEGMENTATION                              */}
       {/* ===================================================================== */}
       {activeSection === 'segmentation' && (
-        <SegmentationLab
-          isDark={isDark}
-          sessions={sessions}
-          selectedSessionId={selectedSessionId}
-          onSelectSessionId={onSelectSessionId}
-          addToast={addToast}
-        />
+        <ResearchErrorBoundary fallbackTitle="Segmentation Lab Render Error">
+          <SegmentationLab
+            isDark={isDark}
+            sessions={sessions}
+            selectedSessionId={selectedSessionId}
+            onSelectSessionId={onSelectSessionId}
+            addToast={addToast}
+          />
+        </ResearchErrorBoundary>
       )}
 
       {/* ===================================================================== */}
       {/* SECTION 6: REAL PCG SEGMENTATION VALIDATION                           */}
       {/* ===================================================================== */}
       {activeSection === 'validation' && (
-        <ValidationLab isDark={isDark} addToast={addToast} />
+        <ResearchErrorBoundary fallbackTitle="Validation Lab Render Error">
+          <ValidationLab isDark={isDark} addToast={addToast} />
+        </ResearchErrorBoundary>
       )}
     </div>
   );
