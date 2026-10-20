@@ -10,7 +10,11 @@ import {
   RefreshCw,
   Clock,
   HardDrive,
-  Zap
+  Zap,
+  Trash2,
+  Download,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { HeartSoundMetadata } from '../types';
 import { STARTER_SAMPLES } from '../audio/samplesData';
@@ -34,6 +38,9 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [loadingSessions, setLoadingSessions] = useState<boolean>(false);
   const [replayingId, setReplayingId] = useState<string | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [integrityChecks, setIntegrityChecks] = useState<Record<string, any>>({});
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const loadSessionsList = async () => {
     setLoadingSessions(true);
@@ -62,6 +69,46 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
       }
     } finally {
       setReplayingId(null);
+    }
+  };
+
+  const handleVerifyClick = async (sessionId: string) => {
+    setVerifyingId(sessionId);
+    try {
+      const res = await bridgeClient.verifySession(sessionId);
+      if (res) {
+        setIntegrityChecks((prev) => ({ ...prev, [sessionId]: res }));
+      }
+    } finally {
+      setVerifyingId(null);
+    }
+  };
+
+  const handleDeleteClick = async (sessionId: string) => {
+    try {
+      await bridgeClient.deleteSession(sessionId);
+      setDeleteConfirmId(null);
+      await loadSessionsList();
+    } catch {
+      // ignore error
+    }
+  };
+
+  const handleExportManifestClick = async (sessionId: string) => {
+    try {
+      const manifest = await bridgeClient.getSessionManifest(sessionId);
+      if (!manifest) return;
+      const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `manifest_${sessionId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore error
     }
   };
 
@@ -261,74 +308,185 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
                 </p>
               </div>
             ) : (
-              sessions.map((sess) => (
-                <div
-                  key={sess.session_id}
-                  className="rounded-xl border p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs"
-                  style={{
-                    backgroundColor: 'var(--surface-card)',
-                    borderColor: 'var(--border-subtle)'
-                  }}
-                >
-                  <div className="flex items-start gap-4">
-                    <div
-                      className="w-10 h-10 rounded-lg border flex items-center justify-center shrink-0 text-[var(--accent-oxblood)]"
-                      style={{
-                        backgroundColor: 'var(--surface-muted)',
-                        borderColor: 'var(--border-subtle)'
-                      }}
-                    >
-                      <Disc size={20} />
+              sessions.map((sess) => {
+                const check = integrityChecks[sess.session_id];
+                const isInterrupted = sess.termination_reason === 'device_disconnected' || sess.termination_reason === 'stream_interrupted';
+                const isIncomplete = sess.status === 'incomplete' || sess.termination_reason === 'incomplete';
+                const isCorrupted = sess.status === 'corrupted_metadata';
+
+                return (
+                  <div
+                    key={sess.session_id}
+                    className="rounded-xl border p-5 flex flex-col gap-3 shadow-xs"
+                    style={{
+                      backgroundColor: 'var(--surface-card)',
+                      borderColor: isCorrupted ? 'var(--status-danger)' : 'var(--border-subtle)'
+                    }}
+                  >
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-start gap-4">
+                        <div
+                          className="w-10 h-10 rounded-lg border flex items-center justify-center shrink-0 text-[var(--accent-oxblood)]"
+                          style={{
+                            backgroundColor: 'var(--surface-muted)',
+                            borderColor: 'var(--border-subtle)'
+                          }}
+                        >
+                          <Disc size={20} />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex flex-wrap items-center gap-2 font-mono-code text-[11px]">
+                            <span className="font-bold text-[var(--accent-oxblood)]">
+                              {sess.session_id}
+                            </span>
+                            <span className="text-[var(--accent-metal)]">•</span>
+                            <span className="text-[var(--on-surface-variant)]">
+                              {sess.started_at_utc ? new Date(sess.started_at_utc).toLocaleString() : 'Date Unknown'}
+                            </span>
+
+                            {/* Schema Version */}
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[var(--surface-muted)] text-[var(--on-surface-variant)] border border-[var(--border-subtle)]">
+                              v{sess.schema_version || '1.0.0'}
+                            </span>
+
+                            {/* Status Badges */}
+                            {isCorrupted ? (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-900/30 text-[var(--status-danger)] border border-[var(--status-danger)]">
+                                CORRUPTED METADATA
+                              </span>
+                            ) : isIncomplete ? (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-900/30 text-[var(--status-warning)] border border-[var(--status-warning)]">
+                                INCOMPLETE SESSION
+                              </span>
+                            ) : isInterrupted ? (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-900/30 text-[var(--status-warning)] border border-[var(--status-warning)]">
+                                INTERRUPTED ({sess.termination_reason?.toUpperCase()})
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-900/30 text-[var(--status-success)] border border-[var(--status-success)]">
+                                COMPLETED
+                              </span>
+                            )}
+
+                            {/* Format Badge with Tooltip */}
+                            <span
+                              title={sess.storage_disclaimer || 'Normalized IEEE float32 audio samples in [-1.0, 1.0]. Not raw unparsed wire bytes.'}
+                              className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-[var(--surface-muted)] text-[var(--accent-metal)] border border-[var(--border-subtle)] cursor-help"
+                            >
+                              FLOAT32 AUDIO
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 font-mono-code text-[10px] text-[var(--on-surface-variant)]">
+                            <span>Source: <strong>{sess.source}</strong></span>
+                            <span>•</span>
+                            <span>{sess.duration_s ? sess.duration_s.toFixed(2) : '0.00'}s ({sess.total_samples || 0} samples)</span>
+                            <span>•</span>
+                            <span>{sess.sample_rate_hz || 0} Hz</span>
+                            <span>•</span>
+                            <span className={sess.stream_quality?.is_healthy ? 'text-[var(--status-success)]' : 'text-[var(--status-warning)]'}>
+                              {sess.stream_quality?.is_healthy ? 'Optimal (0 drops)' : `${sess.stream_quality?.dropped_blocks || 0} dropped`}
+                            </span>
+                          </div>
+
+                          <div className="font-mono-code text-[9px] text-[var(--accent-metal)] truncate max-w-lg">
+                            SHA-256: {sess.raw_wav_sha256 || 'None'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        {/* Verify SHA-256 */}
+                        <button
+                          onClick={() => handleVerifyClick(sess.session_id)}
+                          disabled={verifyingId === sess.session_id}
+                          title="Verify cryptographic SHA-256 hash and sample accounting"
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[var(--on-surface)] border border-[var(--border-strong)] hover:border-[var(--accent-oxblood)] hover:text-[var(--accent-oxblood)] flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                        >
+                          <ShieldCheck size={13} className={verifyingId === sess.session_id ? 'animate-spin' : ''} />
+                          <span>Verify</span>
+                        </button>
+
+                        {/* Export Manifest */}
+                        <button
+                          onClick={() => handleExportManifestClick(sess.session_id)}
+                          title="Export standardized machine-readable session manifest"
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[var(--on-surface)] border border-[var(--border-strong)] hover:border-[var(--accent-oxblood)] hover:text-[var(--accent-oxblood)] flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                        >
+                          <Download size={13} />
+                          <span>Manifest</span>
+                        </button>
+
+                        {/* Analyze */}
+                        <button
+                          onClick={() => onAnalyzeSession && onAnalyzeSession(sess.session_id)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-[var(--accent-oxblood)] border border-[var(--border-strong)] hover:border-[var(--accent-oxblood)] hover:bg-[var(--surface-muted)] flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                        >
+                          <Zap size={13} />
+                          <span>Analyze</span>
+                        </button>
+
+                        {/* Replay */}
+                        <button
+                          onClick={() => handleReplayClick(sess.session_id)}
+                          disabled={replayingId === sess.session_id || isCorrupted || isIncomplete}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[var(--accent-oxblood)] hover:opacity-90 flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 disabled:opacity-50"
+                        >
+                          <Play size={13} className={replayingId === sess.session_id ? 'animate-spin' : ''} />
+                          <span>Replay</span>
+                        </button>
+
+                        {/* Delete Trigger */}
+                        {deleteConfirmId === sess.session_id ? (
+                          <div className="flex items-center gap-1 bg-red-900/20 p-1 rounded-lg border border-[var(--status-danger)]">
+                            <span className="text-[10px] font-mono-code text-[var(--status-danger)] px-1">Delete?</span>
+                            <button
+                              onClick={() => handleDeleteClick(sess.session_id)}
+                              className="px-2 py-0.5 bg-[var(--status-danger)] text-white text-[10px] font-bold rounded cursor-pointer"
+                            >
+                              Yes
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirmId(null)}
+                              className="px-2 py-0.5 bg-[var(--surface-muted)] text-[var(--on-surface)] text-[10px] rounded border border-[var(--border-subtle)] cursor-pointer"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setDeleteConfirmId(sess.session_id)}
+                            title="Delete session"
+                            className="p-1.5 rounded-lg text-[var(--on-surface-variant)] hover:text-[var(--status-danger)] hover:bg-[var(--surface-muted)] cursor-pointer"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="flex flex-col gap-1">
-                      <div className="flex flex-wrap items-center gap-2 font-mono-code text-[11px]">
-                        <span className="font-bold text-[var(--accent-oxblood)]">
-                          {sess.session_id}
-                        </span>
-                        <span className="text-[var(--accent-metal)]">•</span>
-                        <span className="text-[var(--on-surface-variant)]">
-                          {new Date(sess.started_at_utc).toLocaleString()}
-                        </span>
+                    {/* Inline Verification Result Banner */}
+                    {check && (
+                      <div
+                        className={`p-2.5 rounded-lg border text-xs font-mono-code flex items-center gap-2 ${
+                          check.is_valid
+                            ? 'bg-emerald-950/20 border-[var(--status-success)] text-[var(--status-success)]'
+                            : 'bg-red-950/20 border-[var(--status-danger)] text-[var(--status-danger)]'
+                        }`}
+                      >
+                        {check.is_valid ? <CheckCircle2 size={14} className="shrink-0" /> : <AlertTriangle size={14} className="shrink-0" />}
+                        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                          <span className="font-bold">{check.status.toUpperCase()}</span>
+                          <span>•</span>
+                          <span>{check.details}</span>
+                        </div>
                       </div>
-
-                      <div className="flex flex-wrap items-center gap-2 font-mono-code text-[10px] text-[var(--on-surface-variant)]">
-                        <span>Source: <strong>{sess.source}</strong></span>
-                        <span>•</span>
-                        <span>{sess.duration_s.toFixed(2)}s ({sess.total_samples} samples)</span>
-                        <span>•</span>
-                        <span>{sess.sample_rate_hz} Hz</span>
-                        <span>•</span>
-                        <span className={sess.stream_quality.is_healthy ? 'text-[var(--status-success)]' : 'text-[var(--status-warning)]'}>
-                          {sess.stream_quality.is_healthy ? 'Optimal (0 drops)' : `${sess.stream_quality.dropped_blocks} dropped`}
-                        </span>
-                      </div>
-
-                      <div className="font-mono-code text-[9px] text-[var(--accent-metal)] truncate max-w-lg">
-                        SHA-256: {sess.raw_wav_sha256}
-                      </div>
-                    </div>
+                    )}
                   </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => onAnalyzeSession && onAnalyzeSession(sess.session_id)}
-                      className="px-3.5 py-2 rounded-lg text-xs font-semibold text-[var(--accent-oxblood)] border border-[var(--border-strong)] hover:border-[var(--accent-oxblood)] hover:bg-[var(--surface-muted)] flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
-                    >
-                      <Zap size={14} />
-                      <span>Analyze</span>
-                    </button>
-                    <button
-                      onClick={() => handleReplayClick(sess.session_id)}
-                      disabled={replayingId === sess.session_id}
-                      className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-[var(--accent-oxblood)] hover:opacity-90 flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
-                    >
-                      <Play size={14} className={replayingId === sess.session_id ? 'animate-spin' : ''} />
-                      <span>Replay in Pipeline</span>
-                    </button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}

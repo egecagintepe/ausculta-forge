@@ -61,7 +61,10 @@ def load_wav_as_float32(path: str | Path) -> Tuple[np.ndarray, int]:
     if not file_path.exists():
         raise FileNotFoundError(f"WAV file not found: {file_path}")
 
-    fs, data = wavfile.read(str(file_path))
+    try:
+        fs, data = wavfile.read(str(file_path))
+    except Exception as e:
+        raise ValueError(f"Malformed or unreadable WAV file {file_path}: {e}") from e
 
     # Convert multichannel to mono
     if data.ndim > 1:
