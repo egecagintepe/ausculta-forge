@@ -88,7 +88,7 @@ Assessment for EEE495/496 includes individual module quality, Git contribution h
     12. Shielded audio cables and connectors (3.5 mm / BNC / USB)
   - **STRICT DIRECTIVE:** DO NOT place orders during Week 02. BOM v0.1 is for team evaluation in Week 3.
 - **Deliverable B-W2-04: Department Laboratory Equipment Audit**
-  - Survey Bilkent EEE department laboratories to confirm availability of:
+  - Survey Department of Electrical and Electronics Engineering laboratories to confirm availability of:
     - Digital storage oscilloscope (DSO)
     - Arbitrary function / waveform generator
     - Digital multimeter (DMM)
