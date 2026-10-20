@@ -275,6 +275,13 @@ impl BackendManager {
         initial_args.push("--parent-pid".to_string());
         initial_args.push(current_pid.to_string());
 
+        let appdata_dir = std::env::var("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("."));
+        let handshake_path = appdata_dir.join("AuscultaForge").join("handshake.json");
+        initial_args.push("--handshake-file".to_string());
+        initial_args.push(handshake_path.to_string_lossy().to_string());
+
         let mut cmd = Command::new(&cmd_path);
         cmd.args(&initial_args);
         cmd.stdout(Stdio::piped());
