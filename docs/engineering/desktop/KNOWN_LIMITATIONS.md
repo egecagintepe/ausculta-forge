@@ -40,3 +40,17 @@ As of Academic Week 5, physical ESP32-S3 USB streaming has **not** been verified
 
 - **Scientific Segmentation:** Springer DBN/HMM acoustic boundary segmentation executes on the CPU via NumPy/SciPy. Processing a 30-second heart sound recording requires approximately 2–3 seconds on a modern quad-core CPU.
 - **No Clinical Diagnostics (Semester II Seam):** AuscultaForge Desktop provides signal acquisition, acoustic filtering, spectral analysis, and S1/S2 cycle segmentation. It **does not** output automated diagnostic murmur classifications, valvular disease predictions, or clinical diagnoses. Diagnostic ML models are intentionally scheduled for Semester II (EEE496) following clinical data validation.
+
+---
+
+## 5. Process Supervision & Environment Security Limits
+
+- **Windows Job Object Availability:** Process tree containment relies on Win32 `CreateJobObjectW` and `AssignProcessToJobObject`. In certain environments (e.g. restrictive enterprise group policies, nested debuggers, or locked-down sandbox containers), process assignment may return error codes (such as `ERROR_ACCESS_DENIED`).
+- **Defensive Fallback:** When Job Object enrollment is restricted, the desktop supervisor logs a warning and relies on the Python parent-PID watchdog thread (`OpenProcess` / `GetExitCodeProcess`) to terminate the backend upon host exit. Universal orphan prevention is therefore dependent on host OS execution permissions.
+
+---
+
+## 6. Packaging & Installation Verification Boundary
+
+- **Build Output vs. System Installation:** The automated build pipeline compiles the standalone backend and generates a valid NSIS installer (`AuscultaForge_0.1.0-alpha.1_x64-setup.exe`).
+- **Non-Invasive Verification:** To preserve the host developer environment and avoid modifying system-wide registry hives or `Program Files` unattended, installer acceptance is verified via non-invasive binary inspection, hash verification, and standalone execution rather than automated silent installation.

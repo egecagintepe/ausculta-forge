@@ -20,9 +20,10 @@
 
 ## 2. Test & Build Automation Matrix
 
-- [x] **Full Backend Pytest Suite:** All 402 unit and integration tests passing (`pytest software/tests/`).
+- [x] **Full Backend Pytest Suite:** All 404 unit and integration tests passing (`pytest software/tests/`).
+- [x] **Rust Desktop Shell & Process Manager Tests:** 5/5 unit tests passing (`cargo test --lib`).
 - [x] **Desktop Security Tests:** 8/8 tests passing (`test_desktop_security.py`).
-- [x] **Subprocess Lifecycle Test:** Standalone process execution and handshake passing (`test_desktop_server.py`).
+- [x] **Subprocess Lifecycle Test:** Standalone process execution, live handshake deserialization, and health check passing.
 - [x] **Frontend Mathematical Verification:** Live workspace buffer and scaling tests passing (`npm test`).
 - [x] **TypeScript Static Analysis:** Strict typecheck passing without errors (`npm run lint` / `tsc --noEmit`).
 - [x] **Production Frontend Build:** Vite production assets generated (`npm run build`).
@@ -35,7 +36,7 @@
 
 - [x] **Single-Click Startup:** Application starts without manual command prompt or Python launch.
 - [x] **Ephemeral Port Allocation:** Loopback binding dynamically assigns an open OS port without collision.
-- [x] **Process Supervision:** Windows Job Object terminates backend tree when desktop window closes.
+- [x] **Process Supervision:** Windows Job Object (where supported) and parent PID watchdog terminate backend tree when desktop window closes.
 - [x] **Truthful Hardware Status:** UI reports `ABSENT (NO HARDWARE)` when physical board is not detected.
 - [x] **Simulation Disclosure:** Virtual Bench displays `SOFTWARE SIMULATION — NO PHYSICAL ESP32 ATTACHED`.
 - [x] **User Data Persistence:** Sessions and manifests stored in `%APPDATA%\AuscultaForge`, surviving app restart.

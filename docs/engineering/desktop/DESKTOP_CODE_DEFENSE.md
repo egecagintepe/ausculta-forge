@@ -2,7 +2,7 @@
 
 - **Document Version:** 1.0.0
 - **Scope:** Oral Defense Questions, Architectural Rationale, Systems Explanations & Viva Preparation
-- **Academic Context:** EEE495 / EEE496 Senior Design Project (Bilkent University)
+- **Academic Context:** Department of Electrical and Electronics Engineering (EEE495 / EEE496 Senior Design Project)
 - **Primary Author:** Ege Çağın Tepe (Module C Lead)
 
 ---
@@ -11,29 +11,29 @@
 
 ### Q1: Why transform AuscultaForge into a native Windows desktop workstation instead of remaining a web browser application?
 **Model Defense Answer:**
-> *"AuscultaForge is a medical-grade engineering workstation acquiring high-bandwidth phonocardiogram signals at 48 kHz (48,000 32-bit floating-point samples per second). Browser-based deployment exhibits three fundamental flaws for an engineering instrument:*
-> 1. *It requires non-technical clinical users to manually open terminal windows, activate Python environments, and start Uvicorn and Vite servers.*
-> 2. *Web browsers impose strict security sandboxes that prohibit native process management, leading to orphaned background processes that keep audio devices and local ports occupied after the tab is closed.*
-> 3. *Standard browser origins on localhost expose local signal recording endpoints to cross-origin drive-by attacks from external websites.*
+> *"AuscultaForge is an engineering workstation acquiring high-bandwidth phonocardiogram signals at 48 kHz (48,000 32-bit floating-point samples per second). Browser-based deployment exhibits three fundamental operational challenges for a standalone engineering instrument:*
+> 1. *It requires non-technical clinical operators to manually open terminal windows, activate Python environments, and start Uvicorn and Vite servers.*
+> 2. *Web browsers impose sandboxes that prohibit native child process lifecycle management, risking abandoned background processes after the browser tab is closed.*
+> 3. *Standard browser origins on localhost expose local signal recording endpoints to cross-origin requests from external websites unless carefully authenticated.*
 >
-> *By building a native desktop shell, we achieve single-click Start Menu execution, kernel-level process supervision, isolated `%APPDATA%` medical session storage, dynamic port allocation, and per-process authentication."*
+> *By building a native desktop shell, we achieve single-click Start Menu execution, bounded process supervision, isolated `%APPDATA%` medical session storage, dynamic port allocation, and per-instance authentication."*
 
 ---
 
 ### Q2: Why choose Tauri 2 (Rust + WebView2) instead of Electron or pywebview?
 **Model Defense Answer:**
 > *"We conducted an evidence-based Technology Decision Spike (ADR-DESKTOP-001) comparing Tauri 2, Electron, and pywebview:*
-> - *Electron bundles a redundant ~150 MB Chromium runtime with high memory overhead (>300 MB idle RAM).*
-> - *pywebview couples GUI event loops to Python's Global Interpreter Lock (GIL), resulting in UI stutter when heavy DSP algorithms (Welch periodograms or Springer segmentation) execute.*
-> - *Tauri 2 provides an ultra-lightweight (~13 MB executable, ~40 MB RAM) Rust native shell utilizing Windows WebView2, which is pre-installed on Windows 10/11. Furthermore, Rust enables direct Win32 API calls to create Windows Job Objects, guaranteeing zero orphaned backend processes upon exit."*
+> - *Electron bundles a redundant ~150 MB Chromium runtime, creating significant baseline overhead (>300 MB RAM across renderer and utility processes).*
+> - *pywebview couples Python and UI event handling into a single process model where heavy scientific computation (such as Welch periodograms or Springer HSMM segmentation) requires careful multi-process management to prevent UI event loop latency.*
+> - *Tauri 2 provides a lightweight Rust native shell utilizing Windows WebView2 (pre-installed on Windows 10/11) with a clear multi-process architecture decoupling UI rendering from Python computing. Furthermore, Rust enables direct Win32 API integration to create Windows Job Objects as the primary kernel-level containment mechanism, complemented by a parent-PID watchdog thread."*
 
 ---
 
 ### Q3: How do you guarantee that closing the desktop application never leaves a zombie Python process?
 **Model Defense Answer:**
-> *"We implemented a dual-layer defense mechanism:*
-> 1. *OS Kernel Guarantee (Windows Job Object): When Tauri spawns `auscultaforge-backend.exe`, the child process handle is immediately enrolled into a Win32 Job Object configured with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. Even if the Tauri host is forcefully killed in Task Manager or encounters an unhandled crash, the Windows kernel automatically terminates all processes in that job.*
-> 2. *Application Watchdog Thread: The Python backend runs a daemon thread continuously monitoring the parent PID via Win32 `OpenProcess` and `GetExitCodeProcess`. If the parent terminates, the backend initiates an immediate graceful Uvicorn shutdown."*
+> *"We implemented a dual-layer defense mechanism to prevent orphaned backend processes across standard and crash exit paths:*
+> 1. *OS Kernel Containment (Windows Job Object): When Tauri spawns the backend, the child process handle is enrolled into a Win32 Job Object configured with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. When supported by the host execution environment, closing the job handle or terminating the Tauri host causes the OS kernel to terminate child processes in the job.*
+> 2. *Application Watchdog Thread: To account for environments where Job Object assignment may be restricted (such as nested virtualization or restrictive security sandboxes), the Python backend concurrently runs a daemon thread monitoring the parent PID via Win32 `OpenProcess` and `GetExitCodeProcess`. If the parent terminates, the backend initiates an immediate clean shutdown."*
 
 ---
 

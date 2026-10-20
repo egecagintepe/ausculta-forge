@@ -75,6 +75,40 @@ def start_parent_watchdog(parent_pid: int, server: uvicorn.Server) -> None:
     t.start()
 
 
+def build_handshake_payload(
+    host: str,
+    port: int,
+    auth_token: Optional[str],
+    user_data_dir: str | Path,
+    pid: int,
+) -> dict:
+    """Build the standardized, versioned handshake dictionary."""
+    base_data_dir = Path(user_data_dir).resolve()
+    sessions_dir = base_data_dir / "sessions"
+    assets_dir = base_data_dir / "assets"
+    analysis_dir = base_data_dir / "analysis"
+    reports_dir = base_data_dir / "reports"
+    logs_dir = base_data_dir / "logs"
+    return {
+        "schema_version": "1.0.0",
+        "app": "AuscultaForge Desktop",
+        "version": "0.1.0-alpha.1",
+        "status": "ready",
+        "host": host,
+        "port": port,
+        "auth_token": auth_token,
+        "pid": pid,
+        "storage_dir": str(base_data_dir),
+        "user_data_dir": str(base_data_dir),
+        "sessions_dir": str(sessions_dir),
+        "assets_dir": str(assets_dir),
+        "analysis_dir": str(analysis_dir),
+        "reports_dir": str(reports_dir),
+        "logs_dir": str(logs_dir),
+        "health_url": f"http://{host}:{port}/api/health",
+    }
+
+
 def run_desktop_server(
     host: str = "127.0.0.1",
     port: int = 0,
@@ -87,11 +121,13 @@ def run_desktop_server(
     # 1. Resolve User Data Directories
     base_data_dir = Path(user_data_dir).resolve() if user_data_dir else get_default_user_data_dir()
     sessions_dir = base_data_dir / "sessions"
+    assets_dir = base_data_dir / "assets"
+    analysis_dir = base_data_dir / "analysis"
     reports_dir = base_data_dir / "reports"
     logs_dir = base_data_dir / "logs"
     cache_dir = base_data_dir / "cache"
 
-    for d in (sessions_dir, reports_dir, logs_dir, cache_dir):
+    for d in (sessions_dir, assets_dir, analysis_dir, reports_dir, logs_dir, cache_dir):
         d.mkdir(parents=True, exist_ok=True)
 
     # Configure file logging in logs_dir
@@ -114,11 +150,12 @@ def run_desktop_server(
     else:
         resolved_token = str(auth_token)
 
-    # 3. Create Application
+    # 3. Create Application with isolated user directories
     app = create_app(
         sessions_dir=sessions_dir,
+        assets_dir=assets_dir,
+        analysis_dir=analysis_dir,
         auth_token=resolved_token,
-        analysis_dir=reports_dir,
     )
 
     # 4. Bind Socket with Dynamic Ephemeral Port Allocation
@@ -134,19 +171,13 @@ def run_desktop_server(
     logger.info(f"Socket successfully bound to {host}:{actual_port}")
 
     # 5. Emit Machine-Readable Handshake Record
-    handshake_payload = {
-        "status": "ready",
-        "app": "AuscultaForge Desktop",
-        "version": "0.1.0-alpha.1",
-        "host": host,
-        "port": actual_port,
-        "auth_token": resolved_token,
-        "pid": os.getpid(),
-        "user_data_dir": str(base_data_dir),
-        "sessions_dir": str(sessions_dir),
-        "reports_dir": str(reports_dir),
-        "logs_dir": str(logs_dir),
-    }
+    handshake_payload = build_handshake_payload(
+        host=host,
+        port=actual_port,
+        auth_token=resolved_token,
+        user_data_dir=base_data_dir,
+        pid=os.getpid(),
+    )
 
     handshake_json = json.dumps(handshake_payload)
 
@@ -185,7 +216,29 @@ def main() -> None:
     parser.add_argument("--user-data-dir", type=str, default=None, help="Root path for persistent user data")
     parser.add_argument("--handshake-file", type=str, default=None, help="Path to write readiness handshake JSON")
     parser.add_argument("--parent-pid", type=int, default=None, help="Parent process ID to monitor")
+    parser.add_argument(
+        "--print-handshake",
+        action="store_true",
+        help="Print handshake payload and exit without starting uvicorn",
+    )
     args = parser.parse_args()
+
+    if args.print_handshake:
+        base_dir = Path(args.user_data_dir).resolve() if args.user_data_dir else get_default_user_data_dir()
+        token = (
+            secrets.token_hex(32)
+            if (args.auth_token == "auto" or not args.auth_token)
+            else (None if args.auth_token == "disabled" else args.auth_token)
+        )
+        payload = build_handshake_payload(
+            host=args.host,
+            port=args.port if args.port > 0 else 58903,
+            auth_token=token,
+            user_data_dir=base_dir,
+            pid=os.getpid(),
+        )
+        print(f"AUSCULTAFORGE_BACKEND_READY:{json.dumps(payload)}", flush=True)
+        return
 
     run_desktop_server(
         host=args.host,

@@ -2,7 +2,7 @@ mod process_manager;
 
 use process_manager::{BackendConfig, BackendManager};
 use std::sync::{Arc, Mutex};
-use tauri::State;
+use tauri::{Manager, State};
 
 struct AppState {
     backend: Arc<Mutex<BackendManager>>,
@@ -59,22 +59,26 @@ pub fn run() {
         .manage(AppState {
             backend: backend_manager,
         })
-        .setup(move |_app| {
+        .setup(move |app| {
             eprintln!("[Desktop] AuscultaForge Desktop Workstation initializing...");
+            let res_dir = app.path().resource_dir().ok();
+            eprintln!("[Desktop] Resolved application resource directory: {:?}", res_dir);
+
             let mut mgr = manager_for_setup
                 .lock()
                 .map_err(|e| tauri::Error::from(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
             
+            mgr.set_resource_dir(res_dir);
+
             match mgr.start() {
                 Ok(cfg) => {
                     eprintln!(
-                        "[Desktop] Initialized backend on port {} with auth token",
+                        "[Desktop] Initialized backend on port {} with verified health check",
                         cfg.port
                     );
                 }
                 Err(err) => {
                     eprintln!("[Desktop] Error during backend initial startup: {}", err);
-                    // Do not panic so the desktop shell can still display the failure diagnostic screen
                 }
             }
 

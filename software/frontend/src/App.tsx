@@ -202,7 +202,7 @@ export default function App() {
     const unsubConn = bridgeClient.onConnectionChange((connected) => {
       setBackendConnected(connected);
       if (connected) {
-        addLog(`Connected to Python DSP Bridge (${bridgeClient.getWsUrl()})`, 'info', 'Bridge');
+        addLog(`Connected to Python DSP Bridge (${bridgeClient.getSanitizedWsUrl()})`, 'info', 'Bridge');
         addToast(`Connected to Python DSP Bridge (${bridgeClient.getEndpoint()})`, 'success');
       } else {
         addLog('Disconnected from Python DSP Bridge. Retrying...', 'warning', 'Bridge');

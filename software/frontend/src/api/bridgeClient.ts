@@ -150,13 +150,18 @@ export interface SessionItem {
 }
 
 export interface BackendDesktopConfig {
+  schema_version?: string;
+  app?: string;
+  version?: string;
+  host?: string;
   port: number;
-  auth_token: string;
+  auth_token?: string | null;
   pid: number;
   storage_dir: string;
   status: string;
   http_base_url: string;
   ws_url: string;
+  health_url?: string;
 }
 
 type FrameCallback = (frame: SignalFrameData) => void;
@@ -213,7 +218,7 @@ class BridgeClient {
           if (cfg && cfg.port) {
             this.apiUrl = `${cfg.http_base_url}/api`;
             this.url = cfg.ws_url;
-            this.authToken = cfg.auth_token;
+            this.authToken = cfg.auth_token || '';
             this.storageDir = cfg.storage_dir;
             this.activeEndpoint = `127.0.0.1:${cfg.port}`;
             return true;
@@ -237,6 +242,10 @@ class BridgeClient {
 
   public getWsUrl(): string {
     return this.url;
+  }
+
+  public getSanitizedWsUrl(): string {
+    return this.url.replace(/([?&]token=)[^&]+/, '$1***');
   }
 
   public getApiUrl(): string {
