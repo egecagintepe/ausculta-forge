@@ -25,6 +25,18 @@ from .models import EnvelopeLabConfig, EnvelopeSeries, EnvelopeLabResult
 def compute_hilbert_envelope(signal: np.ndarray) -> np.ndarray:
     """Compute the analytical signal magnitude envelope via Hilbert transform.
     
+    Mathematical Formulation:
+        z(t) = x(t) + j * H{x(t)}
+        A(t) = |z(t)| = sqrt(x^2(t) + H{x(t)}^2)
+        
+    Assumptions & Limitations:
+    1. Bedrosian Theorem: Valid for amplitude-modulated narrowband carriers where the envelope
+       spectrum and carrier spectrum do not overlap. On wideband PCG or signals with significant
+       low-frequency motion drift, the analytic envelope can exhibit spurious oscillations.
+    2. Finite Observation Length: The discrete Hilbert transform via FFT assumes periodicity,
+       which introduces Gibbs-like edge transients near the start and end of the finite record.
+    3. Noise Sensitivity: Wideband background noise raises the baseline magnitude floor.
+    
     Parameters
     ----------
     signal : np.ndarray
@@ -91,6 +103,7 @@ def compute_moving_rms_envelope(
 def compute_tkeo(
     signal: np.ndarray,
     boundary_policy: str = "replicate",
+    rectify: bool = False,
 ) -> np.ndarray:
     """Compute the discrete Teager-Kaiser Energy Operator (TKEO).
     
@@ -103,13 +116,26 @@ def compute_tkeo(
         For low discrete frequencies (omega_0 << 1), sin(omega_0) ~ omega_0,
         yielding Psi ~ A^2 * omega_0^2 (instantaneous energy proportional to amplitude^2 * frequency^2).
         
-    Boundary Policies:
-        - 'replicate': Psi[0] = Psi[1], Psi[N-1] = Psi[N-2]
-        - 'zero': Psi[0] = 0.0, Psi[N-1] = 0.0
+    Assumptions & Limitations:
+    1. Single dominant component: Designed for mono-component AM-FM signals. In multi-component
+       signals or noisy records, cross-terms can produce negative energy estimates.
+    2. High-frequency amplification: Proportional to frequency squared (omega_0^2), heavily
+       amplifying high-frequency acoustic noise and sharp sensor clicks.
+    3. Boundary handling: Evaluated strictly from n=1 to N-2. Boundary endpoints are padded via policy.
         
-    Diagnostic Caveat:
-        TKEO is an experimental feature comparator. A high TKEO peak indicates rapid energy/frequency
-        transients, but is NOT definitive proof of S1, S2, or cardiovascular pathology.
+    Parameters
+    ----------
+    signal : np.ndarray
+        1D floating-point input array.
+    boundary_policy : str
+        'replicate' (Psi[0] = Psi[1], Psi[N-1] = Psi[N-2]) or 'zero' (Psi[0]=0, Psi[N-1]=0).
+    rectify : bool
+        If True, clips negative cross-term values to 0.0 (half-wave rectification). Default is False.
+        
+    Returns
+    -------
+    np.ndarray
+        TKEO energy sequence of identical length to the input signal.
     """
     if not isinstance(signal, np.ndarray):
         signal = np.asarray(signal, dtype=np.float64)
@@ -135,6 +161,9 @@ def compute_tkeo(
         tkeo[-1] = 0.0
     else:
         raise ValueError(f"Unknown boundary_policy {boundary_policy!r}. Choose 'replicate' or 'zero'.")
+
+    if rectify:
+        tkeo = np.maximum(0.0, tkeo)
 
     return tkeo
 
@@ -357,11 +386,43 @@ def compute_envelope_lab(
         "psd_band": psd_series,
     }
 
+    # 5. Homomorphic Envelope (Schmidt 2010 / Springer 2016 verified pipeline)
+    homo_note = "Homomorphic envelope disabled by configuration."
+    if cfg.include_homomorphic:
+        try:
+            from ..segmentation.springer_features import compute_springer_homomorphic_envelope
+            homo_vals = compute_springer_homomorphic_envelope(
+                signal,
+                sample_rate_hz=sample_rate_hz,
+                lowpass_hz=cfg.homomorphic_lowpass_hz,
+            )
+            homo_series = EnvelopeSeries(
+                algorithm="homomorphic",
+                sample_rate_hz=float(sample_rate_hz),
+                time_s=[float(t) for t in native_time_s],
+                values=[float(v) for v in homo_vals],
+                parameters={
+                    "lowpass_hz": cfg.homomorphic_lowpass_hz,
+                    "filter_type": "butterworth_lowpass_order1_zero_phase",
+                },
+                input_sample_count=n_samples,
+                output_sample_count=len(homo_vals),
+                provenance={"literature": "R005 (Schmidt et al. 2010), R006 (Springer et al. 2016)"},
+            )
+            envelopes["homomorphic"] = homo_series
+            homo_note = "Computed via Schmidt/Springer 8 Hz zero-phase lowpass homomorphic filtering."
+        except Exception as e:
+            homo_note = f"Homomorphic envelope extraction bypassed: {e}"
+
     provenance = {
         "module": "pcg_core.scientific.envelopes",
         "input_sample_rate_hz": float(sample_rate_hz),
-        "homomorphic_status": cfg.homomorphic_status,
-        "homomorphic_note": "Homomorphic envelope deferred to Stage-B pending verified primary-source parameterization (R005/R006).",
+        "homomorphic_status": "AVAILABLE" if "homomorphic" in envelopes else cfg.homomorphic_status,
+        "homomorphic_note": (
+            homo_note
+            if "homomorphic" in envelopes
+            else "Homomorphic envelope deferred to Stage-B pending verified primary-source parameterization (R005/R006)."
+        ),
     }
 
     return EnvelopeLabResult(

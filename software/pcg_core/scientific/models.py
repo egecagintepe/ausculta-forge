@@ -77,10 +77,11 @@ class SignalCharacterizationResult:
     digital_saturation_count: int = 0
     digital_saturation_fraction: float = 0.0
     zero_crossing_rate: Optional[float] = None
+    quality_dimensions: Optional[dict[str, Any]] = None
     provenance: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d = {
             "schema_version": self.schema_version,
             "sample_count": self.sample_count,
             "duration_s": round(sanitize_float(self.duration_s), 4),
@@ -94,6 +95,44 @@ class SignalCharacterizationResult:
             "digital_saturation_count": self.digital_saturation_count,
             "digital_saturation_fraction": round(sanitize_float(self.digital_saturation_fraction), 6),
             "zero_crossing_rate": round(sanitize_float(self.zero_crossing_rate), 6) if self.zero_crossing_rate is not None else None,
+            "provenance": dict(self.provenance),
+        }
+        if self.quality_dimensions is not None:
+            d["quality_dimensions"] = self.quality_dimensions
+        return d
+
+
+@dataclass(slots=True)
+class MultiDimensionalQualityReport:
+    """Multidimensional recording quality assessment reporting distinct physical failure dimensions.
+
+    Metrological Rule: Rejects composite 0–100 scores or diagnostic claims.
+    Reports separate, objective engineering metrics for:
+    1. Digital clipping / saturation
+    2. Stream continuity / sample preservation
+    3. Motion / friction / VLF contact artifacts (0–20 Hz)
+    4. Spectral contamination (50/60 Hz mains hum, high-frequency noise)
+    5. Timing / rate stability faults
+    6. Signal morphology / silence indicators
+    """
+    schema_version: str = "1.0.0"
+    clipping: dict[str, Any] = field(default_factory=dict)
+    continuity: dict[str, Any] = field(default_factory=dict)
+    vlf_motion_evidence: dict[str, Any] = field(default_factory=dict)
+    spectral_contamination: dict[str, Any] = field(default_factory=dict)
+    timing_faults: dict[str, Any] = field(default_factory=dict)
+    morphology_evidence: dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "clipping": dict(self.clipping),
+            "continuity": dict(self.continuity),
+            "vlf_motion_evidence": dict(self.vlf_motion_evidence),
+            "spectral_contamination": dict(self.spectral_contamination),
+            "timing_faults": dict(self.timing_faults),
+            "morphology_evidence": dict(self.morphology_evidence),
             "provenance": dict(self.provenance),
         }
 
@@ -185,6 +224,8 @@ class EnvelopeLabConfig:
     psd_window_type: str = "hamming"
     profile_behavior: str = "SPRINGER_RESEARCH"
     homomorphic_status: str = "DEFERRED_STAGE_B"
+    include_homomorphic: bool = False
+    homomorphic_lowpass_hz: float = 8.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -197,6 +238,8 @@ class EnvelopeLabConfig:
             "psd_window_type": self.psd_window_type,
             "profile_behavior": self.profile_behavior,
             "homomorphic_status": self.homomorphic_status,
+            "include_homomorphic": self.include_homomorphic,
+            "homomorphic_lowpass_hz": self.homomorphic_lowpass_hz,
         }
 
 

@@ -275,7 +275,8 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
               className="px-2.5 py-1.5 rounded text-xs font-mono-code border bg-[var(--surface-muted)] text-[var(--on-surface)]"
               style={{ borderColor: 'var(--border-subtle)' }}
             >
-              <option value="GENERAL_PCG_V1">GENERAL_PCG_V1 (20–600 Hz Butterworth)</option>
+              <option value="PCG_CHARACTERIZATION_20_500_HZ">PCG_CHARACTERIZATION_20_500_HZ (20–500 Hz Mandatory)</option>
+              <option value="GENERAL_PCG_V1">GENERAL_PCG_V1 (20–600 Hz Provisional)</option>
               <option value="RAW_INTEGRITY_V1">RAW_INTEGRITY_V1 (Full Bandwidth)</option>
               <option value="BROADBAND_SYSTEM_ID_V1">BROADBAND_SYSTEM_ID_V1 (No Filter)</option>
               <option value="SPRINGER_SEGMENTATION_RESEARCH_V1">SPRINGER_SEGMENTATION_RESEARCH_V1</option>

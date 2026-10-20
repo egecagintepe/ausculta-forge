@@ -3,6 +3,7 @@
 from .models import (
     SignalQualityConfig,
     SignalCharacterizationResult,
+    MultiDimensionalQualityReport,
     WelchConfig,
     SpectralAnalysisResult,
     EnvelopeLabConfig,
@@ -11,7 +12,7 @@ from .models import (
     SystemIdConfig,
     SystemIdentificationResult,
 )
-from .signal_quality import compute_signal_quality
+from .signal_quality import compute_signal_quality, assess_signal_quality
 from .spectral import compute_welch_psd, resample_analysis_signal
 from .envelopes import (
     compute_hilbert_envelope,
@@ -25,6 +26,7 @@ from .system_id import estimate_siso_system_id
 __all__ = [
     "SignalQualityConfig",
     "SignalCharacterizationResult",
+    "MultiDimensionalQualityReport",
     "WelchConfig",
     "SpectralAnalysisResult",
     "EnvelopeLabConfig",
@@ -33,6 +35,7 @@ __all__ = [
     "SystemIdConfig",
     "SystemIdentificationResult",
     "compute_signal_quality",
+    "assess_signal_quality",
     "compute_welch_psd",
     "resample_analysis_signal",
     "compute_hilbert_envelope",
