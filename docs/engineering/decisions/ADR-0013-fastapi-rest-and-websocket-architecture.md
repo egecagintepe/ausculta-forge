@@ -20,7 +20,7 @@ To connect the local desktop browser user interface (React / Vite) with the Pyth
 ## Decision
 Selected **FastAPI with the Application Factory Pattern (`create_app()` in `software/pcg_app/app.py`)**:
 * **Factory Pattern:** Eliminates a global module-level `app` object; allows tests to instantiate isolated app instances with temporary test session directories.
-* **WebSocket Streaming:** Pushes decimated audio vectors over `ws://127.0.0.1:8000/api/ws/stream`.
+* **WebSocket Streaming:** Pushes decimated audio vectors and live telemetry over `ws://127.0.0.1:8000/ws`.
 * **REST Endpoints:** Exposes 57 strongly-typed endpoints for session management, metrology reports, and research benchmarks.
 
 ## Consequences & Trade-Offs

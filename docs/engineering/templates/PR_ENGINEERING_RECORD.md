@@ -53,7 +53,7 @@
   - Commands: `npm run lint`, `npm run test`, `npm run build`
   - Observed Result: `0 errors, X tests passed, clean build`
 - [ ] **C Golden Vector Parity:**
-  - Command: `tools/portable_generator/run_checks.sh` (or Windows equivalent)
+  - Command: `pytest software/tests/test_c_golden_vectors.py`
   - Observed Result: `PASS (6/6 vectors bit-exact)`
 - [ ] **Hardware Bringup:**
   - Status: `[HARDWARE_UNVERIFIED / BENCH_VERIFIED]`

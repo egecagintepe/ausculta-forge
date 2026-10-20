@@ -23,31 +23,33 @@ This document contains 6 structured code-reading exercises directly taken from t
 
 ### Code Excerpt:
 ```c
-uint32_t pack_and_align_sample(int32_t sample_24bit, int is_msb_aligned) {
-    uint32_t u24 = (uint32_t)sample_24bit & 0x00FFFFFFU;
-    
-    if (is_msb_aligned) {
-        return (u24 << 8);
-    } else {
-        if (u24 & 0x00800000U) {
-            return (u24 | 0xFF000000U);
-        } else {
-            return u24;
-        }
-    }
+/* tools/c_golden_vectors/golden_common.h */
+
+/**
+ * @brief Sign-extend a raw 24-bit word into a signed 32-bit integer (LSB-aligned).
+ */
+static inline int32_t sign_extend_24_to_32(uint32_t raw_24) {
+    return (int32_t)((raw_24 & 0x00FFFFFFU) << 8) >> 8;
+}
+
+/**
+ * @brief Convert LSB-aligned 24-bit signed integer to MSB-aligned (left-justified) 32-bit container.
+ */
+static inline int32_t lsb_to_msb_aligned(int32_t lsb_val) {
+    return (int32_t)((uint32_t)(lsb_val & 0x00FFFFFFU) << 8);
 }
 ```
 
 ### Examiner Questions:
-1. **Predict Output:** What is the exact 32-bit hexadecimal return value when `sample_24bit = -4,194,304` (`-2^22`, negative half scale) and `is_msb_aligned = 0`?
-   * *Solution:* In 24-bit two's complement, $-4,194,304 = 2^{24} - 2^{22} = 12,582,912 = 0\text{xC00000}$.
-   * Bit 23 is 1 (`0xC00000 & 0x800000 != 0`).
-   * The sign-extension branch executes: `0x00C00000 | 0xFF000000 = 0xFFC00000`.
-   * Return value: `0xFFC00000` (which evaluates to $-4,194,304$ in standard 32-bit signed integer arithmetic).
-2. **Boundary Modification:** If the hardware was upgraded to a 28-bit ADC, what constants in this function must be modified?
-   * *Solution:* The bitmask `0x00FFFFFFU` becomes `0x0FFFFFFFU`. The sign check `0x00800000U` (bit 23) becomes `0x08000000U` (bit 27). The sign-extension mask `0xFF000000U` becomes `0xF0000000U`. The MSB shift `<< 8` becomes `<< 4`.
-3. **Bug Spotting:** Why did the author write `(uint32_t)sample_24bit & 0x00FFFFFFU` instead of just `sample_24bit & 0x00FFFFFF`?
-   * *Solution:* If `sample_24bit` is negative, in C it is sign-extended to 32-bit signed before the bitwise operation. Without `uint32_t` casting, performing bitwise shifts on signed types later can invoke undefined behavior.
+1. **Predict Output:** What is the exact 32-bit hexadecimal and decimal return value of `sign_extend_24_to_32(0x00C00000U)`?
+   * *Solution:* In 24-bit two's complement, `0x00C00000` represents $-4,194,304$ (negative half scale).
+   * Mask with `0x00FFFFFFU` yields `0x00C00000U`.
+   * Left shift `<< 8` moves bit 23 into the 32-bit sign bit position (bit 31), producing `0xC0000000U`.
+   * Cast to `int32_t` and arithmetic right shift `>> 8` propagates the sign bit across the top 8 bits, yielding `0xFFC00000` (decimal $-4,194,304$).
+2. **Implementation-Defined Caveat:** Why does right-shifting a signed negative integer depend on compiler implementation in ISO C, and how does GCC/Clang handle it?
+   * *Solution:* In ISO C (C99 §6.5.7), right-shifting a negative signed integer is implementation-defined behavior (arithmetic vs. logical right shift). GCC and Clang guarantee an arithmetic shift (preserving sign bits).
+3. **Container Conversion:** What does `lsb_to_msb_aligned(-4194304)` return?
+   * *Solution:* Masking `-4194304` (`0xFFC00000`) with `0x00FFFFFFU` yields `0x00C00000U`. Shifting left by 8 yields `0xC0000000U` (signed decimal $-1,073,741,824$), which aligns the 24-bit audio word with the top 24 bits of a 32-bit container (`S32_LE`).
 
 ---
 

@@ -1,114 +1,236 @@
-# AuscultaForge — Session Recording, Replay & Cryptographic Integrity Internals
-**Document ID:** `AF-CODE-RECORDING-V01`  
+# AuscultaForge — Session Recording, Replay & Storage Integrity Internals
+**Document ID:** `AF-CODE-RECORDING-V02`  
 **Classification:** `CODE_VERIFIED` / `TEST_VERIFIED`  
 **Course Context:** EEE495 / EEE496 Senior Design Project — Digital Stethoscope  
 **Reference File:** `software/pcg_core/recording.py`  
+**Downstream Orchestration:** `software/pcg_app/state.py` (`StreamManager.recorder`)  
+**Data Contract:** `software/pcg_core/models.py` (`SampleBlock.samples` as `np.float32`)  
 **Associated Tests:** `software/tests/test_recording.py` (20 automated tests)
 
 ---
 
-## 1. Dual-File Scientific Persistence Architecture
+## 1. Directory-Based Scientific Persistence Architecture
 
-In academic engineering research, audio recordings cannot be stored as standalone binary files lacking context. Without verifiable provenance, recordings are vulnerable to sample rate confusion, undocumented filtering, lost timestamps, and silent file truncation.
+In biomedical acoustic research, recorded audio must never be stored as an uncontextualized binary blob. Without verifiable provenance, scientific recordings are vulnerable to sample rate confusion, undocumented filtering, lost timestamps, and silent file corruption.
 
-AuscultaForge mandates a **Dual-File Immutable Session Architecture**:
-Every scientific recording session is stored as a twin pair of files under `experiments/sessions/`:
-1. **`<session_id>.wav`:** The raw, uncompressed Pulse Code Modulated (PCM) audio waveform.
-2. **`<session_id>.meta.json`:** A cryptographic metadata sidecar document recording acquisition provenance, environment state, sample counts, and an SHA-256 checksum of the audio payload.
+AuscultaForge implements a **Tri-File Directory Session Architecture**:
+Every scientific recording session is stored as a dedicated directory under `experiments/sessions/<session_id>/` containing three tightly coupled files:
 
 ```text
-experiments/sessions/
-├── session_20261020_143000_exp01.wav        # Raw 24-bit / 48 kHz PCM audio
-└── session_20261020_143000_exp01.meta.json  # Immutable cryptographic sidecar
+experiments/sessions/<session_id>/
+├── raw.wav          # Canonical accepted samples serialized in normalized IEEE float32
+├── session.json     # Authoritative session metadata sidecar (provenance, environment, SHA-256)
+└── manifest.json    # Machine-readable laboratory manifest for phantom benchmarks & audit
 ```
+
+### 1.1 Structural Role of Files
+
+1. **`raw.wav`:**
+   - Serialized via `scipy.io.wavfile.write()`.
+   - Default format: `normalized_float32` (IEEE-754 32-bit floating point, samples scaled to $[-1.0, 1.0]$).
+   - Captures unadulterated sensor acquisitions after transport acceptance and normalization, before any user-selected UI bandpass or display decimation filters.
+   - **Crucial Distinction:** A normalized float32 WAV is **not** an unparsed bit-for-bit byte copy of the physical wire stream. As documented in the `SessionMetadata.storage_disclaimer`:
+     > *"WAV file contains normalized IEEE float32 audio samples in [-1.0, 1.0], derived via linear scaling from acquisition blocks. It is not an unparsed wire bitstream copy."*
+2. **`session.json`:**
+   - Authoritative JSON metadata sidecar created by `SessionMetadata.to_json()`.
+   - Records UTC start/end timestamps, sample rate, total blocks, total sample count, hardware sequence boundaries, stream quality reports, Git commit SHA, runtime environment, and the SHA-256 checksum of `raw.wav`.
+3. **`manifest.json`:**
+   - Exportable benchmark manifest produced by `export_session_manifest()`.
+   - Standardizes parameters for repeatable offline phantom analysis, CirCor / PhysioNet benchmarking, and metrology pipelines.
 
 ---
 
-## 2. RIFF / WAV Audio Header Mechanics
+## 2. In-Memory Accumulation and Atomic Serialization Lifecycle
 
-### 2.1 RIFF Chunk Structure
-A standard uncompressed WAV file is structured as nested Resource Interchange File Format (RIFF) chunks:
+The acquisition pipeline handles audio in real time. Because disk writes can introduce non-deterministic I/O latency, `SessionRecorder` buffers samples in memory and executes serialization upon session finalization.
 
-```text
-Offset  Size  Field Name          Expected Value / Calculation
-0       4     ChunkID             "RIFF" (0x52494646)
-4       4     ChunkSize           Total file size - 8 bytes
-8       4     Format              "WAVE" (0x57415645)
-12      4     Subchunk1ID         "fmt " (0x666D7420)
-16      4     Subchunk1Size       16 (PCM chunk size)
-20      2     AudioFormat         1 (Linear PCM, uncompressed)
-22      2     NumChannels         1 (Mono)
-24      4     SampleRate          48,000 (0x0000BB80)
-28      4     ByteRate            SampleRate × NumChannels × (BitsPerSample / 8)
-32      2     BlockAlign          NumChannels × (BitsPerSample / 8)
-34      2     BitsPerSample       16, 24, or 32
-36      4     Subchunk2ID         "data" (0x64617461)
-40      4     Subchunk2Size       NumSamples × NumChannels × (BitsPerSample / 8)
-44      N     Data Payload        Contiguous raw audio samples
+```mermaid
+sequenceDiagram
+    autonumber
+    participant SM as StreamManager
+    participant SR as SessionRecorder
+    participant FS as File System (experiments/sessions/<id>/)
+    participant SQM as StreamQualityMonitor
+
+    Note over SM,SR: Session Start
+    SM->>SR: start(session_id, source, acquisition_mode)
+    SR->>FS: mkdir(<session_id>)
+    SR->>FS: write placeholder session.json (status="recording", termination="incomplete")
+    
+    Note over SM,SR: Real-Time Acquisition Loop
+    loop Every Incoming SampleBlock
+        SM->>SR: record_block(block)
+        SR->>SR: Check sample_rate_hz invariant
+        SR->>SQM: inspect_block(block)
+        SR->>SR: append chunk to self._chunks (float32 array)
+        SR->>SR: _total_samples += len(chunk)
+    end
+
+    Note over SM,SR: Session Finalization
+    SM->>SR: stop(termination_reason="completed")
+    SR->>SR: full_audio = np.concatenate(self._chunks)
+    SR->>SR: Verify len(full_audio) == _total_samples
+    SR->>FS: scipy.io.wavfile.write("raw.wav", sample_rate, full_audio)
+    SR->>FS: wavfile.read("raw.wav") (read-back verification)
+    SR->>SR: compute_file_sha256("raw.wav")
+    SR->>FS: write "session.json.tmp" -> atomic replace "session.json"
+    SR->>FS: write "manifest.json"
+    SR-->>SM: return SessionMetadata
 ```
 
-### 2.2 Header Rewriting on Finalization
-* **The Streaming Problem:** When recording starts, the total duration and sample count are unknown. Writing a zero or fixed size into `ChunkSize` and `Subchunk2Size` causes standard media players (and Python `scipy.io.wavfile`) to report the file as empty or corrupt if stream terminates abruptly.
-* **The AuscultaForge Solution:**
-  1. At session initialization, `SessionRecorder` writes the full 44-byte RIFF header with placeholder sizes ($0\text{xFFFFFFFF}$).
-  2. Samples are appended sequentially to disk using unbuffered binary stream writes.
-  3. When `SessionRecorder.stop()` is called (or when an emergency disconnect is caught), the file pointer seeks back to byte offsets 4 and 40 (`f.seek(4)`, `f.seek(40)`) and rewrites the exact byte counts.
-  4. The file is cleanly flushed to disk (`f.flush()`, `os.fsync(f.fileno())`).
+### 2.1 Initialization & Crash Marker (`start`)
+When `SessionRecorder.start()` is invoked:
+1. Validates `session_id` using `validate_session_id()`:
+   - Enforces regex `^[a-zA-Z0-9_-]+$`.
+   - Rejects directory traversal (`..`, `/`, `\`).
+   - Rejects Windows reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`).
+2. Creates the target directory `experiments/sessions/<session_id>/`.
+3. Immediately writes an in-progress placeholder `session.json`:
+   ```json
+   {
+     "session_id": "session_20261020_143000_exp01",
+     "status": "recording",
+     "termination_reason": "incomplete",
+     "started_at_utc": "2026-10-20T14:30:00.124567+00:00",
+     "ended_at_utc": null
+   }
+   ```
+   **Why this matters:** If the host process crashes, the USB cable is unplugged, or power is cut mid-stream, an unfinalized session is unambiguously detectable as `status: "incomplete"` rather than masquerading as a valid completed recording.
+
+### 2.2 Streaming Block Ingestion (`record_block`)
+When `SessionRecorder.record_block(block: SampleBlock)` is invoked:
+1. State verification: Asserts `self._active is True` (raises `RecordingStateError` if stopped).
+2. Sample rate consistency check:
+   - If initial rate is unset, locks `self._sample_rate_hz = block.sample_rate_hz`.
+   - If incoming rate changes mid-session, sets `self._active = False` and raises `RecordingSampleRateError` to prevent writing a corrupted multi-rate WAV file.
+3. Quality inspection: Passes the block to `StreamQualityMonitor.inspect_block()` to track sequence gaps, dropped blocks, timestamp regressions, and repeated sequences.
+4. Memory buffering: Converts `block.samples` to `np.ndarray` of dtype `np.float32` and appends to `self._chunks`.
+
+### 2.3 Stop & Atomic Serialization (`stop`)
+When `SessionRecorder.stop(termination_reason="completed")` is invoked:
+1. Concatenation & Sample Accounting:
+   ```python
+   full_audio = np.concatenate(self._chunks)
+   if len(full_audio) != self._total_samples:
+       raise SessionCorruptedError(
+           f"Sample accounting discrepancy: recorder counted {self._total_samples} samples, "
+           f"but concatenated audio contains {len(full_audio)} samples."
+       )
+   ```
+2. WAV File Serialization:
+   ```python
+   wav_path = session_dir / "raw.wav"
+   if self.wav_format == "float32":
+       wavfile.write(str(wav_path), self._sample_rate_hz, full_audio.astype(np.float32))
+   else:
+       scaled = np.clip(full_audio, -1.0, 1.0) * 32767.0
+       wavfile.write(str(wav_path), self._sample_rate_hz, scaled.astype(np.int16))
+   ```
+3. Read-Back Verification:
+   The recorder immediately reads back `raw.wav` from disk via `scipy.io.wavfile.read()`, checking that `read_fs == self._sample_rate_hz` and `len(read_samples) == self._total_samples`. If filesystem truncation occurred, `SessionCorruptedError` is raised.
+4. Whole-File SHA-256 Digest:
+   Computes the SHA-256 hash of the complete written `raw.wav` file via `compute_file_sha256(wav_path)`:
+   - Reads the file in 64 KB binary blocks.
+   - Hashes the complete file byte stream (including RIFF container headers and data chunk).
+5. Atomic Sidecar Write:
+   Writes `session.json.tmp` and replaces `session.json` atomically via `Path.replace()`, ensuring readers never observe a partially written JSON file.
+6. Laboratory Manifest Export:
+   Generates and writes `manifest.json`.
 
 ---
 
-## 3. Cryptographic Sidecar Schema & SHA-256 Hashing
+## 3. Cryptographic Sidecar Schema & SHA-256 Verification
 
-### 3.1 Streaming SHA-256 Calculation
-Rather than reading the entire file from disk after recording completes (which incurs heavy I/O latency for multi-gigabyte recordings), `SessionRecorder` maintains an active cryptographic hash object:
-```python
-self._sha256 = hashlib.sha256()
-
-# Inside sample append loop:
-pcm_bytes = raw_samples.tobytes()
-self._file.write(pcm_bytes)
-self._sha256.update(pcm_bytes)  # Incremental in-memory digest
-```
-The hash covers the **raw audio data payload only** (excluding the 44-byte RIFF header), ensuring the hash is invariant to audio container metadata reformatting.
-
-### 3.2 Formal JSON Metadata Sidecar Schema
+### 3.1 Actual `session.json` Schema (`SessionMetadata`)
 ```json
 {
   "session_id": "session_20261020_143000_exp01",
-  "created_at": "2026-10-20T14:30:00.124Z",
-  "completed_at": "2026-10-20T14:30:30.124Z",
-  "duration_seconds": 30.000,
-  "sample_rate": 48000,
-  "channels": 1,
-  "bit_depth": 24,
-  "container_format": "S32_LE",
+  "started_at_utc": "2026-10-20T14:30:00.124567+00:00",
+  "ended_at_utc": "2026-10-20T14:30:30.124567+00:00",
+  "source": "device",
+  "sample_rate_hz": 48000,
+  "total_blocks": 2812,
   "total_samples": 1440000,
-  "expected_samples": 1440000,
-  "dropped_samples": 0,
-  "discontinuity_count": 0,
-  "sha256_payload_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "provenance": {
-    "git_commit_sha": "fa4b75a80d29aab04875534234574db9f6c0af43",
-    "software_version": "1.0.0",
-    "module_owner": "Module C (Ege)",
-    "source_type": "hardware_serial",
-    "device_port": "COM3",
-    "device_vid": "0x303A",
-    "device_pid": "0x4001"
+  "duration_s": 30.0,
+  "first_sequence": 100,
+  "last_sequence": 2911,
+  "first_timestamp_s": 0.0021,
+  "last_timestamp_s": 29.9981,
+  "raw_wav_relpath": "raw.wav",
+  "raw_wav_sha256": "4a7d1ed414474e4033ac29ccb8653d9b168aae62c3e1f82d1c618290327f2f14",
+  "stream_quality": {
+    "total_blocks": 2812,
+    "dropped_blocks": 0,
+    "repeated_sequences": 0,
+    "sequence_discontinuities": 0,
+    "timestamp_regressions": 0,
+    "sample_rate_changes": 0,
+    "is_healthy": true
   },
-  "termination_reason": "user_stopped"
+  "git_commit_sha": "fa4b75a80d29aab04875534234574db9f6c0af43",
+  "environment": {
+    "python_version": "3.11.9",
+    "numpy_version": "1.26.4",
+    "scipy_version": "1.13.1",
+    "platform": "Windows-11-10.0.26100-SP0"
+  },
+  "acquisition_mode": "hardware_serial",
+  "termination_reason": "completed",
+  "device_info": {
+    "port": "COM3",
+    "vid": "0x303A",
+    "pid": "0x4001",
+    "description": "ESP32-S3 USB CDC"
+  },
+  "app_version": "2.0.0",
+  "schema_version": "2.0.0",
+  "storage_format": "normalized_float32",
+  "wire_format": "S32_LE",
+  "storage_disclaimer": "WAV file contains normalized IEEE float32 audio samples in [-1.0, 1.0], derived via linear scaling from acquisition blocks. It is not an unparsed wire bitstream copy.",
+  "status": "finalized",
+  "manifest_version": "2.0.0"
 }
 ```
 
+### 3.2 Real Role of the SHA-256 Digest
+- **What SHA-256 DOES Provide:**
+  - **Storage Integrity Verification:** Confirms that `raw.wav` has not suffered bit rot, accidental manual editing, incomplete transfer across storage media, or silent file truncation.
+  - **Audit Baseline:** Enables automated test harnesses and metrology pipelines to detect discrepancies between metadata records and audio files on disk.
+- **What SHA-256 DOES NOT Provide:**
+  - **Proof of Recording Authenticity:** Because `session.json` is stored as an unauthenticated plaintext JSON file on the local filesystem, an attacker with write access could modify `raw.wav` and recompute `raw_wav_sha256` in `session.json`. SHA-256 is an integrity check, **not** a digital signature or cryptographic proof of physical hardware provenance.
+
 ---
 
-## 4. Replay 2.0 Engine & Tamper Rejection
+## 4. Session Verification & Replay Infrastructure
 
-The replay engine (`pcg_core.recording.SessionReplayer`) provides rate-controlled simulated playback of historical recordings.
+### 4.1 Verification Engine (`verify_session`)
+The verification function `verify_session(session_id, sessions_dir)` executes a systematic five-step audit:
+1. Validates identifier containment via `validate_session_id()`.
+2. Checks directory existence (`missing_session`).
+3. Loads `session.json`:
+   - Returns `missing_metadata` if sidecar is absent.
+   - Returns `corrupted_metadata` if JSON parsing fails.
+   - Returns `incomplete` if `status == "recording"` or `termination_reason == "incomplete"`.
+4. Checks `raw.wav` existence (`missing_audio`).
+5. Recomputes `actual_sha256 = compute_file_sha256(wav_path)` and loads audio to compare:
+   - `sha256_match`: `actual_sha256 == meta_data["raw_wav_sha256"]`
+   - `sample_count_match`: `len(wav_samples) == meta_data["total_samples"]`
+   - `sample_rate_match`: `wav_fs == meta_data["sample_rate_hz"]`
+   - If any check fails, returns `is_valid: False` with status `corrupted`.
 
-### Integrity Rejection Invariant:
-Before parsing audio bytes, the replayer executes a mandatory cryptographic audit:
-1. Opens `<session_id>.wav` and computes its SHA-256 payload hash.
-2. Compares against `sha256_payload_hash` in `<session_id>.meta.json`.
-3. If hashes mismatch (indicating manual editing, bit rot, or data truncation), the replayer **refuses to load the session**, raising `SessionIntegrityError`.
-4. This guarantees that fabricated or altered audio files can never be used in academic metrology reports.
+### 4.2 Replay Integration (`create_session_source`)
+Session replay does not use a standalone recorder subclass. Instead, the function `create_session_source()` constructs an audio source object from `software/pcg_core/sources.py`:
+- `WavSource(wav_path, block_size=256)`: Fast offline replay for batch testing and analysis.
+- `RealtimeWavSource(wav_path, block_size=256, realtime=True, speed_factor=1.0)`: Paced streaming replay that simulates real-time hardware packet arrival at 48 kHz.
+
+---
+
+## 5. Formal Exception Taxonomy
+
+| Exception Class | Base Class | Trigger Condition |
+| :--- | :--- | :--- |
+| `RecordingStateError` | `RuntimeError` | Calling `start()` when already recording, or `record_block()` / `stop()` when inactive. |
+| `RecordingSampleRateError` | `ValueError` | Incoming `SampleBlock.sample_rate_hz` changes mid-session; terminates recording. |
+| `SessionCorruptedError` | `ValueError` | Sample accounting mismatch during concatenation or read-back serialization failure. |
+| `SessionNotFoundError` | `FileNotFoundError` | Requested `session_id` directory does not exist under `experiments/sessions/`. |
+| `SessionIntegrityError` | `ValueError` | Cryptographic SHA-256 mismatch or sample count discrepancy during verification. |

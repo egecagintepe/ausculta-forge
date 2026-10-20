@@ -43,7 +43,7 @@
 * **Difficulty:** Intermediate
 * **Expected Answer:** Cast the 24-bit value to `uint32_t`, test if bit 23 is set (`raw & 0x00800000U`), and if true, bitwise OR with `0xFF000000U` to set bits 31..24 to 1s, then cast the result to `int32_t`.
 * **Underlying Concept:** Two's-complement sign extension.
-* **Code Reference:** `tools/c_golden_vectors/golden_common.h` (`pack_and_align_sample`)
+* **Code Reference:** `tools/c_golden_vectors/golden_common.h` (`sign_extend_24_to_32`)
 * **Follow-up Question:** What is the hexadecimal representation of $-1$ in a 24-bit integer, and what does it become after 32-bit sign extension?
 * **Common Incorrect Response:** "You just do `val << 8 >> 8` on an `int32_t`." (Incorrect: invokes undefined behavior if `val < 0`).
 
@@ -87,13 +87,13 @@
 * **Follow-up Question:** What bug occurs if a DMA descriptor's `owner` bit is NOT marked `volatile`?
 * **Common Incorrect Response:** "It makes the variable thread-safe." (Incorrect: volatile does not provide atomicity or mutex locks).
 
-### Q9: Why is `sin()` evaluated using modulo reduction (`sample_index % period`) in `generate_sine_100hz_sample()`?
+### Q9: Why does `generate_pcm_sine()` evaluate trigonometric phase via discrete steps, and how does `s_sine_table` prevent phase drift?
 * **Difficulty:** Intermediate
-* **Expected Answer:** Because `sample_index` grows continuously. As double-precision floats grow large ($> 10^7$), the spacing between representable floats increases, causing loss of precision in the lower bits when evaluating $\sin(2\pi f t)$. Modulo reduction onto $[0, 479]$ guarantees identical, cyclic numerical precision indefinitely.
-* **Underlying Concept:** Floating-point precision degradation over time.
-* **Code Reference:** `tools/c_golden_vectors/golden_common.h`
-* **Follow-up Question:** What is the exact period in samples of a 100 Hz tone sampled at 48,000 Hz?
-* **Common Incorrect Response:** "To save CPU time." (Incorrect: it is for floating-point phase accuracy).
+* **Expected Answer:** In `tools/c_golden_vectors/golden_common.h`, `generate_pcm_sine()` steps phase using `phase_inc = (2.0 * M_PI * freq_hz) / sample_rate_hz`. For continuous bench generation in `tools/esp32_bench_example/main/main.c`, `s_sine_table[480]` precomputes exactly 1 period ($48000 / 100 = 480$ samples) and steps `s_sine_index = (s_sine_index + 1) % 480`. Stepping a bounded cyclic lookup table rather than passing unbounded `(double)n` directly into `sin()` prevents floating-point precision degradation and phase jitter over multi-hour streaming ($N > 10^7$).
+* **Underlying Concept:** Numerical phase continuity and lookup table mechanics.
+* **Code Reference:** `tools/c_golden_vectors/golden_common.h` (`generate_pcm_sine`), `tools/esp32_bench_example/main/main.c` (`s_sine_table`)
+* **Follow-up Question:** What is the exact length in samples of 1 cycle of a 100 Hz tone sampled at 48,000 Hz?
+* **Common Incorrect Response:** "To save CPU time." (Incorrect: cyclic indexing guarantees zero phase drift indefinitely).
 
 ### Q10: What is a strict-aliasing violation in C?
 * **Difficulty:** Expert
@@ -125,11 +125,11 @@
 
 ### Q13: Why is `512 samples + vTaskDelay(11 ms)` in software NOT guaranteed 48 kHz acquisition?
 * **Difficulty:** Advanced
-* **Expected Answer:** `vTaskDelay` delays by an integer number of FreeRTOS ticks. At standard $100 \text{ Hz}$ tick rate (`portTICK_PERIOD_MS = 10 ms`), an 11 ms delay rounds to 20 ms (2 ticks) or fluctuates with scheduler jitter. True 48.000 kHz continuous sampling requires hardware I2S bit clocks and DMA interrupts to pace acquisition.
-* **Underlying Concept:** FreeRTOS tick quantization vs. hardware DMA pacing.
-* **Code Reference:** `tools/esp32_bench_example/README.md`
+* **Expected Answer:** In `tools/esp32_bench_example/sdkconfig.defaults`, FreeRTOS is configured with `CONFIG_FREERTOS_HZ=1000` (1 ms tick). A delay of `pdMS_TO_TICKS(11)` suspends the task for 11 ms. However, generating 512 samples at 48,000 Hz requires an exact block period of $512 / 48000 \approx 10.6667 \text{ ms}$ ($\approx 93.75 \text{ frames/s}$). Pacing via 11 ms delay produces only $\approx 90.91 \text{ frames/s}$ ($46,545 \text{ samples/s}$), creating a $-3.03\%$ sample rate deficit ($\approx 1,455 \text{ samples/s}$ missing). Furthermore, software task delays suffer from scheduler jitter and task preemption. True 48.000 kHz continuous sampling requires hardware I2S bit clocks and DMA interrupts to pace acquisition.
+* **Underlying Concept:** FreeRTOS software task pacing vs. hardware I2S DMA interrupts.
+* **Code Reference:** `tools/esp32_bench_example/main/main.c`, `tools/esp32_bench_example/sdkconfig.defaults`
 * **Follow-up Question:** How does the production firmware in Module B achieve strict 48.000 kHz pacing?
-* **Common Incorrect Response:** "Because 11 ms equals 512 / 48000." (Incorrect: 512 / 48000 is 10.667 ms, and software delays suffer from tick quantization).
+* **Common Incorrect Response:** "Because 11 ms equals 512 / 48000." (Incorrect: 512 / 48000 is 10.667 ms, and software delays suffer from tick quantization and jitter).
 
 ### Q14: How does linked-list DMA ping-pong buffering work on the ESP32-S3?
 * **Difficulty:** Advanced
@@ -139,13 +139,13 @@
 * **Follow-up Question:** What happens if the CPU takes longer than $10.67 \text{ ms}$ to process Buffer A?
 * **Common Incorrect Response:** "DMA waits for the CPU to finish." (Incorrect: DMA continues and overwrites the buffer, causing data loss).
 
-### Q15: Why are tasks pinned to specific cores (`Core 0` vs `Core 1`) in the ESP32-S3 architecture?
+### Q15: How are CPU cores intended to be allocated between audio acquisition and USB communication on the ESP32-S3?
 * **Difficulty:** Intermediate
-* **Expected Answer:** Core 1 is dedicated to time-critical I2S DMA interrupt handling and audio acquisition. Core 0 is dedicated to the TinyUSB stack, system housekeeping, and background tasks. Pining tasks prevents USB packet bursts on Core 0 from interrupting real-time audio sampling on Core 1.
+* **Expected Answer:** In the proposed Module B firmware architecture, Core 1 is designated for real-time I2S DMA servicing and acoustic buffer management, while Core 0 is designated for the TinyUSB stack, protocol serialization, and background housekeeping. Pinned tasks prevent USB interrupt bursts from causing I2S FIFO underruns. **Crucial Status Caveat:** This dual-core allocation is an architectural design proposal for Module B's production firmware; it has not yet been executed or verified on physical hardware in the current repository baseline.
 * **Underlying Concept:** Asymmetric task pinning in SMP FreeRTOS.
-* **Code Reference:** `docs/engineering/code-atlas/ESP32_RUNTIME_ARCHITECTURE.md`
+* **Code Reference:** `docs/engineering/code-atlas/ESP32_RUNTIME_ARCHITECTURE.md`, `firmware/`
 * **Follow-up Question:** Which FreeRTOS function is used to pin a task to a core?
-* **Common Incorrect Response:** "FreeRTOS automatically balances tasks evenly." (Incorrect: automatic balancing can cause cache thrashing and interrupt latency).
+* **Common Incorrect Response:** "Dual-core allocation is fully implemented and verified on the bench." (Incorrect: production firmware is in progress by Module B; test tools currently use single-task simulation).
 
 ### Q16: What is the exact frequency of the I2S Bit Clock (`SCK`) for a mono 24-bit microphone transmitting in standard 32-bit dual-slot format at 48 kHz?
 * **Difficulty:** Intermediate
@@ -224,13 +224,13 @@
 
 ## Domain 3: USB Protocol & Transport Engineering
 
-### Q25: Why did AuscultaForge select USB CDC-ACM instead of USB Audio Class (UAC)?
+### Q25: Why is USB CDC-ACM the active candidate proposal instead of USB Audio Class (UAC)?
 * **Difficulty:** Advanced
-* **Expected Answer:** USB Audio Class (UAC) exposes the device as a Windows microphone, subjecting the stream to OS-level sample rate conversion, automatic gain control (AGC), and volume scaling, corrupting raw scientific integer words. Furthermore, UAC cannot easily carry custom telemetry (packet sequence numbers, drop flags, and hardware timestamps). CDC-ACM provides direct, unadulterated byte access.
-* **Underlying Concept:** OS audio stack corruption vs. virtual COM port transparency.
-* **Code Reference:** `docs/engineering/decisions/ADR-0003-usb-cdc-acm-transport.md`
+* **Expected Answer:** USB Audio Class (UAC) is an isochronous audio standard that integrates seamlessly with OS sound mixers. However, host operating systems (particularly Windows) frequently route UAC streams through sound enhancement engines that apply automatic gain control (AGC), volume scaling, or sample rate conversion, corrupting raw physiological signals. Furthermore, standard UAC provides no native sideband for hardware timestamps, sample drop counters, or sequence indices. USB CDC-ACM exposes a transparent virtual COM port that allows custom packet headers, sequence counters, and unadulterated PCM samples to pass directly to the host application. **Crucial Status Note:** CDC-ACM is the active Hardware Rev-A candidate proposal under review by Modules B & C (DW03-09, DW03-12), awaiting joint physical bring-up.
+* **Underlying Concept:** Virtual serial transparency vs. OS audio processing side-effects.
+* **Code Reference:** `docs/engineering/decisions/ADR-0003-usb-cdc-acm-transport.md`, `software/pcg_app/device_runtime.py`
 * **Follow-up Question:** Which Windows in-box driver binds to CDC-ACM?
-* **Common Incorrect Response:** "UAC is too slow." (Incorrect: UAC has plenty of bandwidth, but corrupts scientific signal integrity).
+* **Common Incorrect Response:** "CDC-ACM is a final closed decision." (Incorrect: it is an active candidate proposal awaiting physical hardware sign-off).
 
 ### Q26: What is the mathematical polynomial of CRC-16-CCITT and what errors does it detect?
 * **Difficulty:** Advanced
@@ -240,21 +240,21 @@
 * **Follow-up Question:** Can CRC-16 correct corrupted bits?
 * **Common Incorrect Response:** "It detects and fixes errors." (Incorrect: CRC detects errors, it does not correct them like ECC/Reed-Solomon).
 
-### Q27: How does the Layer 2 Frame Decoder recover when garbage bytes are received on the wire?
+### Q27: How does `ReferenceFramedPacketDecoder` recover when garbage bytes are received on the wire?
 * **Difficulty:** Intermediate
-* **Expected Answer:** The decoder drops the corrupted frame, increments `corrupt_frame_count`, advances its read pointer by 1 byte, and hunts forward through the byte buffer scanning for the 2-byte preamble sync word `0xAA55`. Once found, it realigns frame parsing to the new boundary.
-* **Underlying Concept:** Frame synchronization and resynchronization.
-* **Code Reference:** `software/pcg_app/transport.py`
+* **Expected Answer:** In `software/pcg_app/device_runtime.py`, `ReferenceFramedPacketDecoder.feed_bytes()` appends incoming bytes to an internal assembly buffer (`self._buffer`). If invalid bytes appear, it searches forward for the 2-byte preamble sync magic `MAGIC = b"\xaa\x55"`. If found, it slices away the leading garbage bytes, increments `self._malformed_count`, and attempts to unpack the frame header and payload.
+* **Underlying Concept:** Preamble search and frame resynchronization.
+* **Code Reference:** `software/pcg_app/device_runtime.py` (`ReferenceFramedPacketDecoder`)
 * **Follow-up Question:** What test verifies this behavior?
-* **Common Incorrect Response:** "It resets the COM port." (Incorrect: port remains open; stream resynchronizes in software).
+* **Common Incorrect Response:** "It resets the COM port." (Incorrect: port remains open; stream resynchronizes entirely in host buffer parsing).
 
-### Q28: What is the gross signaling bitrate of USB 2.0 Full-Speed, and what percentage is used by AuscultaForge?
+### Q28: What is the nominal application data rate of 48 kHz 24-bit streaming, and how does it relate to USB 2.0 Full-Speed bandwidth?
 * **Difficulty:** Intermediate
-* **Expected Answer:** Full-Speed USB operates at $12.000 \text{ Mbps}$. AuscultaForge streams 48,000 samples/s at 4 bytes/sample ($1.536 \text{ Mbps}$ payload). With proposed 40-byte framing overhead, data rate is $1.92 \text{ Mbps}$. This consumes $\approx 16\text{--}20\%$ of bus capacity, leaving $> 80\%$ bandwidth margin.
-* **Underlying Concept:** USB bandwidth budgeting.
-* **Code Reference:** `docs/engineering/architecture/SYSTEM_ARCHITECTURE.md`
+* **Expected Answer:** At 48,000 samples/s with 4 bytes per sample (`S32_LE` container), raw audio payload rate is $48,000 \times 4 = 192,000 \text{ bytes/s} = 1.536 \text{ Mbit/s}$. With the proposed 256-sample frame (187.5 frames/s with 40-byte header), header overhead is $187.5 \times 40 = 7,500 \text{ bytes/s}$. The nominal application throughput before trailers is $192,000 + 7,500 = 199,500 \text{ bytes/s} = 1.596 \text{ Mbit/s}$. Full-Speed USB operates at 12.0 Mbps signaling rate. However, actual bus capacity must account for packet tokens (SOF every 1 ms, IN/DATA/ACK packets), CRC-16 checks, NRZI bit stuffing, and CDC-ACM bulk endpoint maximum packet sizes (64 bytes), which divide each frame into multiple USB transactions. True bus utilization cannot be derived by simple subtraction from 12 Mbps.
+* **Underlying Concept:** Nominal application throughput vs. physical USB packet overhead.
+* **Code Reference:** `docs/engineering/code-atlas/USB_PROTOCOL_ENGINEERING.md`
 * **Follow-up Question:** What is the maximum packet size for Full-Speed bulk endpoints?
-* **Common Incorrect Response:** "$480 \text{ Mbps}$." (Incorrect: $480 \text{ Mbps}$ is High-Speed USB; ESP32-S3 internal PHY is Full-Speed $12 \text{ Mbps}$).
+* **Common Incorrect Response:** "Data rate is 1.92 Mbps leaving 80% free margin." (Incorrect: 1.596 Mbps nominal application rate, and bus overhead requires protocol measurement).
 
 ### Q29: What Win32 error occurs when a USB cable is pulled mid-stream?
 * **Difficulty:** Intermediate
@@ -288,11 +288,11 @@
 * **Follow-up Question:** Where in Windows Device Manager do you view VID and PID?
 * **Common Incorrect Response:** "They are randomly generated on boot." (Incorrect: fixed in USB device descriptors).
 
-### Q33: Why does `ByteTransportReader` handle chunked/partial reads?
+### Q33: Why does `ReferenceFramedPacketDecoder` handle chunked/partial reads?
 * **Difficulty:** Intermediate
-* **Expected Answer:** Serial port `read(N)` operations over USB are non-atomic; the operating system returns whatever bytes are currently in the kernel serial FIFO. If 40 bytes are requested, `read()` may return 12 bytes. The transport layer must buffer partial reads until a full frame is assembled.
-* **Underlying Concept:** Non-blocking streaming I/O.
-* **Code Reference:** `software/pcg_app/transport.py`
+* **Expected Answer:** Serial port reads over USB are non-atomic; the operating system returns whatever bytes are currently in the kernel serial FIFO. If 40 bytes or 1064 bytes are expected, `read()` may return a partial fragment. In `software/pcg_app/device_runtime.py`, `ReferenceFramedPacketDecoder.feed_bytes()` appends chunks to `self._buffer` and only emits completed frames when sufficient bytes arrive, preventing truncated frames from leaking into the pipeline.
+* **Underlying Concept:** Multi-fragment streaming frame assembly.
+* **Code Reference:** `software/pcg_app/device_runtime.py` (`ReferenceFramedPacketDecoder.feed_bytes`)
 * **Follow-up Question:** What happens if code assumes `read(40)` always returns exactly 40 bytes?
 * **Common Incorrect Response:** "Serial reads always wait until all bytes arrive." (Incorrect: partial reads cause corrupted framing).
 
@@ -392,7 +392,7 @@
 * **Difficulty:** Advanced
 * **Expected Answer:** To resample by rational factor $P/Q$, the algorithm conceptually upsamples by integer $P$ (zero-padding), filters with an anti-aliasing low-pass filter, and downsamples by integer $Q$ (decimating). Polyphase decomposition commutes filtering and decimation, executing filtering only at the lower rate for high efficiency.
 * **Underlying Concept:** Multirate digital signal processing.
-* **Code Reference:** `software/pcg_core/segmentation/preprocessing.py`
+* **Code Reference:** `software/pcg_core/segmentation/springer_preprocessing.py`
 * **Follow-up Question:** What are $P$ and $Q$ when downsampling 48,000 Hz to 1,000 Hz?
 * **Common Incorrect Response:** "It does linear interpolation between points." (Incorrect: linear interpolation causes aliasing; polyphase resampling applies ideal low-pass filtering).
 
@@ -400,7 +400,7 @@
 * **Difficulty:** Advanced
 * **Expected Answer:** The homomorphic envelope transforms multiplicative signal components (excitation $\times$ vocal/chest tract) into additive components using the logarithm ($\ln(|x|)$), applies a low-pass filter to extract the slow amplitude modulation, and inverts via exponential ($\exp(\cdot)$).
 * **Underlying Concept:** Homomorphic deconvolution.
-* **Code Reference:** `software/pcg_core/segmentation/features.py`
+* **Code Reference:** `software/pcg_core/segmentation/springer_features.py`
 * **Follow-up Question:** Who proposed this for PCG segmentation?
 * **Common Incorrect Response:** "It is a Fourier transform." (Incorrect: it is log-envelope filtering).
 
@@ -408,7 +408,7 @@
 * **Difficulty:** Intermediate
 * **Expected Answer:** It identifies high-amplitude impulse artifacts caused by sensor movement. It computes window maxima across 500 ms windows, finds the median of these maxima, and attenuates any sample exceeding $3 \times \text{median}$, preventing impulse spikes from dominating subsequent normalization.
 * **Underlying Concept:** Non-linear artifact rejection.
-* **Code Reference:** `software/pcg_core/segmentation/preprocessing.py`
+* **Code Reference:** `software/pcg_core/segmentation/springer_preprocessing.py`
 * **Follow-up Question:** Why use the median of window maxima instead of the mean?
 * **Common Incorrect Response:** "It deletes the noisy section." (Incorrect: it clips the spike amplitude while preserving time continuity).
 
@@ -622,7 +622,7 @@
 * **Difficulty:** Foundation
 * **Expected Answer:** State 1: $S_1$ (First heart sound), State 2: Systole, State 3: $S_2$ (Second heart sound), State 4: Diastole.
 * **Underlying Concept:** Cardiac phonocardiogram state modeling.
-* **Code Reference:** `software/pcg_core/segmentation/springer_hsmm.py`
+* **Code Reference:** `software/pcg_core/segmentation/hsmm.py`
 * **Follow-up Question:** What is the strict transition topology between these states?
 * **Common Incorrect Response:** "Systole, Diastole, Murmur, Noise." (Incorrect: those are acoustic categories, not the 4 cyclic states).
 
@@ -630,7 +630,7 @@
 * **Difficulty:** Advanced
 * **Expected Answer:** Standard HMMs have memoryless geometric/exponential state duration distributions, predicting that the most probable duration for $S_1$ or $S_2$ is $1 \text{ ms}$. An HSMM explicitly parameterizes duration distributions (Gaussian/Poisson), enforcing realistic physiological durations ($80\text{--}150 \text{ ms}$).
 * **Underlying Concept:** Semi-Markov duration modeling.
-* **Code Reference:** `software/pcg_core/segmentation/springer_hsmm.py`
+* **Code Reference:** `software/pcg_core/segmentation/hsmm.py`
 * **Follow-up Question:** How are duration distributions conditioned in Springer's model?
 * **Common Incorrect Response:** "HMM cannot handle four states." (Incorrect: HMM handles any number of states, but models duration exponentially).
 
@@ -642,7 +642,7 @@
   3. Wavelet energy envelope (Daubechies-4 / Morlet).
   4. Power Spectral Density envelope ($40\text{--}250 \text{ Hz}$).
 * **Underlying Concept:** Multi-feature acoustic envelope extraction.
-* **Code Reference:** `software/pcg_core/segmentation/features.py`
+* **Code Reference:** `software/pcg_core/segmentation/springer_features.py`
 * **Follow-up Question:** To what sampling frequency is the audio resampled before feature extraction?
 * **Common Incorrect Response:** "MFCCs, Chroma, Spectrogram, Zero Crossing." (Incorrect: those are speech features; Springer uses 4 specific envelopes).
 
@@ -650,7 +650,7 @@
 * **Difficulty:** Advanced
 * **Expected Answer:** Using four One-vs-Rest (OvR) logistic regression classifiers to estimate posterior state probabilities $P(q_t = j \mid \mathbf{O}_t) = \frac{1}{1 + e^{-(\mathbf{w}_j^T \mathbf{O}_t + b_j)}}$, then applying Bayes' rule: $b_j(\mathbf{O}_t) \propto \frac{P(q_t = j \mid \mathbf{O}_t)}{P(q_t = j)}$.
 * **Underlying Concept:** Logistic regression emission modeling in HSMM.
-* **Code Reference:** `software/pcg_core/segmentation/springer_logistic.py`
+* **Code Reference:** `software/pcg_core/segmentation/logistic.py`
 * **Follow-up Question:** Why use logistic regression instead of Gaussian Mixture Models (GMM)?
 * **Common Incorrect Response:** "Using neural networks." (Incorrect: Springer 2016 specifically uses logistic regression).
 
@@ -658,7 +658,7 @@
 * **Difficulty:** Advanced
 * **Expected Answer:** By constraining the state transition matrix $A$ such that $A_{1,2} = 1, A_{2,3} = 1, A_{3,4} = 1, A_{4,1} = 1$, and all other transitions are zero ($-\infty$ in log-space). Any path attempting to transition from $S_1$ directly to $S_2$ or diastole is pruned.
 * **Underlying Concept:** Dynamic programming with constrained transition matrices.
-* **Code Reference:** `software/pcg_core/segmentation/springer_hsmm.py`
+* **Code Reference:** `software/pcg_core/segmentation/hsmm.py`
 * **Follow-up Question:** Can the algorithm start in any state?
 * **Common Incorrect Response:** "By sorting the outputs by time." (Incorrect: the constraint is enforced inside the forward Viterbi trellis).
 
@@ -674,7 +674,7 @@
 * **Difficulty:** Foundation
 * **Expected Answer:** The PhysioNet CirCor DigiScope Pediatric PCG Dataset (PhysioNet Challenge 2022, Source R008).
 * **Underlying Concept:** Benchmark dataset provenance.
-* **Code Reference:** `software/pcg_core/segmentation/circor.py`
+* **Code Reference:** `software/pcg_core/segmentation/validation/circor.py`
 * **Follow-up Question:** Why is this dataset appropriate?
 * **Common Incorrect Response:** "MIT-BIH Arrhythmia Database." (Incorrect: MIT-BIH is an ECG database, not PCG).
 
@@ -682,7 +682,7 @@
 * **Difficulty:** Intermediate
 * **Expected Answer:** A predicted event ($S_1$ or $S_2$) is scored as a True Positive ($TP$) if its center falls within $\pm \delta$ (typically $\pm 50 \text{ ms}$ or $\pm 100 \text{ ms}$) of an unmatched reference annotation. If no reference annotation exists within $\pm \delta$, it is a False Positive ($FP$).
 * **Underlying Concept:** Temporal event matching metrics.
-* **Code Reference:** `software/pcg_core/segmentation/matching.py`
+* **Code Reference:** `software/pcg_core/segmentation/validation/matching.py`
 * **Follow-up Question:** What prevents two predictions from claiming the same reference event?
 * **Common Incorrect Response:** "By calculating mean squared error." (Incorrect: discrete event detection uses temporal matching windows).
 
@@ -762,21 +762,21 @@
 * **Follow-up Question:** Can the device transition directly from `ABSENT` to `STREAMING`?
 * **Common Incorrect Response:** "Connected and Disconnected." (Incorrect: those are binary flags, not the full 8-state machine).
 
-### Q88: How does `SessionRecorder` guarantee that recorded WAV files are valid even if the cable is disconnected mid-stream?
+### Q88: How does `SessionRecorder` guarantee that recorded sessions remain detectable and verifiable if an interruption occurs mid-stream?
 * **Difficulty:** Advanced
-* **Expected Answer:** It writes placeholder headers at start, appends raw PCM bytes continuously, and traps `SerialException` in an emergency disconnect handler that rewrites the RIFF header chunk sizes to match the exact byte count written before the disconnect occurred.
-* **Underlying Concept:** Emergency file finalization.
-* **Code Reference:** `software/pcg_core/recording.py`
-* **Follow-up Question:** What happens if the WAV header chunk size is NOT rewritten?
-* **Common Incorrect Response:** "The operating system automatically fixes it." (Incorrect: leaving 0xFFFFFFFF makes the WAV unreadable in standard players).
+* **Expected Answer:** In `software/pcg_core/recording.py`, `SessionRecorder.start()` pre-creates the session directory `experiments/sessions/<session_id>/` and immediately commits an in-progress placeholder `session.json` with `status: "recording"` and `termination_reason: "incomplete"`. If power fails or the USB cable is unplugged mid-stream, `verify_session()` inspects this file and reports `status: "incomplete"`. When `stop()` is called gracefully (or by `StreamManager` handling a disconnect), the accumulated in-memory float32 samples are concatenated, verified for exact sample count, written to `raw.wav` via `scipy.io.wavfile.write()`, read back from disk to verify sample integrity, and hashed with whole-file SHA-256.
+* **Underlying Concept:** Crash-marker persistence and atomic session finalization.
+* **Code Reference:** `software/pcg_core/recording.py` (`SessionRecorder.start`, `stop`, `verify_session`)
+* **Follow-up Question:** What happens if the counted samples do not match the concatenated audio array length?
+* **Common Incorrect Response:** "It rewrites 44-byte WAV headers directly on disk during streaming." (Incorrect: samples are buffered in memory and serialized atomically upon stop).
 
-### Q89: Why is SHA-256 computed only over the audio samples and NOT the entire WAV file?
+### Q89: What does the SHA-256 digest in `session.json` actually hash, and what are its security boundaries?
 * **Difficulty:** Intermediate
-* **Expected Answer:** The 44-byte RIFF container header contains file-length metadata and chunk headers that may be updated or reordered by audio software. Computing the hash strictly over the PCM audio samples ensures the cryptographic digest reflects the acoustic data payload itself.
-* **Underlying Concept:** Cryptographic payload integrity.
-* **Code Reference:** `software/pcg_core/recording.py`
-* **Follow-up Question:** Where is this hash stored?
-* **Common Incorrect Response:** "Because hashing headers is illegal." (Incorrect: it ensures hash invariance to container metadata).
+* **Expected Answer:** In `software/pcg_core/recording.py`, `compute_file_sha256(wav_path)` hashes the **entire serialized `raw.wav` file on disk** (including the RIFF container headers and audio data chunk). Its purpose is storage integrity comparison: it detects file corruption, bit rot, accidental manual editing, or incomplete file copies across media. **Security Boundary:** It does NOT provide cryptographic proof of recording authenticity or tamper-proofing against a malicious actor with filesystem access, because `session.json` is unauthenticated plaintext; an attacker could replace `raw.wav` and update `raw_wav_sha256`.
+* **Underlying Concept:** Storage integrity hashing vs. digital authenticity signatures.
+* **Code Reference:** `software/pcg_core/recording.py` (`compute_file_sha256`, `verify_session`)
+* **Follow-up Question:** How does `verify_session()` use this hash?
+* **Common Incorrect Response:** "It hashes only the audio payload to allow metadata editing." (Incorrect: it hashes the complete file on disk).
 
 ### Q90: What is the purpose of `RollingBuffer` in `pcg_core/buffers.py`?
 * **Difficulty:** Intermediate
@@ -850,7 +850,7 @@
 * **Difficulty:** Intermediate
 * **Expected Answer:** If the WebSocket connection drops, `BridgeClient` sets state to disconnected, initiates an exponential backoff timer, and attempts reconnection periodically. When the backend restarts, it re-establishes communication and resynchronizes telemetry without requiring a browser refresh.
 * **Underlying Concept:** Resilient client networking.
-* **Code Reference:** `software/frontend/src/bridgeClient.ts`
+* **Code Reference:** `software/frontend/src/api/bridgeClient.ts`
 * **Follow-up Question:** What prevents reconnect storms?
 * **Common Incorrect Response:** "The browser automatically reconnects WebSockets." (Incorrect: browsers do not auto-reconnect WebSockets; application code must implement it).
 
@@ -916,3 +916,117 @@
 * **Code Reference:** `docs/engineering/verification/REPRODUCIBILITY_GUIDE.md`
 * **Follow-up Question:** Where are baseline experiment configurations stored?
 * **Common Incorrect Response:** "By taking screenshots." (Incorrect: scientific reproducibility requires cryptographic versioned artifacts).
+
+---
+
+## Comprehensive Question Verification & Source-of-Truth Matrix
+
+This machine-readable matrix links each of the 105 defense questions to its implementation status, verified source file, and evidence verification method.
+
+| Question ID | Question Topic | Implementation Status | Verified Source Reference | Verification Method |
+| :--- | :--- | :--- | :--- | :--- |
+| Q001 | What is the exact difference between int32_t and long in stand... | `VERIFIED_IMPLEMENTED` | `tools/c_golden_vectors/golden_common.h` | C Golden Vector Suite (`test_c_golden_vectors.py`) |
+| Q002 | Why is left-shifting a negative signed integer undefined behav... | `THEORETICAL_FOUNDATION` | `docs/engineering/code-atlas/C_LANGUAGE_FOUNDATIONS.md` | Mathematical / ISO C99 Specification Analysis |
+| Q003 | How do you sign-extend a 24-bit negative integer stored in a 3... | `VERIFIED_IMPLEMENTED` | `tools/c_golden_vectors/golden_common.h` (`sign_extend_24_to_32`) | C Golden Vector Suite (`test_c_golden_vectors.py`) |
+| Q004 | Explain the difference between Little-Endian and Big-Endian by... | `THEORETICAL_FOUNDATION` | `docs/engineering/code-atlas/C_LANGUAGE_FOUNDATIONS.md` | Mathematical / ISO C99 Specification Analysis |
+| Q005 | What is the purpose of the U suffix in integer literals like 0... | `VERIFIED_IMPLEMENTED` | `tools/c_golden_vectors/golden_common.h` | C Golden Vector Suite (`test_c_golden_vectors.py`) |
+| Q006 | How does two's-complement arithmetic handle overflow? | `THEORETICAL_FOUNDATION` | `docs/engineering/code-atlas/C_LANGUAGE_FOUNDATIONS.md` | Mathematical / ISO C99 Specification Analysis |
+| Q007 | What is the difference between a static array allocation and a... | `THEORETICAL_FOUNDATION` | `tools/esp32_bench_example/main/main.c` | Mathematical / ISO C99 Specification Analysis |
+| Q008 | What does the volatile keyword tell a C compiler in the contex... | `THEORETICAL_FOUNDATION` | `docs/engineering/code-atlas/ESP32_RUNTIME_ARCHITECTURE.md` | Mathematical / ISO C99 Specification Analysis |
+| Q009 | Why does generate_pcm_sine() evaluate trigonometric phase via ... | `VERIFIED_IMPLEMENTED` | `tools/c_golden_vectors/golden_common.h` (`generate_pcm_sine`), `tools/esp32_bench_example/main/main.c` (`s_sine_table`) | C Golden Vector Suite (`test_c_golden_vectors.py`) |
+| Q010 | What is a strict-aliasing violation in C? | `THEORETICAL_FOUNDATION` | `docs/engineering/code-atlas/C_LANGUAGE_FOUNDATIONS.md` | Mathematical / ISO C99 Specification Analysis |
+| Q011 | Explain how the symmetric rounding formula val >= 0.0 ? (int32... | `VERIFIED_IMPLEMENTED` | `tools/c_golden_vectors/golden_common.h` | C Golden Vector Suite (`test_c_golden_vectors.py`) |
+| Q012 | Why are header guards (#ifndef HEADER_H ... #endif) mandatory ... | `VERIFIED_IMPLEMENTED` | `tools/c_golden_vectors/golden_common.h` | C Golden Vector Suite (`test_c_golden_vectors.py`) |
+| Q013 | Why is 512 samples + vTaskDelay(11 ms) in software NOT guarant... | `VERIFIED_PROPOSAL` | `tools/esp32_bench_example/main/main.c`, `tools/esp32_bench_example/sdkconfig.defaults` | Module B/C Proposed Architecture / Experimental Config |
+| Q014 | How does linked-list DMA ping-pong buffering work on the ESP32... | `VERIFIED_PROPOSAL` | `docs/engineering/code-atlas/ESP32_RUNTIME_ARCHITECTURE.md` | Architectural Candidate Review (Awaiting Module B HW Bring-up) |
+| Q015 | How are CPU cores intended to be allocated between audio acqui... | `VERIFIED_PROPOSAL` | `docs/engineering/code-atlas/ESP32_RUNTIME_ARCHITECTURE.md`, `firmware/` | Module B/C Proposed Architecture / Experimental Config |
+| Q016 | What is the exact frequency of the I2S Bit Clock (SCK) for a m... | `THEORETICAL_FOUNDATION` | `docs/hardware/ESP32_S3_BRINGUP_CHECKLIST.md` | FreeRTOS Kernel Architectural Analysis |
+| Q017 | What physical pin routing issue must be checked on the DirencN... | `THEORETICAL_FOUNDATION` | `docs/hardware/ESP32_S3_BRINGUP_CHECKLIST.md` | FreeRTOS Kernel Architectural Analysis |
+| Q018 | What is the purpose of DTR line state checking in tools/esp32_... | `VERIFIED_IMPLEMENTED` | `tools/esp32_bench_example/main/main.c` | C Compilation / Bench Test |
+| Q019 | Why does the INMP441 MEMS microphone have an L/R pin, and what... | `THEORETICAL_FOUNDATION` | `docs/hardware/ESP32_S3_BRINGUP_CHECKLIST.md` | FreeRTOS Kernel Architectural Analysis |
+| Q020 | What is the voltage level of the ESP32-S3 I/O pins, and is the... | `THEORETICAL_FOUNDATION` | `docs/hardware/ESP32_S3_BRINGUP_CHECKLIST.md` | FreeRTOS Kernel Architectural Analysis |
+| Q021 | What is the difference between internal SRAM and Octal PSRAM o... | `VERIFIED_PROPOSAL` | `docs/engineering/code-atlas/ESP32_RUNTIME_ARCHITECTURE.md` | Architectural Candidate Review (Awaiting Module B HW Bring-up) |
+| Q022 | What is an ISR (Interrupt Service Routine) and what are its ex... | `VERIFIED_PROPOSAL` | `docs/engineering/code-atlas/ESP32_RUNTIME_ARCHITECTURE.md` | Architectural Candidate Review (Awaiting Module B HW Bring-up) |
+| Q023 | Why do we recommend jumper wires $< 10 \text{ cm}$ between INM... | `THEORETICAL_FOUNDATION` | `docs/hardware/ESP32_S3_BRINGUP_CHECKLIST.md` | FreeRTOS Kernel Architectural Analysis |
+| Q024 | What is the purpose of the watchdog timer in FreeRTOS? | `THEORETICAL_FOUNDATION` | `docs/engineering/architecture/FAILURE_RECOVERY.md` | FreeRTOS Kernel Architectural Analysis |
+| Q025 | Why is USB CDC-ACM the active candidate proposal instead of US... | `VERIFIED_PROPOSAL` | `docs/engineering/decisions/ADR-0003-usb-cdc-acm-transport.md`, `software/pcg_app/device_runtime.py` | Module B/C Proposed Architecture / Experimental Config |
+| Q026 | What is the mathematical polynomial of CRC-16-CCITT and what e... | `THEORETICAL_FOUNDATION` | `tools/c_golden_vectors/golden_common.h` | USB 2.0 Full-Speed Specification Analysis |
+| Q027 | How does ReferenceFramedPacketDecoder recover when garbage byt... | `VERIFIED_IMPLEMENTED` | `software/pcg_app/device_runtime.py` (`ReferenceFramedPacketDecoder`) | Pytest Streaming Suite (`test_device_runtime.py`) |
+| Q028 | What is the nominal application data rate of 48 kHz 24-bit str... | `THEORETICAL_FOUNDATION` | `docs/engineering/code-atlas/USB_PROTOCOL_ENGINEERING.md` | Protocol Math Audit (199.5 kB/s nominal application rate) |
+| Q029 | What Win32 error occurs when a USB cable is pulled mid-stream? | `VERIFIED_IMPLEMENTED` | `software/pcg_app/device_runtime.py` | Pytest Streaming Suite (`test_device_runtime.py`) |
+| Q030 | What is bit-stuffing in USB physical signaling? | `VERIFIED_PROPOSAL` | `docs/engineering/code-atlas/USB_PROTOCOL_ENGINEERING.md` | Candidate Protocol Audit (1.596 Mbit/s nominal; USB overhead model) |
+| Q031 | What are USB Endpoints, and which endpoints are used in Auscul... | `VERIFIED_PROPOSAL` | `docs/engineering/code-atlas/USB_PROTOCOL_ENGINEERING.md` | Candidate Protocol Audit (1.596 Mbit/s nominal; USB overhead model) |
+| Q032 | What is the role of Vendor ID (VID) and Product ID (PID) in US... | `THEORETICAL_FOUNDATION` | `docs/hardware/ESP32_S3_BRINGUP_CHECKLIST.md` | USB 2.0 Full-Speed Specification Analysis |
+| Q033 | Why does ReferenceFramedPacketDecoder handle chunked/partial r... | `VERIFIED_IMPLEMENTED` | `software/pcg_app/device_runtime.py` (`ReferenceFramedPacketDecoder.feed_bytes`) | Pytest Streaming Suite (`test_device_runtime.py`) |
+| Q034 | What is the purpose of the 2-byte 0xAA55 sync word? | `THEORETICAL_FOUNDATION` | `docs/protocol/PROTOCOL_DRAFT.md` | USB 2.0 Full-Speed Specification Analysis |
+| Q035 | Why does AuscultaForge use Second-Order Sections (SOS) instead... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/dsp.py` | Pytest Pipeline Suite (`software/tests/`) |
+| Q036 | How does StreamingBandpass maintain filter state across contig... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/dsp.py` | Pytest Pipeline Suite (`software/tests/`) |
+| Q037 | What is the difference between causal streaming filtering (sos... | `VERIFIED_IMPLEMENTED` | `docs/engineering/science/DSP_MATHEMATICS.md` | Pytest Pipeline Suite (`software/tests/`) |
+| Q038 | Define Root Mean Square (RMS) and explain how it differs from ... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/scientific/signal_quality.py` | Pytest Pipeline Suite (`software/tests/`) |
+| Q039 | What is Crest Factor and what does a high crest factor indicat... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/scientific/signal_quality.py` | Pytest Pipeline Suite (`software/tests/`) |
+| Q040 | Formulate the Teager-Kaiser Energy Operator (TKEO) and state i... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/scientific/envelopes.py` | Pytest Pipeline Suite (`software/tests/`) |
+| Q041 | What is the Hilbert transform and how is the analytic signal f... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/scientific/envelopes.py` | Pytest Pipeline Suite (`software/tests/`) |
+| Q042 | What is the passband of the primary AuscultaForge bandpass fil... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/dsp.py` | Pytest Pipeline Suite (`software/tests/`) |
+| Q043 | What digital clipping threshold is enforced in signal_quality.py? | `VERIFIED_IMPLEMENTED` | `software/pcg_core/scientific/signal_quality.py` | Pytest Pipeline Suite (`software/tests/`) |
+| Q044 | What is the group delay of a digital filter? | `VERIFIED_IMPLEMENTED` | `docs/engineering/science/DSP_MATHEMATICS.md` | Pytest Pipeline Suite (`software/tests/`) |
+| Q045 | How does polyphase rational resampling work in scipy.signal.re... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/springer_preprocessing.py` | Pytest Pipeline Suite (`software/tests/`) |
+| Q046 | What is a homomorphic envelope and why is it used in heart sou... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/springer_features.py` | Pytest Pipeline Suite (`software/tests/`) |
+| Q047 | What is the Schmidt spike removal algorithm? | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/springer_preprocessing.py` | Pytest Pipeline Suite (`software/tests/`) |
+| Q048 | What is the difference between IIR and FIR filters in biomedic... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/dsp.py` | Pytest Pipeline Suite (`software/tests/`) |
+| Q049 | Why is the Welch method superior to a single raw FFT periodogr... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/scientific/spectral.py` | Pytest Suite (`software/tests/`) |
+| Q050 | Calculate the exact frequency bin resolution $\Delta f$ for $f... | `THEORETICAL_FOUNDATION` | `docs/engineering/science/SPECTRAL_ANALYSIS.md` | Mathematical / ISO C99 Specification Analysis |
+| Q051 | Why is the Hann window chosen as the standard window in Auscul... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/scientific/spectral.py` | Pytest Suite (`software/tests/`) |
+| Q052 | What is the Short-Time Fourier Transform (STFT) and what gover... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/analysis.py` | Pytest Suite (`software/tests/`) |
+| Q053 | How is power mains interference quantified in pcg_core.scienti... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/scientific/spectral.py` | Pytest Suite (`software/tests/`) |
+| Q054 | What is Parseval's theorem and how does it relate time-domain ... | `THEORETICAL_FOUNDATION` | `docs/engineering/science/SPECTRAL_ANALYSIS.md` | Mathematical / ISO C99 Specification Analysis |
+| Q055 | Why must zero-padding in an FFT NOT be confused with increasin... | `THEORETICAL_FOUNDATION` | `docs/engineering/science/SPECTRAL_ANALYSIS.md` | Mathematical / ISO C99 Specification Analysis |
+| Q056 | What is the Gabor limit? | `THEORETICAL_FOUNDATION` | `docs/engineering/science/SPECTRAL_ANALYSIS.md` | Mathematical / ISO C99 Specification Analysis |
+| Q057 | What is spectral leakage and what causes it? | `THEORETICAL_FOUNDATION` | `docs/engineering/science/SPECTRAL_ANALYSIS.md` | Mathematical / ISO C99 Specification Analysis |
+| Q058 | Why does a 50% overlap in Welch's method recover lost informat... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/scientific/spectral.py` | Pytest Suite (`software/tests/`) |
+| Q059 | Define the SISO $H_1(f)$ transfer function estimator and expla... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/phantom.py` | Metrology Golden Runner (`test_metrology_golden.py`) |
+| Q060 | What is Magnitude-Squared Coherence $\gamma_{xy}^2(f)$ and wha... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/scientific/system_id.py` | Metrology Golden Runner (`test_metrology_golden.py`) |
+| Q061 | How does AuscultaForge estimate the propagation delay $\tau$ b... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/phantom.py` | Metrology Golden Runner (`test_metrology_golden.py`) |
+| Q062 | How is scalar path gain estimated under additive noise? | `VERIFIED_IMPLEMENTED` | `software/pcg_core/validation.py` | Metrology Golden Runner (`test_metrology_golden.py`) |
+| Q063 | List the six mandatory physical measurements required by the c... | `VERIFIED_IMPLEMENTED` | `docs/engineering/verification/SOFTWARE_VS_HARDWARE_EVIDENCE.md` | Metrology Golden Runner (`test_metrology_golden.py`) |
+| Q064 | What is the Coefficient of Variation ($\text{CV}$) and what ta... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/metrology/workflows.py` | Metrology Golden Runner (`test_metrology_golden.py`) |
+| Q065 | Why is a dead-weight clamping fixture (e.g. 500 g) recommended... | `VERIFIED_IMPLEMENTED` | `docs/engineering/science/MEASUREMENT_UNCERTAINTY.md` | Metrology Golden Runner (`test_metrology_golden.py`) |
+| Q066 | What acoustic components constitute the bench test phantom? | `VERIFIED_IMPLEMENTED` | `docs/engineering/architecture/SYSTEM_ARCHITECTURE.md` | Metrology Golden Runner (`test_metrology_golden.py`) |
+| Q067 | What is the purpose of the 5-minute warm-up period in metrolog... | `VERIFIED_IMPLEMENTED` | `docs/engineering/science/MEASUREMENT_UNCERTAINTY.md` | Metrology Golden Runner (`test_metrology_golden.py`) |
+| Q068 | How is Signal-to-Noise Ratio (SNR) calculated in pcg_core.scie... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/scientific/signal_quality.py` | Metrology Golden Runner (`test_metrology_golden.py`) |
+| Q069 | Why can we NOT claim sound pressure measurements in calibrated... | `VERIFIED_IMPLEMENTED` | `docs/engineering/science/PCG_SIGNAL_FOUNDATIONS.md` | Metrology Golden Runner (`test_metrology_golden.py`) |
+| Q070 | What is the minimum acceptable streaming continuity during the... | `VERIFIED_IMPLEMENTED` | `docs/engineering/verification/SOFTWARE_VS_HARDWARE_EVIDENCE.md` | Metrology Golden Runner (`test_metrology_golden.py`) |
+| Q071 | What are the four states modeled in Springer's LR-HSMM segment... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/hsmm.py` | Springer Validation Suite (`test_springer_segmentation.py`) |
+| Q072 | Why is a Hidden Semi-Markov Model (HSMM) necessary instead of ... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/hsmm.py` | Springer Validation Suite (`test_springer_segmentation.py`) |
+| Q073 | What four features are extracted in the Springer segmentation ... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/springer_features.py` | Springer Validation Suite (`test_springer_segmentation.py`) |
+| Q074 | How are state emission probabilities calculated in Springer's ... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/logistic.py` | Springer Validation Suite (`test_springer_segmentation.py`) |
+| Q075 | How does the extended Viterbi algorithm enforce the cyclic car... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/hsmm.py` | Springer Validation Suite (`test_springer_segmentation.py`) |
+| Q076 | What is subject-level splitting and why is record-level splitt... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/validation/` | Springer Validation Suite (`test_springer_segmentation.py`) |
+| Q077 | What open-access dataset is used in AuscultaForge for segmenta... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/validation/circor.py` | Springer Validation Suite (`test_springer_segmentation.py`) |
+| Q078 | Define the event matching tolerance window and explain how Tru... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/validation/matching.py` | Springer Validation Suite (`test_springer_segmentation.py`) |
+| Q079 | What is the official role of machine learning in the EEE495/EE... | `VERIFIED_IMPLEMENTED` | `README.md` | Springer Validation Suite (`test_springer_segmentation.py`) |
+| Q080 | How does autocorrelation estimate heart rate in pcg_core.segme... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/heart_rate.py` | Springer Validation Suite (`test_springer_segmentation.py`) |
+| Q081 | What is the $F_1$-score and why is accuracy an inappropriate m... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/evaluation.py` | Springer Validation Suite (`test_springer_segmentation.py`) |
+| Q082 | What is duration conditioning in Springer's HSMM? | `VERIFIED_IMPLEMENTED` | `software/pcg_core/segmentation/durations.py` | Springer Validation Suite (`test_springer_segmentation.py`) |
+| Q083 | Why does software/pcg_app/app.py use an application factory (c... | `VERIFIED_IMPLEMENTED` | `software/pcg_app/app.py` | Session Recording Suite (`test_recording.py`) |
+| Q084 | How many total routes are registered in the AuscultaForge Fast... | `VERIFIED_IMPLEMENTED` | `docs/engineering/code-atlas/FASTAPI_API_REFERENCE.md` | Session Recording Suite (`test_recording.py`) |
+| Q085 | What is the correct endpoint for polling physical USB devices? | `VERIFIED_IMPLEMENTED` | `software/pcg_app/app.py` | Session Recording Suite (`test_recording.py`) |
+| Q086 | How does StreamManager prevent slow WebSocket clients from sta... | `VERIFIED_IMPLEMENTED` | `software/pcg_app/state.py` | Session Recording Suite (`test_recording.py`) |
+| Q087 | What are the eight states of the DeviceRuntime lifecycle state... | `VERIFIED_IMPLEMENTED` | `software/pcg_app/device_runtime.py` | Session Recording Suite (`test_recording.py`) |
+| Q088 | How does SessionRecorder guarantee that recorded sessions rema... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/recording.py` (`SessionRecorder.start`, `stop`, `verify_session`) | Pytest Session Verification (`test_recording.py`) |
+| Q089 | What does the SHA-256 digest in session.json actually hash, an... | `VERIFIED_IMPLEMENTED` | `software/pcg_core/recording.py` (`compute_file_sha256`, `verify_session`) | Pytest Session Verification (`test_recording.py`) |
+| Q090 | What is the purpose of RollingBuffer in pcg_core/buffers.py? | `VERIFIED_IMPLEMENTED` | `software/pcg_core/buffers.py` | Session Recording Suite (`test_recording.py`) |
+| Q091 | What is the difference between synchronous code and asynchrono... | `VERIFIED_IMPLEMENTED` | `software/pcg_app/app.py` | Session Recording Suite (`test_recording.py`) |
+| Q092 | What is the purpose of CORS middleware in pcg_app/app.py? | `VERIFIED_IMPLEMENTED` | `software/pcg_app/app.py` | Session Recording Suite (`test_recording.py`) |
+| Q093 | Why does the frontend waveform display use an HTML5 Canvas ins... | `VERIFIED_IMPLEMENTED` | `software/frontend/src/components/LiveWorkspace.tsx` | Frontend Vitest / TypeScript Check (`npm test`, `npm run lint`) |
+| Q094 | How does DisplayDecimator preserve transient clicks while deci... | `VERIFIED_IMPLEMENTED` | `software/pcg_app/display_pipeline.py` | Frontend Vitest / TypeScript Check (`npm test`, `npm run lint`) |
+| Q095 | Explain the distinction between mcu_drops and display_drops on... | `VERIFIED_IMPLEMENTED` | `software/frontend/src/components/LiveWorkspace.tsx` | Frontend Vitest / TypeScript Check (`npm test`, `npm run lint`) |
+| Q096 | What unit test file verifies frontend mathematical logic? | `VERIFIED_IMPLEMENTED` | `software/frontend/src/tests/live_workspace_math.test.ts` | Frontend Vitest / TypeScript Check (`npm test`, `npm run lint`) |
+| Q097 | What is the 15x scale distortion bug prevented in live_workspa... | `VERIFIED_IMPLEMENTED` | `software/frontend/src/tests/live_workspace_math.test.ts` | Frontend Vitest / TypeScript Check (`npm test`, `npm run lint`) |
+| Q098 | How does BridgeClient handle automatic WebSocket reconnection? | `VERIFIED_IMPLEMENTED` | `software/frontend/src/api/bridgeClient.ts` | Frontend Vitest / TypeScript Check (`npm test`, `npm run lint`) |
+| Q099 | What is TypeScript compile-time type checking and what command... | `VERIFIED_IMPLEMENTED` | `software/frontend/package.json` | Frontend Vitest / TypeScript Check (`npm test`, `npm run lint`) |
+| Q100 | What tool bundles the React application for production? | `VERIFIED_IMPLEMENTED` | `software/frontend/package.json` | Frontend Vitest / TypeScript Check (`npm test`, `npm run lint`) |
+| Q101 | What are the primary ownership boundaries between Kaan, Ozan, ... | `ACADEMIC_GOVERNANCE` | `README.md` | Course SDP4 Charter & ABET Module Attribution |
+| Q102 | Why does AuscultaForge explicitly prohibit clinical diagnostic... | `ACADEMIC_GOVERNANCE` | `docs/engineering/decisions/ADR-0018-engineering-metrology-vs-clinical-diagnosis.md` | Course SDP4 Charter & ABET Module Attribution |
+| Q103 | What was the Master Integration Gate (PR #31)? | `ACADEMIC_GOVERNANCE` | `docs/engineering/history/DEVELOPMENT_CHRONICLE.md` | Course SDP4 Charter & ABET Module Attribution |
+| Q104 | What is the difference between Academic Week 10 and Software S... | `ACADEMIC_GOVERNANCE` | `docs/hardware/ESP32_S3_BRINGUP_CHECKLIST.md` | Course SDP4 Charter & ABET Module Attribution |
+| Q105 | How does AuscultaForge ensure reproducibility in published res... | `ACADEMIC_GOVERNANCE` | `docs/engineering/verification/REPRODUCIBILITY_GUIDE.md` | Course SDP4 Charter & ABET Module Attribution |

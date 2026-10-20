@@ -8,7 +8,7 @@
 
 - **Experiment ID:** `EXP-YYYYMMDD-XX`
 - **Date & Time:** `YYYY-MM-DD HH:MM UTC`
-- **Location / Laboratory:** [e.g., Bilkent EEE Acoustics Laboratory]
+- **Location / Laboratory:** [e.g., Department Acoustics Laboratory]
 - **Operators / Witnesses:** [Kaan / Ozan / Ege]
 - **Module Focus:** `[Module A (Acoustics) / Module B (Embedded) / Cross-Module Integration]`
 - **Status:** `[PLANNED / IN_PROGRESS / BENCH_VERIFIED / REJECTED]`

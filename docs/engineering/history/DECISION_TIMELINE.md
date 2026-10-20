@@ -110,8 +110,8 @@ gantt
 
 ---
 
-### Entry D06: Dual-File Recording — Lossless WAV + Cryptographic JSON Sidecar
-* **Date:** 2026-09-26 (Hardened in Sprint 04, PR #20)
+### Entry D06: Structured Directory Recording — Lossless WAV + Metadata Sidecars
+* **Date:** 2026-09-26 (Hardened in Sprint 04, PR #20; Consolidated in PR #31)
 * **Owner:** Module C (Ege)
 * **ADR Link:** [`ADR-0014-lossless-raw-wav-and-metadata-sidecar.md`](../decisions/ADR-0014-lossless-raw-wav-and-metadata-sidecar.md)
 * **Commit:** `d8c3505`
@@ -120,5 +120,5 @@ gantt
 * **Alternatives Considered:**
   1. *HDF5 / NetCDF:* Standard in big-data scientific computing, but difficult to inspect in standard audio software (Audacity) and requires heavy binary libraries.
   2. *Single WAV file with embedded INFO chunks:* Limited metadata schema; metadata fields often stripped by third-party audio editing software.
-* **Decision:** Enforced **Dual-File Architecture**: `<session_id>.wav` containing uncompressed PCM audio, and `<session_id>.meta.json` containing immutable metadata (Git commit SHA, sample rate, total samples, dropped packet counts, and SHA-256 payload checksum).
-* **Consequences:** Replay engine automatically verifies SHA-256 hash before loading, preventing corrupt or tampered data from contaminating metrology reports.
+* **Decision:** Enforced **Structured Directory Session Persistence**: Each session is stored under `experiments/sessions/<session_id>/` containing `raw.wav` (lossless normalized float32 WAV by default), `session.json` (metadata, exact sample count, dropped packets, and whole-file SHA-256 storage hash), and `manifest.json`.
+* **Consequences:** `verify_session()` automatically checks the whole-file SHA-256 hash before loading or analyzing, detecting bit rot, truncation, or accidental editing.

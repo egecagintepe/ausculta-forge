@@ -24,14 +24,14 @@ stateDiagram-v2
     ABSENT --> DETECTED: Hardware USB Enumeration / Virtual Bench Mounted
     DETECTED --> ABSENT: Physical USB Disconnect
     
-    DETECTED --> OPENING: User Calls POST /api/device/open
+    DETECTED --> OPENING: User Calls POST /api/device/connect
     OPENING --> DETECTED: Port Open Failed / Permission Denied
     
     OPENING --> HANDSHAKING: COM Port Opened Successfully
     HANDSHAKING --> OPENING: Handshake Timeout / Preamble Noise
     
     HANDSHAKING --> READY: Magic Word (0xAA55) & Capabilities Exchanged
-    READY --> CLOSING: User Calls POST /api/device/close
+    READY --> CLOSING: User Calls POST /api/device/disconnect
     
     READY --> STREAMING: User Calls POST /api/stream/start
     STREAMING --> READY: User Calls POST /api/stream/stop

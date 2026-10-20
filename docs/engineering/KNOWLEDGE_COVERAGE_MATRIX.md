@@ -10,18 +10,18 @@ This matrix provides a comprehensive, bidirectional audit connecting academic cu
 | :--- | :--- | :--- | :--- | :--- |
 | **Acoustic Transduction** | MEMS I2S microphone vs ECM analog conditioning | [ADR-0004](decisions/ADR-0004-i2s-digital-mems-vs-analog-ecm.md)<br>[PCG_SIGNAL_FOUNDATIONS](science/PCG_SIGNAL_FOUNDATIONS.md) | `docs/research/INMP441_MICROPHONE_ANALYSIS.md`<br>`docs/sdp/MODULE_A_ACOUSTIC_TRANSDUCTION.md` | `DOCUMENTED_PROPOSAL`<br>`HARDWARE_UNVERIFIED` |
 | **Procurement Engineering** | Component substitution rationale (PUI to INMP441) | [ADR-0005](decisions/ADR-0005-inmp441-procurement-substitution.md)<br>[DEVELOPMENT_CHRONICLE](history/DEVELOPMENT_CHRONICLE.md) | `docs/research/PROCUREMENT_ALTERNATIVES_SUMMARY.md` | `GIT_VERIFIED` |
-| **Embedded Architecture** | ESP32-S3 Xtensa LX7 dual-core, DMA, FreeRTOS | [ESP32_RUNTIME_ARCHITECTURE](code-atlas/ESP32_RUNTIME_ARCHITECTURE.md)<br>[ADR-0001](decisions/ADR-0001-esp32-s3-mcu-selection.md) | `tools/esp32_bench_example/main/esp32_bench_example_main.c` | `CODE_VERIFIED` (C scaffold)<br>`HARDWARE_UNVERIFIED` |
-| **Real-Time Data Buffering** | Producer-consumer ring buffers, FreeRTOS tasks | [BUFFERING_AND_REALTIME](code-atlas/BUFFERING_AND_REALTIME.md)<br>[RUNTIME_LIFECYCLE](architecture/RUNTIME_LIFECYCLE.md) | `software/pcg_app/stream_manager.py`<br>`software/pcg_app/device/ring_buffer.py` | `CODE_VERIFIED`<br>`TEST_VERIFIED` (Host) |
-| **Binary Serialization** | 24-bit PCM in S32_LE, two's-complement arithmetic | [PCM_BINARY_REPRESENTATION](code-atlas/PCM_BINARY_REPRESENTATION.md)<br>[C_LANGUAGE_FOUNDATIONS](code-atlas/C_LANGUAGE_FOUNDATIONS.md) | `software/pcg_app/device/packet.py`<br>`tools/portable_generator/generator.c` | `CODE_VERIFIED`<br>`TEST_VERIFIED` |
-| **Digital Communications** | USB CDC-ACM framing, packet synchronization | [USB_PROTOCOL_ENGINEERING](code-atlas/USB_PROTOCOL_ENGINEERING.md)<br>[ADR-0003](decisions/ADR-0003-usb-cdc-acm-transport.md) | `software/pcg_app/device/protocol.py`<br>`docs/protocol/USB_CDC_PACKET_FORMAT.md` | `CODE_VERIFIED`<br>`TEST_VERIFIED` |
+| **Embedded Architecture** | ESP32-S3 Xtensa LX7 dual-core, DMA, FreeRTOS | [ESP32_RUNTIME_ARCHITECTURE](code-atlas/ESP32_RUNTIME_ARCHITECTURE.md)<br>[ADR-0001](decisions/ADR-0001-esp32-s3-mcu-selection.md) | `tools/esp32_bench_example/main/main.c` | `CODE_VERIFIED` (C scaffold)<br>`HARDWARE_UNVERIFIED` |
+| **Real-Time Data Buffering** | Producer-consumer ring buffers, FreeRTOS tasks | [BUFFERING_AND_REALTIME](code-atlas/BUFFERING_AND_REALTIME.md)<br>[RUNTIME_LIFECYCLE](architecture/RUNTIME_LIFECYCLE.md) | `software/pcg_app/stream_manager.py`<br>`software/pcg_core/buffers.py` | `CODE_VERIFIED`<br>`TEST_VERIFIED` (Host) |
+| **Binary Serialization** | 24-bit PCM in S32_LE, two's-complement arithmetic | [PCM_BINARY_REPRESENTATION](code-atlas/PCM_BINARY_REPRESENTATION.md)<br>[C_LANGUAGE_FOUNDATIONS](code-atlas/C_LANGUAGE_FOUNDATIONS.md) | `software/pcg_app/device_runtime.py`<br>`tools/c_golden_vectors/golden_generator.c` | `CODE_VERIFIED`<br>`TEST_VERIFIED` |
+| **Digital Communications** | USB CDC-ACM framing, packet synchronization | [USB_PROTOCOL_ENGINEERING](code-atlas/USB_PROTOCOL_ENGINEERING.md)<br>[ADR-0003](decisions/ADR-0003-usb-cdc-acm-transport.md) | `software/pcg_app/device_runtime.py`<br>`docs/protocol/USB_CDC_PACKET_FORMAT.md` | `CODE_VERIFIED`<br>`TEST_VERIFIED` |
 | **Host System Architecture** | FastAPI asynchronous REST, WebSockets, background threads | [FASTAPI_API_REFERENCE](code-atlas/FASTAPI_API_REFERENCE.md)<br>[PYTHON_RUNTIME_WALKTHROUGH](code-atlas/PYTHON_RUNTIME_WALKTHROUGH.md) | `software/pcg_app/app.py`<br>`software/pcg_app/server.py` | `CODE_VERIFIED`<br>`TEST_VERIFIED` (394 pytest) |
-| **Digital Signal Processing** | SOS Butterworth filtering, zero-phase vs causal | [DSP_MATHEMATICS](science/DSP_MATHEMATICS.md)<br>[ADR-0012](decisions/ADR-0012-host-python-dsp-vs-firmware-dsp.md) | `software/pcg_app/dsp/pipeline.py`<br>`software/pcg_app/dsp/filter.py` | `CODE_VERIFIED`<br>`TEST_VERIFIED` |
-| **Spectral Analysis** | Welch PSD, STFT spectrogram, frequency binning | [SPECTRAL_ANALYSIS](science/SPECTRAL_ANALYSIS.md) | `software/pcg_app/analysis/spectral.py` | `CODE_VERIFIED`<br>`TEST_VERIFIED` |
-| **System Identification** | Frequency response H1, coherence, latency estimation | [SYSTEM_IDENTIFICATION](science/SYSTEM_IDENTIFICATION.md) | `software/pcg_app/analysis/system_id.py` | `CODE_VERIFIED`<br>`TEST_VERIFIED` |
-| **Segmentation Modeling** | Springer 4-state HMM/HSMM, duration modeling | [SEGMENTATION_MODELS](science/SEGMENTATION_MODELS.md) | `software/pcg_app/analysis/segmentation.py` | `CODE_VERIFIED`<br>`TEST_VERIFIED` |
-| **Measurement Uncertainty** | Type A/B uncertainty, GUM guidelines, noise floors | [MEASUREMENT_UNCERTAINTY](science/MEASUREMENT_UNCERTAINTY.md)<br>[ADR-0018](decisions/ADR-0018-engineering-metrology-vs-clinical-diagnosis.md) | `software/pcg_app/analysis/metrics.py` | `CODE_VERIFIED` |
+| **Digital Signal Processing** | SOS Butterworth filtering, zero-phase vs causal | [DSP_MATHEMATICS](science/DSP_MATHEMATICS.md)<br>[ADR-0012](decisions/ADR-0012-host-python-dsp-vs-firmware-dsp.md) | `software/pcg_core/dsp.py` | `CODE_VERIFIED`<br>`TEST_VERIFIED` |
+| **Spectral Analysis** | Welch PSD, STFT spectrogram, frequency binning | [SPECTRAL_ANALYSIS](science/SPECTRAL_ANALYSIS.md) | `software/pcg_core/scientific/spectral.py` | `CODE_VERIFIED`<br>`TEST_VERIFIED` |
+| **System Identification** | Frequency response H1, coherence, latency estimation | [SYSTEM_IDENTIFICATION](science/SYSTEM_IDENTIFICATION.md) | `software/pcg_core/phantom.py` | `CODE_VERIFIED`<br>`TEST_VERIFIED` |
+| **Segmentation Modeling** | Springer 4-state HMM/HSMM, duration modeling | [SEGMENTATION_MODELS](science/SEGMENTATION_MODELS.md) | `software/pcg_core/segmentation/` | `CODE_VERIFIED`<br>`TEST_VERIFIED` |
+| **Measurement Uncertainty** | Type A/B uncertainty, GUM guidelines, noise floors | [MEASUREMENT_UNCERTAINTY](science/MEASUREMENT_UNCERTAINTY.md)<br>[ADR-0018](decisions/ADR-0018-engineering-metrology-vs-clinical-diagnosis.md) | `software/pcg_core/scientific/signal_quality.py` | `CODE_VERIFIED` |
 | **Academic Defense** | Oral examination questions, failure fallback | [DEFENSE_HANDBOOK](defense/DEFENSE_HANDBOOK.md)<br>[QUESTION_BANK](defense/QUESTION_BANK.md) | Entire repository test suite & docs | `DOCUMENTED_PROPOSAL` |
-| **Research Feasibility** | Deep learning extension roadmap, dataset provenance | [SEMESTER_II_AI_ROADMAP](research/SEMESTER_II_AI_ROADMAP.md)<br>[DEPENDENCY_AND_LICENSE_AUDIT](DEPENDENCY_AND_LICENSE_AUDIT.md) | `software/pcg_app/analysis/` | `DOCUMENTED_PROPOSAL` |
+| **Research Feasibility** | Deep learning extension roadmap, dataset provenance | [SEMESTER_II_AI_ROADMAP](research/SEMESTER_II_AI_ROADMAP.md)<br>[DEPENDENCY_AND_LICENSE_AUDIT](DEPENDENCY_AND_LICENSE_AUDIT.md) | `software/pcg_core/segmentation/` | `DOCUMENTED_PROPOSAL` |
 
 ---
 
@@ -55,16 +55,16 @@ This matrix provides a comprehensive, bidirectional audit connecting academic cu
 - **C Language Bitwise & Two's Complement:** Documented in [C_LANGUAGE_FOUNDATIONS](code-atlas/C_LANGUAGE_FOUNDATIONS.md) and [PCM_BINARY_REPRESENTATION](code-atlas/PCM_BINARY_REPRESENTATION.md).
 - **FreeRTOS Real-Time Tasks & Ring Buffers:** Documented in [BUFFERING_AND_REALTIME](code-atlas/BUFFERING_AND_REALTIME.md).
 - **USB CDC-ACM Packet Protocol & Framing:** Documented in [USB_PROTOCOL_ENGINEERING](code-atlas/USB_PROTOCOL_ENGINEERING.md) and [ADR-0003](decisions/ADR-0003-usb-cdc-acm-transport.md).
-- **Experimental Sample Generator:** Source in `tools/esp32_bench_example/main/esp32_bench_example_main.c`, audited in [EMBEDDED_C_WALKTHROUGH](code-atlas/EMBEDDED_C_WALKTHROUGH.md). Status: `HARDWARE_UNVERIFIED`.
+- **Experimental Sample Generator:** Source in `tools/esp32_bench_example/main/main.c`, audited in [EMBEDDED_C_WALKTHROUGH](code-atlas/EMBEDDED_C_WALKTHROUGH.md). Status: `HARDWARE_UNVERIFIED`.
 
 ### Module C — Host Software, DSP & User Interface (Lead: Ege)
-- **Device Runtime & Transport Management:** Documented in [PYTHON_RUNTIME_WALKTHROUGH](code-atlas/PYTHON_RUNTIME_WALKTHROUGH.md) §2 (`software/pcg_app/device/`).
+- **Device Runtime & Transport Management:** Documented in [PYTHON_RUNTIME_WALKTHROUGH](code-atlas/PYTHON_RUNTIME_WALKTHROUGH.md) §2 (`software/pcg_app/device_runtime.py`).
 - **Stream Routing & Display Decimation:** Documented in [PYTHON_RUNTIME_WALKTHROUGH](code-atlas/PYTHON_RUNTIME_WALKTHROUGH.md) §3 (`software/pcg_app/stream_manager.py`).
-- **Signal Processing & Filtering:** Documented in [DSP_MATHEMATICS](science/DSP_MATHEMATICS.md) (`software/pcg_app/dsp/`).
-- **Spectral & System Identification:** Documented in [SPECTRAL_ANALYSIS](science/SPECTRAL_ANALYSIS.md) and [SYSTEM_IDENTIFICATION](science/SYSTEM_IDENTIFICATION.md) (`software/pcg_app/analysis/`).
-- **Segmentation Modeling:** Documented in [SEGMENTATION_MODELS](science/SEGMENTATION_MODELS.md) (`software/pcg_app/analysis/segmentation.py`).
+- **Signal Processing & Filtering:** Documented in [DSP_MATHEMATICS](science/DSP_MATHEMATICS.md) (`software/pcg_core/dsp.py`).
+- **Spectral & System Identification:** Documented in [SPECTRAL_ANALYSIS](science/SPECTRAL_ANALYSIS.md) and [SYSTEM_IDENTIFICATION](science/SYSTEM_IDENTIFICATION.md) (`software/pcg_core/scientific/` and `software/pcg_core/phantom.py`).
+- **Segmentation Modeling:** Documented in [SEGMENTATION_MODELS](science/SEGMENTATION_MODELS.md) (`software/pcg_core/segmentation/`).
 - **FastAPI HTTP & WebSocket Interface:** Documented in [FASTAPI_API_REFERENCE](code-atlas/FASTAPI_API_REFERENCE.md) (`software/pcg_app/app.py`).
-- **Audio Session Persistence & WAV Export:** Documented in [RECORDING_AND_SESSION_INTERNALS](code-atlas/RECORDING_AND_SESSION_INTERNALS.md) (`software/pcg_app/recording/`).
+- **Audio Session Persistence & WAV Export:** Documented in [RECORDING_AND_SESSION_INTERNALS](code-atlas/RECORDING_AND_SESSION_INTERNALS.md) (`software/pcg_core/recording.py`).
 - **React Frontend Dashboard:** Documented in [FRONTEND_ARCHITECTURE](code-atlas/FRONTEND_ARCHITECTURE.md) (`software/frontend/`).
 - **Cross-Language Contracts:** Documented in [CROSS_LANGUAGE_DATA_CONTRACTS](code-atlas/CROSS_LANGUAGE_DATA_CONTRACTS.md).
 
@@ -78,7 +78,7 @@ This matrix provides a comprehensive, bidirectional audit connecting academic cu
 | **Frontend TypeScript** | Strict type safety and compilation | [REPRODUCIBILITY_GUIDE](verification/REPRODUCIBILITY_GUIDE.md) | `npm run lint` / `tsc --noEmit` | 0 errors |
 | **Frontend Unit Tests** | Decimation, display math, telemetry | [TEST_ATLAS](verification/TEST_ATLAS.md) | `npm run test` (Vitest) | 4 passed |
 | **Frontend Production Build**| Vite bundle optimization and asset packaging | [FRONTEND_ARCHITECTURE](code-atlas/FRONTEND_ARCHITECTURE.md) | `npm run build` | Clean build in 3.48s |
-| **Portable C Bench Parity** | Golden vector bit-exactness between C & Python | [TEST_ATLAS](verification/TEST_ATLAS.md) | `tools/portable_generator/` | 6/6 tests passed |
+| **Portable C Bench Parity** | Golden vector bit-exactness between C & Python | [TEST_ATLAS](verification/TEST_ATLAS.md) | `tools/c_golden_vectors/` | 6/6 tests passed |
 | **Requirements Traceability**| PR #18–31 functional compliance mapping | [REQUIREMENTS_TRACEABILITY](verification/REQUIREMENTS_TRACEABILITY.md) | Multi-module review | 100% software requirements mapped |
 | **Hardware Bringup Checks** | ESP32-S3 UART/CDC connection and polling | [SOFTWARE_VS_HARDWARE_EVIDENCE](verification/SOFTWARE_VS_HARDWARE_EVIDENCE.md) | `docs/hardware/ESP32_S3_BRINGUP_CHECKLIST.md` | `HARDWARE_UNVERIFIED` (Requires physical bench) |
 

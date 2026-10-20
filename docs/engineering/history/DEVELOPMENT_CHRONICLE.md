@@ -63,8 +63,8 @@ timeline
 #### Architectural Events:
 1. **Decision Record on Hardware & Team Boundaries (`667daa7`):**
    - Formally documented initial hardware assumptions: ESP32-S3 microcontroller, nominal 48 kHz sampling baseline, electret vs. MEMS trade-offs, and module ownership assignments.
-2. **Dual-File Session Persistence (`d8c3505`):**
-   - Established the strict recording rule: Audio MUST be saved as 16-bit or 24-bit uncompressed WAV paired with an immutable JSON sidecar (`<session_id>.meta.json`) recording sample count, dropped packets, SHA-256 payload checksums, and git commit hashes.
+2. **Structured Directory Session Persistence (`d8c3505`):**
+   - Established the strict recording rule: Audio sessions are saved in structured directories (`experiments/sessions/<session_id>/`) containing `raw.wav` (normalized float32 WAV by default) paired with JSON metadata (`session.json` & `manifest.json`) recording sample count, dropped packets, whole-file SHA-256 storage hash, and git commit hashes.
 3. **DeviceRuntime State Machine (`18d5381`, `a586346`):**
    - Implemented an 8-state hardware lifecycle (`ABSENT`, `DETECTED`, `OPENING`, `HANDSHAKING`, `READY`, `STREAMING`, `CLOSING`, `INTERRUPTED`) inside `software/pcg_app/device_runtime.py`.
    - Prevented illegal streaming transitions and established truthful capability discovery.
@@ -162,7 +162,7 @@ graph TD
 
 #### Resolution of Semantic Divergences:
 During integration, 8 overlapping files were audited and reconciled:
-1. `software/frontend/src/bridgeClient.ts`: Merged WebSocket stream handlers with metrology and research endpoints.
+1. `software/frontend/src/api/bridgeClient.ts`: Merged WebSocket stream handlers with metrology and research endpoints.
 2. `software/frontend/src/types.ts`: Consolidated telemetry, system identification, and model evaluation types.
 3. `software/pcg_app/app.py`: Registered all 57 routes across core runtime, virtual bench, sessions, metrology, and research labs.
 4. `software/pcg_app/analysis_service.py`: Reconciled multi-channel file analysis with single-channel 48 kHz streaming.

@@ -20,9 +20,10 @@ Data integrity must be verified at two radically different timescales:
 
 ## Decision
 Enforced a **Dual-Tiered Integrity Policy**:
-1. **Wire Level — CRC-16-CCITT:** Firmware computes a 16-bit CRC ($G(x) = x^{16} + x^{12} + x^5 + 1$, init `0xFFFF`) over each wire frame. The host Layer 2 decoder validates this CRC in real-time, discarding corrupted frames.
-2. **File Level — Cryptographic SHA-256:** As audio samples are streamed to disk, `SessionRecorder` updates an incremental SHA-256 digest. The final 64-character hexadecimal hash is committed to `<session_id>.meta.json`. Replaying or analyzing the session requires matching this hash.
+1. **Wire Level — Reference CRC-16-CCITT:** The proposed framing protocol and reference decoder (`software/pcg_app/device_runtime.py`) calculate a 16-bit CRC ($G(x) = x^{16} + x^{12} + x^5 + 1$, init `0xFFFF`) over each frame. While currently implemented in host test utilities and reference decoders, the final trailer policy and algorithm remain an active candidate proposal awaiting joint Module B/C physical bring-up approval.
+2. **File Level — Whole-File Storage SHA-256:** Upon session finalization, `SessionRecorder.stop()` invokes `compute_file_sha256(raw_wav_path)` to compute the cryptographic SHA-256 digest over the complete serialized `raw.wav` file on disk. This digest is committed to `session.json` (as `raw_wav_sha256`) and `manifest.json`. Session verification (`verify_session()`) recomputes this hash to detect bit rot, truncation, or accidental editing.
+   * *Security Boundary:* SHA-256 provides file integrity detection, not cryptographic proof of recording authenticity or tamper-proofing against an attacker with filesystem access.
 
 ## Consequences & Trade-Offs
-* **Positive:** Lightweight hardware verification on the wire; rock-solid cryptographic immutability on disk.
-* **Negative:** Modifying a recorded audio file in external software (e.g. Audacity) invalidates the SHA-256 hash, causing the AuscultaForge analysis pipeline to reject it. (This is an intended scientific protection).
+* **Positive:** Clear separation of wire-level transport integrity from post-acquisition disk integrity; automated detection of file corruption or truncation.
+* **Negative:** Modifying a recorded audio file in external software (e.g. Audacity) invalidates the SHA-256 hash, causing `verify_session()` to flag `sha256_match: false`. (This is an intended scientific protection).

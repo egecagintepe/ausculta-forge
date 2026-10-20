@@ -18,11 +18,11 @@ In scientific instrumentation, the user interface must never compete with the un
 ```mermaid
 graph TD
     subgraph BACKEND ["FastAPI Server (localhost:8000)"]
-        WS_STREAM["WebSocket Server (/api/ws/stream)"]
+        WS_STREAM["WebSocket Server (/ws)"]
         REST_API["REST API Server (/api/...)"]
     end
 
-    subgraph CLIENT_TRANSPORT ["Frontend Transport (bridgeClient.ts)"]
+    subgraph CLIENT_TRANSPORT ["Frontend Transport (src/api/bridgeClient.ts)"]
         WS_CLIENT["BridgeClient (Singleton)<br>- Reconnection state machine<br>- Typed JSON deserializer"]
         HTTP_CLIENT["HTTP Bridge Client<br>- Axios / Fetch wrapper"]
     end

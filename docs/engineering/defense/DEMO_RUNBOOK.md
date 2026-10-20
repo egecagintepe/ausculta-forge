@@ -72,10 +72,11 @@ timeline
 1. Click **"Start Recording"** with session label `Demo_Evaluation_01`.
 2. Record for exactly 10.0 seconds.
 3. Click **"Stop Recording"**.
-4. Open the `experiments/sessions/` directory on screen. Show the generated file pair:
-   - `Demo_Evaluation_01.wav` ($480,000 \text{ samples} \times 3 \text{ bytes} \approx 1.44 \text{ MB}$).
-   - `Demo_Evaluation_01.meta.json`.
-5. Open the JSON sidecar: point out the Git commit SHA, exact sample count ($480,000$), zero dropped samples, and the 64-character SHA-256 payload hash.
+4. Open the `experiments/sessions/<session_id>/` directory on screen. Show the generated files:
+   - `raw.wav` (normalized float32 WAV, $480,000 \text{ samples} \times 4 \text{ bytes} \approx 1.92 \text{ MB}$).
+   - `session.json` (metadata, sample counts, duration, and whole-file SHA-256 hash).
+   - `manifest.json` (session manifest registry).
+5. Open `session.json`: point out the Git commit SHA, exact sample count ($480,000$), zero dropped samples, and the 64-character `raw_wav_sha256` whole-file hash.
 
 ### Minute 4: Offline Scientific Lab & Welch PSD
 1. Switch navigation tabs to **"Scientific Lab"**.

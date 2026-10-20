@@ -35,10 +35,10 @@ graph TD
 * **Host Application Recovery (`software/pcg_app/device_runtime.py`):**
   1. **Exception Catching:** The background transport thread traps `SerialException` immediately.
   2. **State Transition:** State machine transitions instantaneously from `STREAMING` to `INTERRUPTED`.
-  3. **Recording Preservation:** If an active WAV recording is in progress, `SessionRecorder.stop()` is synchronously executed inside the exception handler.
-     * The WAV header is updated from placeholder length ($0\text{xFFFFFFFF}$) to the exact number of bytes safely written to disk prior to disconnection.
-     * The running SHA-256 hash is computed over all completed sample bytes.
-     * The JSON sidecar is written with `termination_reason: "device_disconnected"`.
+  3. **Recording Preservation:** If an active WAV recording is in progress, `SessionRecorder.stop()` is executed to finalize the session:
+     * The accumulated normalized float32 samples are concatenated, verified for length, and written to `raw.wav` via `scipy.io.wavfile.write()`.
+     * The complete serialized `raw.wav` file is hashed with whole-file SHA-256.
+     * `session.json` and `manifest.json` are committed with accurate duration and metadata.
   4. **Frontend Alert:** A WebSocket alert message (`{"type": "device_interrupted", "error": "USB cable disconnected"}`) is pushed to React. The UI changes to an amber "Interrupted" banner without crashing.
 * **Test Verification:** Covered by `software/tests/test_transport_readiness.py::test_abrupt_disconnect_finalizes_session_and_preserves_samples` and Virtual Bench Scenario 8 (`test_scenario_lifecycle_interruption_reconnect`).
 
@@ -48,7 +48,7 @@ graph TD
 * **Symptom:** Electromagnetic interference (EMI) or poor breadboard contact corrupts bits on the serial wire.
 * **Detection:** Layer 2 Frame Decoder checks the 16-bit CRC against the received frame bytes:
   $$\text{CRC}_{\text{calc}} \ne \text{CRC}_{\text{received}}$$
-* **Resynchronization Algorithm (`software/pcg_app/transport.py`):**
+* **Resynchronization Algorithm (`software/pcg_app/device_runtime.py`):**
   1. The decoder rejects the corrupted frame and increments `corrupt_frame_count`.
   2. The decoder shifts its read window forward by 1 byte and searches the byte stream for the next occurrence of the 2-byte synchronization word:
      $$\text{Sync Word} = 0\text{xAA55} \quad (\text{Bytes: } [0\text{x}55, 0\text{x}\text{AA}])$$

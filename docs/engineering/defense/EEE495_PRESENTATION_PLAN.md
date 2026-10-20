@@ -27,7 +27,7 @@ The EEE495 presentation marks the conclusion of Semester I (Foundation, Architec
 > 
 > *Rather than jumping straight to unverified machine learning on dirty signals, our project focuses on physical acoustic fidelity. In Module A, Kaan evaluated electret condenser microphones versus digital I2S MEMS, establishing that integrated 24-bit MEMS sensors bypass breadboard analog electromagnetic noise. In Module B, Ozan architected an ESP32-S3 acquisition datapath using hardware I2S Direct Memory Access and native USB CDC-ACM streaming at 48,000 samples per second. In Module C, I developed the host software platform: a FastAPI desktop bridge, a bounded peak-preserving display pipeline running at 60 FPS, lossless dual-file session recording with SHA-256 sidecars, and an automated metrology suite executing the six mandatory physical measurements.*
 > 
-> *Our software pipeline is 100% verified with 394 automated tests, and with our Week 04 component procurement from DirencNet complete, we are fully positioned for Academic Week 05 acoustic phantom bench bring-up. Thank you."*
+> *Our integrated software test suite passes 394 automated tests, and with our Week 04 component procurement from DirencNet complete, we are fully positioned for Academic Week 05 acoustic phantom bench bring-up. Thank you."*
 
 ---
 
@@ -42,7 +42,7 @@ The EEE495 presentation marks the conclusion of Semester I (Foundation, Architec
 | **5** | Procurement & Turkish Sourcing BOM | BOM v0.2, DirencNet orders (PR #28) | **Ozan:** Substitution of PUI Audio with INMP441 due to local stock; DevKit N16R8. |
 | **6** | Embedded Acquisition & DMA (Module B) | FreeRTOS dual-core task map | **Ozan:** Core 1 I2S DMA ping-pong buffering ($10.67\text{ ms}$); Core 0 USB CDC-ACM. |
 | **7** | Host Runtime & Display Decimation | Display pipeline diagram | **Ege:** Peak-preserving decimation ($\le 600$ pts) protecting 60 FPS React canvas. |
-| **8** | Lossless Recording & Cryptography | WAV + JSON sidecar schema | **Ege:** SHA-256 incremental hashing; tamper rejection in Replay 2.0. |
+| **8** | Lossless Recording & Integrity | WAV + JSON sidecar schema | **Ege:** Whole-file SHA-256 storage hashing; verification and replay integrity. |
 | **9** | Metrology & The 6 Mandatory Tests | Measurement matrix table | **Ege:** Automated 6-measurement runner; current status: `HARDWARE_UNVERIFIED`. |
 | **10**| Verification & Week 05 Bring-Up Plan | Pytest summary (394 passed), G1 gate | **All:** 394 tests passed; physical bring-up checklist ready for lab bench. |
 

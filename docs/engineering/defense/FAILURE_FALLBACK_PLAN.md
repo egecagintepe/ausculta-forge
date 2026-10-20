@@ -52,7 +52,7 @@ AuscultaForge integrates a pre-built, fully functional **Software Virtual Bench*
 ---
 
 ### Contingency 4: Windows COM Port is Locked by Another Process (`PermissionError`)
-* **Failure Symptom:** Calling `POST /api/device/open` returns HTTP 500: `serial.SerialException: could not open port 'COM3': PermissionError(13, 'Access is denied.')`.
+* **Failure Symptom:** Calling `POST /api/device/connect` returns HTTP 500: `serial.SerialException: could not open port 'COM3': PermissionError(13, 'Access is denied.')`.
 * **Root Cause:** A background Python instance, serial monitor (PuTTY/Arduino IDE), or previous crashed process still holds an open Windows kernel handle to the port.
 * **Immediate Emergency Command:**
   Open PowerShell as Administrator and kill lingering Python processes:

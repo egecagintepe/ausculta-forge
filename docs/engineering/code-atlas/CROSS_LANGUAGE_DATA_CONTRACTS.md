@@ -4,7 +4,7 @@
 **Course Context:** EEE495 / EEE496 Senior Design Project — Digital Stethoscope  
 **Reference Files:**
 - C: `tools/c_golden_vectors/golden_common.h`
-- Python: `software/pcg_core/models.py`, `software/pcg_app/models.py`
+- Python: `software/pcg_core/models.py`, `software/pcg_app/device_runtime.py`
 - TypeScript: `software/frontend/src/types.ts`
 
 ---
@@ -27,45 +27,42 @@ A breakdown in data types across language boundaries can lead to silent data cor
 ```mermaid
 classDiagram
     class C_AudioBlock {
-        +uint32_t samples[512]
-        +uint16_t sequence_number
-        +uint16_t flags
-        +uint32_t timestamp_ticks
+        +int32_t samples[512]
+        +uint32_t sequence
+        +uint32_t timestamp_us
     }
 
     class Python_SampleBlock {
-        +np.ndarray samples (float64)
-        +int sample_rate (48000)
-        +float timestamp (epoch seconds)
-        +int sequence_number
+        +np.ndarray samples (float32)
+        +int sample_rate_hz (48000)
+        +float timestamp_s (seconds)
+        +int sequence
+        +str source
     }
 
     class TS_WebSocketFrame {
-        +string type ("signal_frame")
+        +string type
         +number sequence
-        +number timestamp
-        +number sample_rate
+        +number timestamp_s
         +number[] points (decimated)
-        +StreamMetrics metrics
-        +StreamHealth stream_health
     }
 
-    C_AudioBlock --> Python_SampleBlock : Normalized via Layer 3 Unpacker
-    Python_SampleBlock --> TS_WebSocketFrame : Decimated via DisplayDecimator
+    C_AudioBlock --> Python_SampleBlock : Normalized via packet_to_sample_block()
+    Python_SampleBlock --> TS_WebSocketFrame : Decimated via decimate_min_max()
 ```
 
 ### 2.2 Side-by-Side Type Mapping Table
 
 | Logical Concept | Embedded C (`tools/`) | Host Python (`pcg_core`, `pcg_app`) | Frontend TypeScript (`types.ts`) | Wire / Serialization Format |
 |---|---|---|---|---|
-| **Audio Sample Container** | `int32_t` / `uint32_t` | `np.int32` / `np.float64` | `number` (Float32 in Canvas) | Little-Endian 32-bit (`S32_LE`) |
-| **Sampling Frequency** | `uint32_t` (e.g. `48000U`) | `int` | `number` | JSON integer: `48000` |
+| **Audio Sample Container** | `int32_t` / `uint32_t` | `np.int32` / `np.float32` | `number` (Float32 in Canvas) | Little-Endian 32-bit (`S32_LE`) |
+| **Sampling Frequency** | `uint32_t` (e.g. `48000U`) | `int` (`sample_rate_hz`) | `number` | JSON integer: `48000` |
 | **Monotonic Sample Counter** | `uint64_t` | `int` (unbounded Python int) | `number` | JSON integer |
-| **Frame Sequence Counter** | `uint16_t` ($0\text{--}65535$) | `int` | `number` | 2 bytes on wire / JSON integer |
-| **Timestamp (Hardware)** | `uint32_t` (FreeRTOS ticks) | `int` (converted to seconds) | `number` | 4 bytes on wire |
+| **Frame Sequence Counter** | `uint16_t` / `uint32_t` | `int` (`sequence`) | `number` | 2/4 bytes on wire / JSON integer |
+| **Timestamp (Hardware)** | `int64_t` (`esp_timer_get_time`) | `float` (`timestamp_s`) | `number` | Microseconds integer on wire / Float in Python |
 | **Timestamp (Host Timebase)**| N/A | `float` (`time.time()`) | `number` | ISO-8601 string or epoch float |
-| **Device State Enum** | N/A | `DeviceState(str, Enum)` | `type DeviceState = "ABSENT" \| "DETECTED" \| ...` | JSON string (`"READY"`, `"STREAMING"`) |
-| **Integrity Checksum** | `uint16_t` (CRC-16) | `str` (64-character SHA-256 hex) | `string` | 2 bytes wire / 64-char JSON string |
+| **Device State Enum** | N/A | `DeviceState(str, Enum)` | `type DeviceState = "absent" \| "ready" \| ...` | JSON string (`"ready"`, `"streaming"`) |
+| **Integrity Checksum** | `uint16_t` (CRC-16 reference) | `str` (64-character SHA-256 hex) | `string` | File SHA-256 in `session.json` |
 
 ---
 
@@ -76,13 +73,24 @@ classDiagram
 from dataclasses import dataclass
 import numpy as np
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class SampleBlock:
-    """Universal immutable container for an ingested audio block."""
-    samples: np.ndarray       # 1D float64 array, shape (N,)
-    sample_rate: int          # Sampling frequency (Hz), e.g. 48000
-    timestamp: float          # Monotonic arrival timestamp (seconds)
-    sequence_number: int      # Monotonic sequence counter
+    """UI ve donan\u0131mdan ba\u011f\u0131ms\u0131z ortak \u00f6rnek blo\u011fu.
+    
+    Wire protocol DE\u011e\u0130LD\u0130R. MCU verisi parse edilip bu yap\u0131ya \u00e7evrilir.
+    """
+    sequence: int             # Monotonic continuous packet/block index
+    timestamp_s: float        # Hardware or host timestamp in seconds
+    sample_rate_hz: int       # Acquisition rate (e.g. 48000 Hz)
+    samples: np.ndarray       # 1D float32 array in [-1.0, 1.0]
+    source: str = "unknown"   # Source identifier (e.g. "device", "mock")
+
+    def __post_init__(self) -> None:
+        self.samples = np.asarray(self.samples, dtype=np.float32)
+        if self.samples.ndim != 1:
+            raise ValueError("samples tek kanall\u0131 1-D olmal\u0131")
+        if self.sample_rate_hz <= 0:
+            raise ValueError("sample_rate_hz pozitif olmal\u0131")
 ```
 
 ### 3.2 TypeScript Interface (`software/frontend/src/types.ts`)

@@ -1,110 +1,110 @@
 # AuscultaForge — USB Protocol Engineering & Wire-Level Framing
-**Document ID:** `AF-CODE-USB-PROTOCOL-V01`  
+**Document ID:** `AF-CODE-USB-PROTOCOL-V02`  
 **Classification:** `CODE_VERIFIED` (Host Layer) / `DOCUMENTED_PROPOSAL` (Firmware Wire Framing)  
 **Course Context:** EEE495 / EEE496 Senior Design Project — Digital Stethoscope  
 **Reference Files:**
-- `software/pcg_app/transport.py`
+- `software/pcg_app/device_runtime.py` (`DeviceRuntime`, `packet_to_sample_block`, `DeviceSamplePacket`)
 - `docs/sdp/week-04/submissions/module-b-ozan/W04_B_to_C_protocol-proposal_v01.md`
 - `docs/protocol/PROTOCOL_DRAFT.md`
+- `tools/esp32_bench_example/main/main.c` (`HARDWARE_UNVERIFIED`)
 
 ---
 
 ## 1. Physical USB Standards & Operating Modes
 
-AuscultaForge utilizes the on-chip USB OTG peripheral of the ESP32-S3 operating as a **USB 2.0 Full-Speed Device**.
+AuscultaForge targets the on-chip USB OTG peripheral of the ESP32-S3 operating as a **USB 2.0 Full-Speed Device**.
 
 ### 1.1 Physical Signaling & Transceiver
-* **Data Signaling Rate:** $12.000 \text{ Mbps} \pm 0.25\%$.
+* **Signaling Rate:** $12.000 \text{ Mbps} \pm 0.25\%$.
 * **Signaling Lines:** Differential pair $D+$ (`GPIO 20`) and $D-$ (`GPIO 19`).
-* **Line Encoding:** Non-Return-to-Zero Inverted (NRZI) with bit-stuffing (a zero is inserted after six consecutive ones to ensure clock synchronization).
-* **Speed Identification:** Full-speed device asserts a $1.5 \text{ k}\Omega$ pull-up resistor on the $D+$ line.
+* **Line Encoding:** Non-Return-to-Zero Inverted (NRZI) with bit-stuffing (a zero is inserted after six consecutive ones to guarantee clock recovery).
+* **Speed Identification:** Full-speed device presence is signaled via a $1.5 \text{ k}\Omega$ pull-up resistor on the $D+$ line.
 
-### 1.2 USB CDC-ACM (Communication Device Class — Abstract Control Model)
-* **Standard Class:** Universal Serial Bus Class Definitions for Communications Devices (v1.2).
-* **Driver Binding:** Standard Microsoft Windows driver `usbser.sys` binds automatically to Vendor ID `0x303A` (Espressif Systems) and Product ID `0x4001` (TinyUSB CDC).
-* **Zero Driver Footprint:** No external drivers, proprietary INF files, or Zadig WinUSB overrides are required on the host computer.
+### 1.2 Transport Class Candidate: USB CDC-ACM
+* **Candidate Status:** CDC-ACM is the active **Rev-A proposal under review by Modules B & C** (DW03-09, DW03-12). It is not a closed unilateral decision.
+* **Driver Binding:** On Windows 10/11, the in-box driver `usbser.sys` binds automatically to Vendor ID `0x303A` (Espressif) and Product ID `0x4001` (TinyUSB CDC).
+* **Comparison with USB Audio Class (UAC):**
+  - *UAC:* Presents the stethoscope as a standard audio input device. While it integrates with native sound APIs, Windows OS audio processing stacks often apply sample rate conversion, high-pass filtering, and volume scaling that distort raw physiological signals. Furthermore, standard UAC provides no native sideband for hardware timestamps, sample drop flags, or sequence counters.
+  - *CDC-ACM:* Exposes a transparent virtual COM port. It allows raw binary frames containing custom telemetry headers, unadulterated integer PCM words, and error-checking trailers to pass directly to Python without OS audio stack interference.
 
 ---
 
-## 2. The 3-Tier Layered Host Protocol Model
+## 2. Nominal Application Throughput vs. Physical USB Bus Overhead
 
-To prevent wire framing assumptions from leaking into the core DSP engine, AuscultaForge enforces a **3-tier transport architecture** inside `software/pcg_app/transport.py`:
+A critical engineering calculation governs the feasibility of streaming 48 kHz 24-bit audio over USB Full-Speed.
+
+### 2.1 Raw Audio Payload Rate
+* Sampling frequency: $f_s = 48,000 \text{ samples/second}$.
+* Container size: $4 \text{ bytes/sample}$ (`S32_LE` container).
+* **Raw Audio Payload Throughput:**
+  $$\text{Payload Rate} = 48,000 \times 4 = 192,000 \text{ bytes/second} = 1.536 \text{ Mbit/second}$$
+
+### 2.2 Framing Overhead Scenarios
+
+1. **Proposed 40-byte Packet (8 samples per frame, 6,000 frames/s):**
+   - 8 samples $\times$ 4 bytes $= 32\text{ bytes payload}$.
+   - 8 bytes header + CRC $= 40\text{ bytes frame}$.
+   - Data rate: $6,000 \times 40 = 240,000 \text{ bytes/second} = 1.920 \text{ Mbit/second}$.
+   - *Limitation:* Generating 6,000 USB packets per second incurs severe FreeRTOS interrupt and host USB driver scheduling overhead.
+2. **Proposed 256-sample Frame (187.5 frames/s with 40-byte header):**
+   - 256 samples $\times$ 4 bytes $= 1,024\text{ bytes payload}$.
+   - Frame rate: $48,000 / 256 = 187.5 \text{ frames/second}$.
+   - Header overhead: $187.5 \times 40 = 7,500 \text{ bytes/second}$.
+   - **Nominal Application Rate (before trailers):**
+     $$\text{App Throughput} = 192,000 + 7,500 = 199,500 \text{ bytes/second} = 1.596 \text{ Mbit/second}$$
+   - With optional 2-byte CRC-16 trailer: $187.5 \times 2 = 375 \text{ bytes/second} \implies 1.599 \text{ Mbit/second}$.
+3. **Bench Example 512-sample Block (93.75 frames/s):**
+   - 512 samples $\times$ 4 bytes $= 2,048\text{ bytes payload}$.
+   - Frame rate: $48,000 / 512 = 93.75 \text{ frames/second}$.
+   - Header overhead: $93.75 \times 40 = 3,750 \text{ bytes/second}$.
+   - **Nominal Application Rate:**
+     $$\text{App Throughput} = 192,000 + 3,750 = 195,750 \text{ bytes/second} = 1.566 \text{ Mbit/second}$$
+
+### 2.3 Physical Bus Utilization Reality
+* The nominal application rate of $\approx 1.596 \text{ Mbit/s}$ represents $\approx 13.3\%$ of the gross $12 \text{ Mbps}$ Full-Speed PHY rate.
+* **Important Warning:** Do not infer that the remaining $86.7\%$ ($10.4 \text{ Mbit/s}$) is free headroom! Physical USB bus utilization includes:
+  - Start-of-Frame (SOF) packets every $1.0 \text{ ms}$.
+  - USB token packets (`IN`, `OUT`), data packet PIDs, and 16-bit packet CRCs.
+  - Inter-packet delays, bus turnaround times, and NRZI bit stuffing.
+  - CDC-ACM bulk endpoints (maximum packet size 64 bytes on Full-Speed) require the host controller to split larger frames into multiple 64-byte USB transactions.
+  - OS USB driver interrupt latency and USB host polling intervals.
+* True USB bus utilization and headroom can only be confirmed through physical hardware bus-analyzer measurements.
+
+---
+
+## 3. Host Ingestion & Normalization Layer
+
+In the host software (`software/pcg_app/device_runtime.py`), incoming packets are ingested through a decoupled adapter model:
 
 ```mermaid
 graph TD
-    subgraph LAYER_1 ["Layer 1: Byte Transport Layer"]
-        PHYS_BYTES["Physical Serial Byte Stream (pyserial / mock)"] --> L1_READER["ByteTransportReader<br>- Handles chunked non-blocking reads<br>- Buffers fragmented OS buffers"]
-    end
-
-    subgraph LAYER_2 ["Layer 2: Packet Framing & Integrity Layer"]
-        L1_READER --> PREAMBLE_HUNT["Sync Word Hunter<br>(Looks for 0xAA55)"]
-        PREAMBLE_HUNT --> HEADER_PARSE["Header Parser<br>(Seq Num, Length, Flags)"]
-        HEADER_PARSE --> CRC_CHECK{"CRC-16-CCITT Check"}
-        CRC_CHECK -->|Pass| VALID_FRAME["Payload Byte Buffer"]
-        CRC_CHECK -->|Fail| DROP_FRAME["Drop & Resync to Next Preamble"]
-    end
-
-    subgraph LAYER_3 ["Layer 3: Sample Normalization & Demux Layer"]
-        VALID_FRAME --> UNPACK_S32["S32_LE Unpacker<br>(Unpacks 32-bit words)"]
-        UNPACK_S32 --> SIGN_EXT["Sign Extension / Alignment Check"]
-        SIGN_EXT --> FLOAT_NORM["Normalize to [-1.0, +1.0)"]
-        FLOAT_NORM --> EMIT_BLOCK["Emit SampleBlock to StreamManager"]
-    end
+    PHYS_BYTES["Physical Serial Stream (ESP32-S3 CDC-ACM)"] --> RUNTIME["DeviceRuntime (Worker Thread)"]
+    RUNTIME --> PACKET["DeviceSamplePacket<br>- sequence: int<br>- timestamp_s: float<br>- raw_samples: np.int32<br>- crc_ok: bool"]
+    PACKET --> ADAPTER["packet_to_sample_block()"]
+    ADAPTER --> SAMPLES["Linear Scaling<br>y[n] = raw[n] / 2^23 (LSB)<br>y[n] = raw[n] / 2^31 (MSB)"]
+    SAMPLES --> BLOCK["SampleBlock<br>- samples: np.float32 [-1.0, 1.0]<br>- sample_rate_hz: 48000<br>- sequence: int<br>- timestamp_s: float"]
+    BLOCK --> STREAM["StreamManager Ingestion Queue"]
 ```
+
+### Key Safety Invariant:
+`packet_to_sample_block()` rejects corrupted packets:
+```python
+if not packet.crc_ok:
+    raise ValueError(f"Cannot convert packet with CRC failure at sequence {packet.sequence}")
+```
+Raw integer samples are validated against legal bounds before normalization into `SampleBlock.samples` (float32 array).
 
 ---
 
-## 3. Wire Packet Framing Proposal Analysis
+## 4. Hardware Flow Control & Disconnection Handling
 
-### 3.1 Proposed 40-byte Packet Structure (Module B — Ozan, Week 04)
-Under proposal `W04_B_to_C_protocol-proposal_v01.md`, data is packed into fixed 40-byte frames:
+### DTR (Data Terminal Ready) State Gating:
+The experimental firmware (`tools/esp32_bench_example/main/main.c`) monitors host connection status using `tud_cdc_connected()`:
+- When the host PC asserts DTR (port opened), streaming commences.
+- When the host PC de-asserts DTR (port closed), the MCU pauses transmission and yields via `vTaskDelay()`, preventing unhandled TX FIFO saturation.
 
-```text
-Byte Offset:   0      1      2      3      4      5      6      7
-             ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
-Field:       │ Sync 0xAA55 │  Seq uint16  │ Flags uint16 │ Length (32)  │
-             ├──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┤
-Bytes 8-39:  │ Payload: 8 samples × 4 bytes (S32_LE) = 32 bytes     │
-             ├───────────────────────────┬───────────────────────────┤
-Bytes 40-41: │ CRC-16-CCITT (2 bytes)   │ End of Frame (Optional)   │
-             └───────────────────────────┴───────────────────────────┘
-```
-
-* **Sync Word (`0xAA55`):** 2 bytes (`0x55`, `0xAA` in Little-Endian) establishing packet alignment.
-* **Sequence Counter (`uint16_t`):** Increments by 1 for each transmitted packet ($0\text{--}65535$).
-* **Flags (`uint16_t`):** Encodes sensor health, clipping warnings, and sample alignment mode (bit 0: $0 = \text{LSB}, 1 = \text{MSB}$).
-* **Payload Length (`uint16_t`):** Fixed at 32 bytes (8 audio samples).
-* **Payload Data (32 bytes):** 8 contiguous audio samples in `S32_LE` format ($8 / 48000 \approx 166.7 \ \mu\text{s}$ of audio).
-* **CRC-16-CCITT (2 bytes):** Computed over bytes 0 through 39.
-
-### 3.2 Evaluation: 40-Byte Packets vs. 2048-Byte Bulk Blocks
-| Metric | 40-Byte Fixed Frame Proposal | 2048-Byte Bulk Block Proposal | AuscultaForge Assessment |
-|---|---|---|---|
-| **Packet Frequency** | $6,000 \text{ packets/s}$ | $93.75 \text{ blocks/s}$ | 6,000 packets/s incurs significant OS interrupt overhead on USB Full-Speed. |
-| **Protocol Overhead** | $20\%$ overhead (8 bytes header/CRC per 32 bytes data) | $< 0.4\%$ overhead (8 bytes header per 2048 bytes data) | 40-byte frame consumes more USB bandwidth, but provides lower host latency ($167 \ \mu\text{s}$ vs $10.67 \text{ ms}$). |
-| **Resynchronization Penalty** | Single packet loss drops only 8 samples ($167 \ \mu\text{s}$) | Corrupted packet drops 512 samples ($10.67 \text{ ms}$) | 40-byte framing confines corruption to microscopic intervals. |
-| **Current Status** | `DOCUMENTED_PROPOSAL` | Implemented in Virtual Bench & Tools | **Pending final joint bench approval with Module B (Ozan).** |
-
----
-
-## 4. DTR Line State Flow Control
-
-Standard USB CDC-ACM includes virtual modem control signals:
-* **DTR (Data Terminal Ready):** Asserted by host when opening the COM port; de-asserted upon closing.
-* **RTS (Request to Send):** Flow control line.
-
-### Gating Implementation in Embedded C (`tools/esp32_bench_example/main/main.c`):
-```c
-/* Gated transmission loop */
-while (1) {
-    /* Check if host PC application has asserted DTR */
-    if (tud_cdc_connected()) {
-        /* Host is listening: stream audio blocks */
-        stream_audio_block();
-    } else {
-        /* Host disconnected: pause acquisition and avoid buffer overflow */
-        vTaskDelay(pdMS_TO_TICKS(50));
-    }
-}
-```
-This guarantees that the MCU does not blast packets into unallocated USB FIFOs when the host application is closed.
+### Host Disconnection Handling:
+When the USB cable is unplugged mid-stream:
+1. `DeviceRuntime` worker thread encounters `serial.SerialException` or read timeout.
+2. Catches error and transitions state to `DeviceState.INTERRUPTED`.
+3. Notifies `StreamManager`, which finalizes active session recording with `termination_reason="interrupted"`, preserving all audio received prior to disconnection.

@@ -86,10 +86,10 @@ graph TD
 | `StreamingBandpass` | `pcg_core/dsp.py` | Stateful causal IIR filter using SOS representation | `np.ndarray` (chunk) | Filtered `np.ndarray` | `scipy.signal` |
 | `RollingBuffer` | `pcg_core/buffers.py` | Thread-safe circular FIFO buffer | Continuous blocks | Latest $T$-second slice | `numpy`, `threading` |
 | `StreamQualityMonitor` | `pcg_core/streaming.py` | Tracks sequence continuity & dropped blocks | `sequence_number` | Drop counts, gap history | Pure Python |
-| `SessionRecorder` | `pcg_core/recording.py` | Dual persistence: WAV audio + JSON metadata sidecar | Streaming blocks | `.wav` + `.meta.json` | `wave`, `hashlib`, `json` |
+| `SessionRecorder` | `pcg_core/recording.py` | Directory persistence: raw.wav + session.json + manifest.json | Streaming blocks | `raw.wav`, `session.json`, `manifest.json` | `scipy.io.wavfile`, `hashlib`, `json` |
 | `MetrologyRunner` | `pcg_core/metrology/runner.py` | Orchestrates 6 mandatory advisor measurements | Measurement config | CSV/Markdown reports | `scipy`, `pcg_core.scientific` |
 | `PhantomStimulusEngine` | `pcg_core/phantom.py` | SISO transfer function $H_1(f)$ and delay estimation | Reference & capture signals | Gain, delay, coherence | `scipy.signal` |
-| `SpringerHSMM` | `pcg_core/segmentation/springer_hsmm.py` | Duration-dependent Hidden Semi-Markov Model | Extracted audio features | State sequence ($S_1, \text{sys}, S_2, \text{dia}$) | `numpy`, `scipy.stats` |
+| `SpringerHSMM` | `pcg_core/segmentation/hsmm.py` | Duration-dependent Hidden Semi-Markov Model | Extracted audio features | State sequence ($S_1, \text{sys}, S_2, \text{dia}$) | `numpy`, `scipy.stats` |
 
 ---
 
@@ -98,9 +98,9 @@ graph TD
 | Module / Class | File Location | Primary Purpose | Inputs | Outputs | Key Dependencies |
 |---|---|---|---|---|---|
 | `create_app` | `pcg_app/app.py` | Application factory registering 57 routes | `sessions_dir` | `FastAPI` instance | `fastapi`, `starlette` |
-| `DeviceRuntime` | `pcg_app/device_runtime.py` | Authoritative 8-state hardware lifecycle machine | UI / API poll & stream commands | State enum, telemetry | `pyserial` (optional), `asyncio` |
+| `DeviceRuntime` | `pcg_app/device_runtime.py` | Authoritative physical device lifecycle state machine | UI / API poll & stream commands | State enum, telemetry | `threading`, `struct`, `numpy` |
 | `StreamManager` | `pcg_app/state.py` | Coordinates active audio sources and subscribers | Blocks from hardware or VirtualBench | Broadcast to queues | `asyncio`, `pcg_core` |
-| `DisplayDecimator` | `pcg_app/display_pipeline.py` | Compresses 48 kHz blocks into $\le 600$ peak points | Raw block (512 samples) | Decimated array | `numpy` |
+| `DisplayAggregator` | `pcg_app/display_pipeline.py` | Peak-preserving decimation of 48 kHz stream into bounded points | Raw block (512 samples) | `DisplayFrame` | `numpy` |
 | `VirtualBench` | `pcg_app/virtual_bench.py` | Simulates 8 deterministic known-answer test scenarios | Scenario name | Timed `SampleBlock` streams | `numpy`, `asyncio` |
 | `SessionAnalysisService` | `pcg_app/analysis_service.py` | Executes offline spectral & quality analysis on sessions | Session ID | Structured analysis JSON | `pcg_core.scientific` |
 

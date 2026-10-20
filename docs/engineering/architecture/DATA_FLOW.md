@@ -32,13 +32,13 @@ sequenceDiagram
     U->>T: Full-Speed USB CDC-ACM Packets (64-byte USB packets)
     T->>D: Raw Ingested Byte Stream
     D->>N: Validated 32-bit Frame Words (CRC-16 Verified)
-    N->>S: Normalized SampleBlock (Float64 [-1.0, +1.0], 48000 Hz)
+    N->>S: Normalized SampleBlock (float32 [-1.0, +1.0], 48000 Hz)
     
-    par Continuous Disk Persistence
-        S->>R: Raw int16/int24 PCM Samples + Running SHA-256
+    par In-Memory Session Accumulation
+        S->>R: Normalized float32 sample blocks (written to raw.wav on stop)
     and Real-Time DSP Filtering
         S->>F: Causal SOS Bandpass (scipy.signal.sosfilt with state zk)
-        F->>P: Filtered Samples (512 float64 per block)
+        F->>P: Filtered Samples (512 float32 per block)
         P->>W: Min/Max Decimated Vector (<= 600 points @ 30-60 Hz)
     end
 ```
@@ -75,7 +75,7 @@ sequenceDiagram
 * **Lossless Pacing:** If the host application is slow to read, the CDC-ACM FIFO absorbs packets; if the queue saturates, dropped bytes are explicitly counted in telemetry.
 
 ### Stage 5: Host Ingestion & Normalization ($x[n] \to y[n] \in \mathbb{R}$)
-* **Code Reference:** `software/pcg_app/transport.py` and `software/pcg_core/models.py`.
+* **Code Reference:** `software/pcg_app/device_runtime.py` and `software/pcg_core/models.py`.
 * **Normalization Logic:** Converts signed integer samples to IEEE-754 floating-point values bounded within $[-1.0, +1.0)$:
   * **For 24-bit MSB-Aligned Data (INMP441 Native):**
     $$y[n] = \frac{x_{\text{raw}}[n]}{2^{31}} = \frac{x_{\text{raw}}[n]}{2147483648.0}$$
@@ -83,12 +83,13 @@ sequenceDiagram
     $$y[n] = \frac{x_{\text{raw}}[n]}{2^{23}} = \frac{x_{\text{raw}}[n]}{8388608.0}$$
 * **Container Output:** Wrapped in `SampleBlock`:
   ```python
-  @dataclass(frozen=True)
+  @dataclass(slots=True)
   class SampleBlock:
-      samples: np.ndarray       # 1D float64 array, shape (512,)
-      sample_rate: int          # 48000
-      timestamp: float          # monotonic host epoch timestamp (seconds)
-      sequence_number: int      # continuous block index (0, 1, 2, ...)
+      sequence: int             # Monotonic continuous packet/block index
+      timestamp_s: float        # Hardware or host timestamp in seconds
+      sample_rate_hz: int       # Acquisition rate (e.g. 48000 Hz)
+      samples: np.ndarray       # 1D float32 array in [-1.0, 1.0]
+      source: str = "unknown"   # Source identifier (e.g. "device", "virtual_bench")
   ```
 
 ### Stage 6: Causal DSP Filtering ($y[n] \to y_{\text{filt}}[n]$)

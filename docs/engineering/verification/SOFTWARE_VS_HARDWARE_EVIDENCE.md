@@ -20,9 +20,9 @@ AuscultaForge enforces an uncompromising scientific evidence boundary:
 
 ---
 
-## 2. Software Verification Status (Fully Proven on Host Workstation)
+## 2. Software Verification Status (Proven by Automated Tests on Workstation)
 
-The following capabilities are **100% `CODE_VERIFIED` and `TEST_VERIFIED`**:
+The following capabilities are **`CODE_VERIFIED` and `TEST_VERIFIED`** by automated test suites:
 * **Host Processing Throughput:** Confirmed capable of processing $48,000 \text{ samples/s}$ continuously with $< 5\%$ CPU utilization.
 * **Causal Filtering Stability:** Confirmed that 4th-order SOS Butterworth bandpass filtering preserves phase continuity without edge spikes across contiguous 512-sample blocks.
 * **Peak-Preserving Display Decimation:** Verified that transient clicks are retained while decimating to $\le 600$ points for 60 FPS browser rendering.
@@ -64,4 +64,4 @@ The course advisor mandates **six primary physical measurements** to characteriz
 > **EXAMINATION DEFENSE INVARIANT:**
 > If an examiner asks: *"What was your measured physical SNR?"*
 > **Correct Defense Answer:**
-> *"The physical SNR has not yet been measured on real hardware because our DirencNet components were just procured in Week 04 and physical bench bring-up is scheduled for Week 05. However, our software metrology pipeline (`pcg_core.metrology`) is 100% verified and ready to calculate the metric automatically as soon as the first phantom WAV session is recorded."*
+> *"The physical SNR has not yet been measured on real hardware because our DirencNet components were just procured in Week 04 and physical bench bring-up is scheduled for Week 05. However, our software metrology pipeline (`pcg_core.metrology`) is verified with automated tests and ready to calculate the metric automatically as soon as the first phantom WAV session is recorded."*

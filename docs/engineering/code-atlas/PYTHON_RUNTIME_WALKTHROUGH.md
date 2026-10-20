@@ -59,41 +59,42 @@ The Python host runtime (`pcg_app`) serves as the core bridge connecting physica
 
 ---
 
-### 2.3 `DisplayDecimator` (`software/pcg_app/display_pipeline.py`)
-`DisplayDecimator` protects web clients from buffer overload by compressing raw 48 kHz blocks into bounded min/max envelope vectors.
+### 2.3 `DisplayAggregator` (`software/pcg_app/display_pipeline.py`)
+`DisplayAggregator` decouples high-speed physical acquisition (48 kHz mono) from UI rendering by aggregating incoming samples into peak-preserving display frames at a controlled cadence (e.g. 20–30 Hz, configured via `DisplayPipelineConfig`).
 
-#### Algorithmic Implementation:
+#### Algorithmic Implementation (`decimate_min_max`):
 ```python
-class DisplayDecimator:
-    def __init__(self, target_points: int = 600):
-        self.target_points = target_points
+def decimate_min_max(samples: np.ndarray, target_points: int) -> np.ndarray:
+    """Downsample signal using min/max bucket aggregation (peak-preserving decimation).
+    
+    Divides the signal into target_points / 2 bins and extracts both the minimum
+    and maximum values in each bin (in chronological order). This preserves sharp
+    acoustic transients, murmurs, and valve clicks without aliasing.
+    """
+    n_samples = len(samples)
+    if n_samples <= target_points:
+        return samples.astype(np.float32)
 
-    def decimate(self, samples: np.ndarray) -> np.ndarray:
-        n_samples = len(samples)
-        if n_samples <= self.target_points:
-            return samples.astype(np.float32)
+    num_bins = target_points // 2
+    bin_size = n_samples / num_bins
+    out = np.empty(target_points, dtype=np.float32)
 
-        # Number of min/max buckets
-        num_buckets = self.target_points // 2
-        bucket_size = int(np.ceil(n_samples / num_buckets))
-        
-        # Pad with last sample if needed to reshape cleanly
-        padded_len = num_buckets * bucket_size
-        if padded_len > n_samples:
-            padded = np.pad(samples, (0, padded_len - n_samples), mode='edge')
+    for i in range(num_bins):
+        start = int(i * bin_size)
+        end = int((i + 1) * bin_size) if i < num_bins - 1 else n_samples
+        sub = samples[start:end]
+        if len(sub) == 0:
+            continue
+        min_idx = np.argmin(sub)
+        max_idx = np.argmax(sub)
+        if min_idx <= max_idx:
+            out[2 * i] = sub[min_idx]
+            out[2 * i + 1] = sub[max_idx]
         else:
-            padded = samples[:padded_len]
+            out[2 * i] = sub[max_idx]
+            out[2 * i + 1] = sub[min_idx]
 
-        # Reshape into (num_buckets, bucket_size)
-        buckets = padded.reshape(num_buckets, bucket_size)
-        mins = np.min(buckets, axis=1)
-        maxs = np.max(buckets, axis=1)
-
-        # Interleave mins and maxs into contiguous 1D array
-        decimated = np.empty(num_buckets * 2, dtype=np.float32)
-        decimated[0::2] = mins
-        decimated[1::2] = maxs
-        return decimated
+    return out
 ```
 * **Performance Guarantee:** Tested and verified in `software/tests/test_display_pipeline.py`. Retains sharp transient acoustic clicks while reducing WebSocket payload size by over $98\%$.
 
@@ -117,7 +118,7 @@ class DisplayDecimator:
 
 ### 2.5 `SessionAnalysisService` (`software/pcg_app/analysis_service.py`)
 Provides offline scientific analysis of recorded sessions:
-* Loads `<session_id>.wav` and verifies its cryptographic hash against `<session_id>.meta.json`.
+* Loads `experiments/sessions/<session_id>/raw.wav` and verifies its cryptographic hash against `session.json`.
 * Computes Welch Power Spectral Density (PSD) across standard frequency bands:
   * Infrasound: $0\text{--}20\text{ Hz}$
   * Cardiac Core: $20\text{--}500\text{ Hz}$

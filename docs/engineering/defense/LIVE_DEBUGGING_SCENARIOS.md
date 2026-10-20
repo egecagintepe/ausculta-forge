@@ -23,7 +23,7 @@ This handbook outlines 6 concrete debugging scenarios, providing the exact physi
 * **Underlying Root Cause:** **Bit-Alignment Mismatch (MSB vs. LSB)**.
   * The firmware is sending MSB-aligned samples (audio in bits 31..8), but the host normalizer is interpreting them as LSB-aligned (dividing by $2^{23}$ instead of $2^{31}$). Multiplying by 256 causes massive mathematical overflow and digital wrap-around clipping.
 * **Immediate Live Fix:**
-  * Toggle the alignment flag in the configuration or pass `is_msb_aligned=True` in `software/pcg_app/transport.py`.
+  * Check the alignment flag in the configuration or pass `is_msb_aligned=True` in `software/pcg_app/device_runtime.py`.
   * Verify using `tools/c_golden_vectors/fixtures/manifest.json`.
 
 ---
@@ -79,11 +79,10 @@ This handbook outlines 6 concrete debugging scenarios, providing the exact physi
 
 ---
 
-### Scenario 6: Replay Engine Raises `SessionIntegrityError`
-* **Observed Symptom:** Attempting to replay an archived session file fails with HTTP 400: `SessionIntegrityError: Payload SHA-256 hash mismatch`.
-* **Diagnostic Step 1:** Check the file modification timestamps of `<session_id>.wav` and `<session_id>.meta.json`.
-* **Underlying Root Cause:** **External File Tampering or Truncation**.
-  * Someone opened `<session_id>.wav` in Audacity or a media player and re-saved it, which altered the RIFF header or re-encoded samples, invalidating the SHA-256 payload checksum recorded in the JSON sidecar.
+### Scenario 6: Replay or Verification Flags File Integrity Mismatch
+* **Observed Symptom:** Calling `GET /api/sessions/{session_id}/verify` returns `status: "failed"` with `sha256_match: false` (or `verify_session()` raises `SessionVerificationError`).
+* **Diagnostic Step 1:** Check the session directory `experiments/sessions/<session_id>/` and inspect `raw.wav` and `session.json`.
+* **Underlying Root Cause:** **External File Alteration, Truncation, or Bit Rot**.
+  * Someone opened `raw.wav` in an external audio editor and re-saved it (changing RIFF headers or re-quantizing samples), or the file was truncated during an incomplete copy. The disk SHA-256 no longer matches `raw_wav_sha256` recorded in `session.json`.
 * **Immediate Live Fix:**
-  * Explain the scientific purpose to the examiner: *"This is a deliberate security feature. AuscultaForge refuses to process altered audio files to guarantee scientific auditability."*
-  * If testing recovery, recompute the hash using `python -m pcg_core.recording --rehash <session_id>`.
+  * Explain the scientific purpose to the examiner: *"This is a deliberate data integrity safeguard. AuscultaForge detects file corruption or external alterations to guarantee that downstream scientific metrology operates strictly on untampered raw recordings."*

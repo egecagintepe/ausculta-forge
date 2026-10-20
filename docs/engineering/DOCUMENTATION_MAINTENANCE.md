@@ -119,7 +119,7 @@ Before submitting any documentation pull request, run the following automated ve
    cd software/frontend && npm run lint && npm run test && npm run build
    
    # Verify C golden vector parity
-   cd tools/portable_generator && gcc -O2 -Wall -Wextra -o generator generator.c -lm && ./generator
+   pytest software/tests/test_c_golden_vectors.py
    ```
 
 ---

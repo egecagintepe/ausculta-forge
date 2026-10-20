@@ -20,7 +20,7 @@ To stream continuous audio over USB CDC-ACM, bytes must be delimited into struct
 
 ## Decision & Current Status
 The 40-byte framing specification is recorded as a **`PROPOSED` Wire Standard**:
-* The host transport architecture (`software/pcg_app/transport.py`) implements a 3-layer parser fully capable of syncing to `0xAA55`, validating the CRC-16, and extracting payloads.
+* The host transport architecture (`software/pcg_app/device_runtime.py`) implements a reference decoder fully capable of syncing to `0xAA55`, validating the CRC-16, and extracting payloads.
 * Final approval remains open pending physical bench measurements with Module B (Ozan) to evaluate whether a 6,000 packet/second interrupt rate causes USB host controller starvation on Windows.
 
 ## Consequences & Trade-Offs
