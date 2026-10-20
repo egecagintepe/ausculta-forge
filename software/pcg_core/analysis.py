@@ -41,7 +41,7 @@ class SignalMetrics:
 class FilterConfig:
     """Filter configuration details.
     
-    Note: 20-600 Hz is a provisional engineering default, not a clinical finality.
+    Note: 20-500 Hz is the mandatory characterization band; 20-600 Hz is provisional general development.
     """
     filter_type: str
     low_hz: float
@@ -49,6 +49,8 @@ class FilterConfig:
     order: int
     is_provisional: bool = True
     enabled: bool = True
+    phase_policy: str = "causal_iir"
+    preset_name: str | None = None
 
 
 @dataclass(slots=True)
@@ -142,8 +144,11 @@ def compute_spectrogram_data(
     energy_ratios = {
         "sub_audible_0_20hz": round(band_energy(0.0, 20.0), 4),
         "fundamental_pcg_20_150hz": round(band_energy(20.0, 150.0), 4),
+        "characterization_pcg_20_500hz": round(band_energy(20.0, 500.0), 4),
         "extended_pcg_150_600hz": round(band_energy(150.0, 600.0), 4),
         "high_freq_above_600hz": round(band_energy(600.0, fs / 2.0), 4),
+        "mains_hum_50hz": round(band_energy(48.0, 52.0), 4),
+        "mains_hum_60hz": round(band_energy(58.0, 62.0), 4),
     }
 
     f_res = float(f[1] - f[0]) if len(f) > 1 else 0.0
@@ -237,13 +242,23 @@ def analyze_source(
     filtered_metrics = SignalMetrics.from_samples(filtered_signal)
 
     if filter_enabled:
+        is_prov = not (np.isclose(filter_low_hz, 20.0) and np.isclose(actual_high_hz, 500.0))
+        if np.isclose(filter_low_hz, 20.0) and np.isclose(actual_high_hz, 500.0):
+            p_name = "characterization_20_500hz"
+        elif np.isclose(filter_low_hz, 20.0) and np.isclose(actual_high_hz, 600.0):
+            p_name = "general_20_600hz"
+        else:
+            p_name = "custom"
+
         filter_cfg = FilterConfig(
             enabled=True,
             filter_type=filter_type,
             low_hz=filter_low_hz,
             high_hz=actual_high_hz,
             order=filter_order,
-            is_provisional=True,
+            is_provisional=is_prov,
+            phase_policy="causal_iir",
+            preset_name=p_name,
         )
     else:
         filter_cfg = FilterConfig(
@@ -253,6 +268,8 @@ def analyze_source(
             high_hz=0.0,
             order=0,
             is_provisional=False,
+            phase_policy="none",
+            preset_name=None,
         )
 
     spec_data = compute_spectrogram_data(

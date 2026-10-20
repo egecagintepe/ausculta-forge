@@ -65,20 +65,20 @@ The advisor-defined structural rule requires one primary student owner per Modul
 |---|---|---|
 | **Working digital-stethoscope prototype** | IN PROGRESS | Breadboard / bench hardware assembly underway (Target: Week 5). |
 | **Team-designed acquisition electronics** | IN PROGRESS | Analogue front-end and transducer evaluation underway (`hardware/`). |
-| **Embedded firmware & ingestion path** | IN PROGRESS | ESP32-S3 Native USB data-path architecture designed (`firmware/`). |
-| **Documented device-to-computer protocol** | CONCEPTUAL DRAFT COMPLETE / JOINT FREEZE OPEN | [Week-02 B-to-C requirements](docs/sdp/week-02/bc-interface-requirements.md) plus [Week-03 Module B frame draft](docs/sdp/week-03/submissions/module-b-ozan/W03_B_device-to-host-frame-draft.md). Exact sample packing, USB class, CRC policy and acquisition settings remain open for Week-04 agreement. |
+| **Embedded firmware & ingestion path** | IN PROGRESS | ESP32-S3 Native USB data-path architecture designed (`firmware/`). Experimental reference in `tools/esp32_bench_example/` remains UNVERIFIED on real hardware pending physical delivery and Module B sign-off. |
+| **Documented device-to-computer protocol** | CONCEPTUAL DRAFT COMPLETE / JOINT FREEZE OPEN | [Week-02 B-to-C requirements](docs/sdp/week-02/bc-interface-requirements.md) plus [Week-03 Module B frame draft](docs/sdp/week-03/submissions/module-b-ozan/W03_B_device-to-host-frame-draft.md). Exact sample packing, USB class, CRC policy and acquisition settings remain open for Week-04 agreement. Wire framing in tools remains an unapproved proposal. |
 | **PC Application — Live Waveform Display** | DONE | Bounded peak-preserving decimation pipeline: `software/pcg_app/display_pipeline.py`. |
 | **PC Application — Spectrogram Display** | DONE | Time-frequency STFT visualization in frontend and analysis engine (`software/pcg_core/analysis.py`). |
 | **PC Application — Session Recording & Metadata** | DONE | Dual persistence (raw audio WAV + JSON sidecar): `software/pcg_core/recording.py`. |
 | **PC Application — Device Control & Status** | SOFTWARE FOUNDATION DONE / HARDWARE INTEGRATION PENDING | Host lifecycle state machine / handshake architecture implemented (`software/pcg_app/device_runtime.py`); physical ESP32 device integration pending. |
 | **PC Application — Recording-Quality Feedback** | SOFTWARE FOUNDATION DONE / HARDWARE INTEGRATION PENDING | Real-time & offline metric framework implemented (`software/pcg_core/scientific/signal_quality.py`); thresholds & controlled-artefact validation require physical phantom data. |
 | **Repeatable acoustic phantom** | PLANNED | Phantom electro-acoustic requirements drafted (Exciter + Amp + Silicone + Frame). |
-| **Automated test suite** | DONE | Central test suite with 274+ automated tests: `software/tests/`. |
+| **Automated test suite** | DONE | Central test suite with 394 automated tests (pytest suite across 37 modules), 4 frontend unit tests, and portable C golden-vector verification: `software/tests/`. |
 | **Characterisation measurement report** | PLANNED | Protocols and measurement matrix formalized: [`docs/sdp/week-02/measurement-quality-plan.md`](docs/sdp/week-02/measurement-quality-plan.md). |
 | **Comparison of $\ge 2$ transducer candidates** | PLANNED | Technical selection criteria drafted for Week-3 evaluation (Electret vs MEMS). |
 | **Comparison of $\ge 2$ prototyping approaches** | PLANNED | Breadboard vs soldered prototype comparison planned for Semester I / II. |
 | **Quality check against controlled artefacts** | PLANNED | Physical friction, rubbing, and movement artefact testing scheduled for late Semester I. |
-| **Reproducible repository & documentation** | DONE | Comprehensive engineering knowledge base and reproducible experiment CLI runners. |
+| **Reproducible repository & documentation** | IN PROGRESS / FOUNDATIONS CONSOLIDATED | Foundational architecture and engineering knowledge base consolidated through Sprint 10; comprehensive engineering intelligence and defense system currently being authored; reproducible experiment CLI runners operational. |
 
 ---
 
@@ -195,7 +195,7 @@ ausculta-forge/
 │   │   ├── scientific/     # Full-rate spectral, envelope, and system ID engines
 │   │   └── segmentation/   # Advanced research: Springer LR-HSMM & CirCor validation
 │   ├── frontend/           # React / TypeScript / Vite local desktop UI
-│   ├── tests/              # Automated pytest suite (37 test modules)
+│   ├── tests/              # Automated pytest suite (394 tests across 37 test modules)
 │   ├── pyproject.toml      # Packaging metadata for editable install
 │   └── requirements.txt    # Python dependencies (numpy, scipy, fastapi, pytest)
 ├── firmware/               # Microcontroller firmware and USB transport drivers

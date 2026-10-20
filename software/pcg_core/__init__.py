@@ -54,7 +54,35 @@ def __getattr__(name: str):
     ):
         from . import validation
         return getattr(validation, name)
+    if name in (
+        "StimulusRecord",
+        "generate_100hz_sine",
+        "generate_multitone",
+        "generate_log_sweep",
+        "generate_impulse_train",
+        "prepare_reference_wav_stimulus",
+    ):
+        from . import stimulus
+        return getattr(stimulus, name)
+    if name in (
+        "PhantomTemplate",
+        "STANDARD_PHANTOM_TEMPLATES",
+        "PhantomExperimentRecord",
+        "run_phantom_characterization",
+        "estimate_phantom_alignment",
+    ):
+        from . import phantom
+        return getattr(phantom, name)
     if name == "segmentation":
         from . import segmentation
         return segmentation
+    if name == "stimulus":
+        from . import stimulus
+        return stimulus
+    if name == "phantom":
+        from . import phantom
+        return phantom
+    if name == "metrology":
+        from . import metrology
+        return metrology
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

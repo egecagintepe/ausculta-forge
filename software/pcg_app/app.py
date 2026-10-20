@@ -14,12 +14,21 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from pcg_core.recording import list_sessions, get_session, validate_session_id
+from pcg_core.recording import (
+    list_sessions,
+    get_session,
+    validate_session_id,
+    verify_session_integrity,
+    export_session_manifest,
+    delete_session,
+    SessionCorruptedError,
+)
 from pcg_core.scientific import SystemIdConfig
 from pcg_core.scientific_config import list_analysis_profiles
 from .state import StreamManager
 from .device_runtime import DeviceRuntime, DeviceState
 from .analysis_service import AnalysisService
+from .virtual_bench import VirtualBenchRunner
 from .protocol import (
     make_hello_message,
     make_stream_state_message,
@@ -127,6 +136,33 @@ def create_app(
         profile_id: Optional[str] = "SPRINGER_PHYSIONET_REFERENCE_V1"
         max_display_points: Optional[int] = 600
 
+    class BenchRunRequest(BaseModel):
+        scenario_id: Optional[str] = "all"
+        seed: Optional[int] = 42
+
+    class PhantomStimulusGenerateRequest(BaseModel):
+        stimulus_type: str
+        duration_s: Optional[float] = 5.0
+        sample_rate_hz: Optional[int] = 48000
+        amplitude_fs: Optional[float] = 0.8
+        save_as_asset: Optional[bool] = True
+        custom_params: Optional[dict[str, Any]] = None
+
+    class PhantomCharacterizeRequest(BaseModel):
+        asset_id: str
+        session_id: str
+        template_id: Optional[str] = "PHANTOM_LOG_SWEEP_20_500HZ_V1"
+        trial_id: Optional[str] = None
+        output_gain_dbfs: Optional[float] = -6.0
+        operator_notes: Optional[str] = ""
+        hardware_status: Optional[str] = "PENDING_PHYSICAL_MEASUREMENT"
+        pipeline_buffer_delay_ms: Optional[float] = 30.0
+        max_display_points: Optional[int] = 300
+
+    class MetrologyRunRequest(BaseModel):
+        config: dict[str, Any]
+
+
     # REST Endpoints
     @app.get("/api/status")
     def get_status() -> dict[str, Any]:
@@ -171,6 +207,27 @@ def create_app(
             await manager.broadcast(make_device_state_message(manager.device_runtime.get_state_dict()))
         return manager.device_runtime.get_state_dict()
 
+    # Virtual Integration Bench Endpoints (Software-Only Known-Answer Testing)
+    @app.get("/api/bench/scenarios")
+    def api_list_bench_scenarios() -> list[dict[str, Any]]:
+        runner = VirtualBenchRunner(output_dir="experiments/virtual-bench")
+        return runner.list_scenarios()
+
+    @app.post("/api/bench/run")
+    def api_run_bench(req: Optional[BenchRunRequest] = None) -> dict[str, Any]:
+        scen_id = (req.scenario_id if req else "all") or "all"
+        seed = req.seed if req and req.seed is not None else 42
+        runner = VirtualBenchRunner(output_dir="experiments/virtual-bench", seed=seed)
+        if scen_id == "all":
+            report = runner.run_all()
+            return report.to_dict()
+        else:
+            try:
+                res = runner.run_scenario(scen_id)
+                return res.to_dict()
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
     @app.get("/api/sessions")
     def api_list_sessions() -> list[dict[str, Any]]:
         return list_sessions(manager.sessions_dir)
@@ -186,6 +243,36 @@ def create_app(
             raise HTTPException(status_code=404, detail="Session not found")
         return sess
 
+    @app.get("/api/sessions/{session_id}/verify")
+    def api_verify_session(session_id: str) -> dict[str, Any]:
+        try:
+            valid_id = validate_session_id(session_id, manager.sessions_dir)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid session ID")
+        return verify_session_integrity(valid_id, manager.sessions_dir)
+
+    @app.get("/api/sessions/{session_id}/manifest")
+    def api_get_session_manifest(session_id: str) -> dict[str, Any]:
+        try:
+            valid_id = validate_session_id(session_id, manager.sessions_dir)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid session ID")
+        try:
+            return export_session_manifest(valid_id, manager.sessions_dir)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+    @app.delete("/api/sessions/{session_id}")
+    def api_delete_session(session_id: str) -> dict[str, Any]:
+        try:
+            valid_id = validate_session_id(session_id, manager.sessions_dir)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid session ID")
+        deleted = delete_session(valid_id, manager.sessions_dir)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return {"status": "deleted", "session_id": valid_id}
+
     @app.post("/api/sessions/{session_id}/replay")
     async def api_replay_session(session_id: str) -> dict[str, Any]:
         try:
@@ -197,7 +284,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="Session not found")
         try:
             new_state = manager.select_source("session", session_id=valid_id)
-        except (ValueError, FileNotFoundError) as e:
+        except (ValueError, FileNotFoundError, SessionCorruptedError) as e:
             raise HTTPException(status_code=400, detail=str(e))
         manager.start_stream()
         await manager.broadcast(make_stream_state_message(new_state))
@@ -350,6 +437,61 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(e))
 
     # =========================================================================
+    # Phantom Reference Playback & System Identification Endpoints
+    # =========================================================================
+
+    @app.get("/api/scientific/phantom/templates")
+    def api_list_phantom_templates() -> list[dict[str, Any]]:
+        return analysis.list_phantom_templates()
+
+    @app.post("/api/scientific/phantom/stimulus/generate")
+    def api_generate_phantom_stimulus(req: PhantomStimulusGenerateRequest) -> dict[str, Any]:
+        try:
+            return analysis.generate_phantom_stimulus(
+                stimulus_type=req.stimulus_type,
+                duration_s=req.duration_s or 5.0,
+                sample_rate_hz=req.sample_rate_hz or 48000,
+                amplitude_fs=req.amplitude_fs or 0.8,
+                save_as_asset=True if req.save_as_asset is None else req.save_as_asset,
+                custom_params=req.custom_params,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.post("/api/scientific/phantom/characterize")
+    def api_characterize_phantom(req: PhantomCharacterizeRequest) -> dict[str, Any]:
+        try:
+            return analysis.characterize_phantom(
+                asset_id=req.asset_id,
+                session_id=req.session_id,
+                template_id=req.template_id or "PHANTOM_LOG_SWEEP_20_500HZ_V1",
+                trial_id=req.trial_id,
+                output_gain_dbfs=req.output_gain_dbfs if req.output_gain_dbfs is not None else -6.0,
+                operator_notes=req.operator_notes or "",
+                hardware_status=req.hardware_status or "PENDING_PHYSICAL_MEASUREMENT",
+                pipeline_buffer_delay_ms=req.pipeline_buffer_delay_ms if req.pipeline_buffer_delay_ms is not None else 30.0,
+                max_display_points=req.max_display_points or 300,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+    @app.get("/api/scientific/phantom/experiments")
+    def api_list_phantom_experiments() -> list[dict[str, Any]]:
+        return analysis.list_phantom_experiments()
+
+    @app.get("/api/scientific/phantom/experiments/{trial_id}")
+    def api_get_phantom_experiment(trial_id: str) -> dict[str, Any]:
+        try:
+            exp = analysis.get_phantom_experiment(trial_id)
+            if not exp:
+                raise HTTPException(status_code=404, detail=f"Phantom experiment not found: {trial_id}")
+            return exp
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # =========================================================================
     # Springer LR-HSMM Segmentation Endpoints
     # =========================================================================
 
@@ -396,6 +538,57 @@ def create_app(
             if not report:
                 raise HTTPException(status_code=404, detail=f"Validation benchmark not found: {benchmark_id}")
             return report
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # =========================================================================
+    # Advisor Metrology Automation Endpoints (Sprint 08)
+    # =========================================================================
+
+    @app.get("/api/scientific/metrology/template")
+    def api_get_metrology_template() -> dict[str, Any]:
+        return analysis.get_metrology_template()
+
+    @app.post("/api/scientific/metrology/run")
+    def api_run_metrology_experiment(req: MetrologyRunRequest) -> dict[str, Any]:
+        try:
+            return analysis.run_metrology_experiment(req.config)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Metrology execution failed: {e}")
+
+    @app.get("/api/scientific/metrology/reports")
+    def api_list_metrology_reports() -> list[dict[str, Any]]:
+        return analysis.list_metrology_reports()
+
+    @app.get("/api/scientific/metrology/reports/{report_id}")
+    def api_get_metrology_report(report_id: str) -> dict[str, Any]:
+        try:
+            report = analysis.get_metrology_report(report_id)
+            if not report:
+                raise HTTPException(status_code=404, detail=f"Metrology report not found: {report_id}")
+            return report
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.get("/api/scientific/metrology/reports/{report_id}/csv")
+    def api_get_metrology_csv(report_id: str) -> Response:
+        try:
+            csv_data = analysis.get_metrology_summary_csv(report_id)
+            if csv_data is None:
+                raise HTTPException(status_code=404, detail=f"CSV summary not found for report: {report_id}")
+            return Response(content=csv_data, media_type="text/csv")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.get("/api/scientific/metrology/reports/{report_id}/markdown")
+    def api_get_metrology_markdown(report_id: str) -> Response:
+        try:
+            md_data = analysis.get_metrology_summary_markdown(report_id)
+            if md_data is None:
+                raise HTTPException(status_code=404, detail=f"Markdown report not found for: {report_id}")
+            return Response(content=md_data, media_type="text/markdown")
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 

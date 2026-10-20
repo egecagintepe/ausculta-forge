@@ -91,9 +91,20 @@ pnpm-debug.log*
 # Session recording outputs
 experiments/sessions/*
 !experiments/sessions/.gitkeep
+experiments/virtual-bench/
 
 # Analysis reference assets and comparison reports
 experiments/analysis-assets/*
 !experiments/analysis-assets/.gitkeep
 experiments/analysis/*
 !experiments/analysis/.gitkeep
+
+# Virtual integration bench outputs
+experiments/virtual-bench/*
+!experiments/virtual-bench/acceptance_report.json
+!experiments/virtual-bench/.gitkeep
+
+# Compiled binaries and object files
+*.exe
+*.o
+*.obj

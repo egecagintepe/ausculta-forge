@@ -53,9 +53,25 @@ from pcg_core.scientific import (
     SystemIdentificationResult,
     estimate_siso_system_id,
 )
+from pcg_core.stimulus import (
+    StimulusRecord,
+    generate_100hz_sine,
+    generate_multitone,
+    generate_log_sweep,
+    generate_impulse_train,
+    prepare_reference_wav_stimulus,
+)
+from pcg_core.phantom import (
+    PhantomTemplate,
+    STANDARD_PHANTOM_TEMPLATES,
+    PhantomExperimentRecord,
+    run_phantom_characterization,
+    estimate_phantom_alignment,
+)
 from pcg_core.scientific_config import (
     get_analysis_profile,
     list_analysis_profiles,
+    PCG_CHARACTERIZATION_20_500_HZ,
     GENERAL_PCG_V1,
     RAW_INTEGRITY_V1,
     BROADBAND_SYSTEM_ID_V1,
@@ -198,18 +214,21 @@ class AnalysisService:
         sessions_dir: str | Path = "experiments/sessions",
         models_dir: Optional[str | Path] = None,
         benchmarks_dir: Optional[str | Path] = None,
+        metrology_dir: Optional[str | Path] = None,
     ) -> None:
         self.assets_dir = Path(assets_dir)
         self.analysis_dir = Path(analysis_dir)
         self.sessions_dir = Path(sessions_dir)
         self.models_dir = Path(models_dir) if models_dir is not None else self.analysis_dir.parent / "models"
         self.benchmarks_dir = Path(benchmarks_dir) if benchmarks_dir is not None else self.analysis_dir.parent / "benchmarks"
+        self.metrology_dir = Path(metrology_dir) if metrology_dir is not None else self.analysis_dir.parent / "metrology"
 
         self.assets_dir.mkdir(parents=True, exist_ok=True)
         self.analysis_dir.mkdir(parents=True, exist_ok=True)
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self.benchmarks_dir.mkdir(parents=True, exist_ok=True)
+        self.metrology_dir.mkdir(parents=True, exist_ok=True)
 
     # =========================================================================
     # Reference WAV Asset Management
@@ -428,6 +447,10 @@ class AnalysisService:
             "acquisition_mode": sess_dict.get("acquisition_mode", "offline"),
             "source": sess_dict.get("source", "unknown"),
             "termination_reason": sess_dict.get("termination_reason", "completed"),
+            "schema_version": sess_dict.get("schema_version", "1.0.0"),
+            "storage_format": sess_dict.get("storage_format", "normalized_float32"),
+            "wire_format": sess_dict.get("wire_format"),
+            "storage_disclaimer": sess_dict.get("storage_disclaimer"),
             "raw_wav_sha256": sess_dict.get("raw_wav_sha256", ""),
             "git_commit_sha": sess_dict.get("git_commit_sha"),
             "device_info": sess_dict.get("device_info"),
@@ -725,12 +748,43 @@ class AnalysisService:
             profile = GENERAL_PCG_V1
             profile_id = GENERAL_PCG_V1.profile_id
 
-        if profile_id == "GENERAL_PCG_V1":
+        filter_metadata: dict[str, Any] = {
+            "filter_type": "none",
+            "phase_policy": "none",
+            "order": 0,
+            "low_hz": 0.0,
+            "high_hz": 0.0,
+            "preset": "none",
+        }
+
+        if profile_id == "PCG_CHARACTERIZATION_20_500_HZ":
+            nyq = fs / 2.0
+            high_cut = min(500.0, nyq - 1.0)
+            low_cut = min(20.0, high_cut * 0.5)
+            sos = scipy.signal.butter(4, [low_cut, high_cut], btype="bandpass", fs=fs, output="sos")
+            analysis_samples = scipy.signal.sosfilt(sos, raw_samples).astype(np.float32)
+            filter_metadata = {
+                "filter_type": "butterworth_bandpass",
+                "phase_policy": "causal_iir",
+                "order": 4,
+                "low_hz": low_cut,
+                "high_hz": high_cut,
+                "preset": "PCG_CHARACTERIZATION_20_500_HZ",
+            }
+        elif profile_id == "GENERAL_PCG_V1":
             nyq = fs / 2.0
             high_cut = min(600.0, nyq - 1.0)
             low_cut = min(20.0, high_cut * 0.5)
             sos = scipy.signal.butter(4, [low_cut, high_cut], btype="bandpass", fs=fs, output="sos")
             analysis_samples = scipy.signal.sosfilt(sos, raw_samples).astype(np.float32)
+            filter_metadata = {
+                "filter_type": "butterworth_bandpass",
+                "phase_policy": "causal_iir",
+                "order": 4,
+                "low_hz": low_cut,
+                "high_hz": high_cut,
+                "preset": "GENERAL_PCG_V1",
+            }
         else:
             # RAW or BROADBAND profiles preserve the full bandwidth
             analysis_samples = raw_samples.copy()
@@ -810,6 +864,7 @@ class AnalysisService:
             "total_samples": len(raw_samples),
             "duration_s": round(duration_s, 4),
             "analysis_profile": profile_id,
+            "filter_metadata": filter_metadata,
             "signal_quality": quality_result.to_dict(),
             "spectral": spectral_result.to_dict(),
             "envelope_lab": envelope_result.to_dict(),
@@ -1004,6 +1059,194 @@ class AnalysisService:
 
         reports.sort(key=lambda r: r.get("created_at_utc", ""), reverse=True)
         return reports
+
+    # =========================================================================
+    # Acoustic Phantom Characterization & Reproducible System Identification
+    # =========================================================================
+
+    def list_phantom_templates(self) -> list[dict[str, Any]]:
+        """List all standardized acoustic phantom experiment templates."""
+        return [t.to_dict() for t in STANDARD_PHANTOM_TEMPLATES.values()]
+
+    def generate_phantom_stimulus(
+        self,
+        stimulus_type: str,
+        duration_s: float = 5.0,
+        sample_rate_hz: int = 48000,
+        amplitude_fs: float = 0.8,
+        save_as_asset: bool = True,
+        custom_params: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Generate a deterministic stimulus for driving the acoustic phantom.
+
+        Optionally stores the stimulus as an imported reference WAV asset for immediate reuse.
+        """
+        params = custom_params or {}
+        stype = stimulus_type.lower().strip()
+
+        if stype == "sine_100hz":
+            phase_rad = float(params.get("phase_rad", 0.0))
+            record = generate_100hz_sine(
+                duration_s=duration_s,
+                sample_rate_hz=sample_rate_hz,
+                amplitude_fs=amplitude_fs,
+                phase_rad=phase_rad,
+            )
+        elif stype == "multitone":
+            freqs = params.get("frequencies_hz", [30.0, 60.0, 100.0, 150.0, 250.0, 400.0])
+            use_schroeder = bool(params.get("use_schroeder_phase", True))
+            record = generate_multitone(
+                frequencies_hz=freqs,
+                duration_s=duration_s,
+                sample_rate_hz=sample_rate_hz,
+                peak_amplitude_fs=amplitude_fs,
+                use_schroeder_phase=use_schroeder,
+            )
+        elif stype == "log_sweep":
+            f_start = float(params.get("f_start_hz", 20.0))
+            f_stop = float(params.get("f_stop_hz", 500.0))
+            taper_s = float(params.get("taper_duration_s", 0.05))
+            record = generate_log_sweep(
+                f_start_hz=f_start,
+                f_stop_hz=f_stop,
+                duration_s=duration_s,
+                sample_rate_hz=sample_rate_hz,
+                amplitude_fs=amplitude_fs,
+                taper_duration_s=taper_s,
+            )
+        elif stype == "impulse_train":
+            interval = float(params.get("interval_s", 1.0))
+            pulse_w = int(params.get("pulse_width_samples", 1))
+            record = generate_impulse_train(
+                interval_s=interval,
+                duration_s=duration_s,
+                sample_rate_hz=sample_rate_hz,
+                amplitude_fs=amplitude_fs,
+                pulse_width_samples=pulse_w,
+            )
+        else:
+            raise ValueError(
+                f"Unsupported stimulus_type: {stimulus_type!r}. "
+                "Allowed: 'sine_100hz', 'multitone', 'log_sweep', 'impulse_train'."
+            )
+
+        asset_id = None
+        if save_as_asset:
+            wav_bytes = record.to_wav_bytes(bit_depth=16)
+            asset_meta = self.import_reference_wav(
+                file_bytes=wav_bytes,
+                original_filename=f"{record.stimulus_type}_{sample_rate_hz}hz.wav",
+            )
+            asset_id = asset_meta["asset_id"]
+
+        result = record.to_dict(include_samples=False)
+        result["asset_id"] = asset_id
+        return result
+
+    def characterize_phantom(
+        self,
+        asset_id: str,
+        session_id: str,
+        template_id: str = "PHANTOM_LOG_SWEEP_20_500HZ_V1",
+        trial_id: Optional[str] = None,
+        output_gain_dbfs: float = -6.0,
+        operator_notes: str = "",
+        hardware_status: str = "PENDING_PHYSICAL_MEASUREMENT",
+        pipeline_buffer_delay_ms: float = 30.0,
+        max_display_points: int = 300,
+    ) -> dict[str, Any]:
+        """Perform comprehensive acoustic phantom characterization and system identification.
+
+        Estimates acoustic lag, separates pipeline buffer latency, computes SISO H1 and coherence,
+        detects synchronization/clipping/coverage status, and saves a reproducible experiment report.
+        """
+        valid_asset_id = validate_identifier(asset_id, "asset_id", self.assets_dir)
+        valid_sess_id = validate_session_id(session_id, self.sessions_dir)
+
+        asset_meta = self.get_reference_asset(valid_asset_id)
+        if asset_meta is None:
+            raise FileNotFoundError(f"Reference asset not found: {asset_id}")
+
+        sess_meta = get_session(valid_sess_id, self.sessions_dir)
+        if sess_meta is None:
+            raise FileNotFoundError(f"Capture session not found: {session_id}")
+
+        ref_path = self.assets_dir / f"{valid_asset_id}.wav"
+        cap_path = self.sessions_dir / valid_sess_id / "raw.wav"
+
+        with open(ref_path, "rb") as f:
+            ref_bytes = f.read()
+
+        stimulus = prepare_reference_wav_stimulus(
+            wav_bytes=ref_bytes,
+            filename=asset_meta["filename"],
+        )
+
+        cap_samples, cap_fs = load_wav_as_float32(cap_path)
+
+        rec = run_phantom_characterization(
+            stimulus=stimulus,
+            capture_samples=cap_samples,
+            capture_fs=cap_fs,
+            template_id=template_id,
+            trial_id=trial_id,
+            output_gain_dbfs=output_gain_dbfs,
+            operator_notes=operator_notes,
+            hardware_status=hardware_status,
+            pipeline_buffer_delay_ms=pipeline_buffer_delay_ms,
+            max_display_points=max_display_points,
+        )
+
+        report_dir = self.analysis_dir / f"phantom_{rec.trial_id}"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report_file = report_dir / "phantom_experiment.json"
+        with open(report_file, "w", encoding="utf-8") as f:
+            json.dump(rec.to_dict(), f, indent=2)
+
+        return rec.to_dict()
+
+    def list_phantom_experiments(self) -> list[dict[str, Any]]:
+        """List summary metadata of all recorded phantom experiments sorted newest first."""
+        experiments: list[dict[str, Any]] = []
+        for report_file in self.analysis_dir.glob("phantom_*/phantom_experiment.json"):
+            try:
+                with open(report_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    sys_dict = data.get("system_id", {})
+                    align_dict = data.get("alignment", {})
+                    lat_dict = data.get("latency", {})
+                    experiments.append({
+                        "trial_id": data.get("trial_id", report_file.parent.name.replace("phantom_", "")),
+                        "template_id": data.get("template_id"),
+                        "created_at_utc": data.get("created_at_utc", ""),
+                        "hardware_status": data.get("hardware_status", "PENDING_PHYSICAL_MEASUREMENT"),
+                        "stimulus_id": data.get("stimulus", {}).get("stimulus_id"),
+                        "stimulus_type": data.get("stimulus", {}).get("stimulus_type"),
+                        "session_id": data.get("capture", {}).get("session_id"),
+                        "sync_status": align_dict.get("sync_status"),
+                        "normalized_cross_correlation": align_dict.get("normalized_cross_correlation"),
+                        "estimated_acoustic_lag_ms": lat_dict.get("estimated_acoustic_lag_ms"),
+                        "total_end_to_end_latency_estimate_ms": lat_dict.get("total_end_to_end_latency_estimate_ms"),
+                        "mean_coherence_over_excited_band": sys_dict.get("mean_coherence_over_excited_band"),
+                        "clipping_detected": align_dict.get("capture_clipping", {}).get("clipping_detected", False),
+                    })
+            except Exception:
+                pass
+
+        experiments.sort(key=lambda x: x.get("created_at_utc", ""), reverse=True)
+        return experiments
+
+    def get_phantom_experiment(self, trial_id: str) -> Optional[dict[str, Any]]:
+        """Load a persisted phantom experiment record safely."""
+        valid_id = validate_identifier(trial_id, "trial_id", self.analysis_dir)
+        report_file = self.analysis_dir / f"phantom_{valid_id}" / "phantom_experiment.json"
+        if not report_file.exists():
+            return None
+        try:
+            with open(report_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
 
     # =========================================================================
     # Springer LR-HSMM Segmentation Orchestration
@@ -1264,3 +1507,81 @@ class AnalysisService:
                 return json.load(f)
         except Exception:
             return None
+
+    # =========================================================================
+    # Metrology Automation & Laboratory Report Pipeline (Sprint 08)
+    # =========================================================================
+
+    def get_metrology_template(self) -> dict[str, Any]:
+        """Return the master template configuration for the 6 mandatory measurements."""
+        from pcg_core.metrology.cli import create_template_config
+        return create_template_config()
+
+    def run_metrology_experiment(self, config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Execute a metrology characterization experiment and persist reports."""
+        from pcg_core.metrology import MetrologyExperimentConfig, MetrologyRunner
+
+        config = MetrologyExperimentConfig.from_dict(config_dict)
+        valid_id = validate_identifier(config.experiment_id, "experiment_id", self.metrology_dir)
+        output_dir = self.metrology_dir / valid_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        runner = MetrologyRunner(config)
+        report = runner.run(output_dir=output_dir)
+        return report.to_dict()
+
+    def list_metrology_reports(self) -> list[dict[str, Any]]:
+        """List summary metadata of all persisted advisor metrology reports."""
+        reports: list[dict[str, Any]] = []
+        for report_file in self.metrology_dir.glob("*/metrology_report.json"):
+            try:
+                with open(report_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    reports.append({
+                        "report_id": data.get("report_id", report_file.parent.name),
+                        "created_at_utc": data.get("created_at_utc", ""),
+                        "apparatus_id": data.get("apparatus_id", ""),
+                        "author": data.get("author", ""),
+                        "overall_hardware_status": data.get("overall_hardware_status", ""),
+                        "workflow_statuses": {
+                            "w1_frf": data.get("workflow_1_frequency_response", {}).get("status"),
+                            "w2_snr": data.get("workflow_2_snr_level_ratio", {}).get("status"),
+                            "w3_repeatability": data.get("workflow_3_repeatability", {}).get("status"),
+                            "w4_mains": data.get("workflow_4_mains_interference", {}).get("status"),
+                            "w5_latency": data.get("workflow_5_latency", {}).get("status"),
+                            "w6_continuity": data.get("workflow_6_dropped_samples", {}).get("status"),
+                        },
+                    })
+            except Exception:
+                pass
+
+        reports.sort(key=lambda r: r.get("created_at_utc", ""), reverse=True)
+        return reports
+
+    def get_metrology_report(self, report_id: str) -> Optional[dict[str, Any]]:
+        """Load a persisted metrology report JSON safely."""
+        valid_id = validate_identifier(report_id, "report_id", self.metrology_dir)
+        report_file = self.metrology_dir / valid_id / "metrology_report.json"
+        if not report_file.exists():
+            return None
+        with open(report_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def get_metrology_summary_csv(self, report_id: str) -> Optional[str]:
+        """Load the tabular summary CSV for an advisor report safely."""
+        valid_id = validate_identifier(report_id, "report_id", self.metrology_dir)
+        csv_file = self.metrology_dir / valid_id / "metrology_summary.csv"
+        if not csv_file.exists():
+            return None
+        with open(csv_file, "r", encoding="utf-8") as f:
+            return f.read()
+
+    def get_metrology_summary_markdown(self, report_id: str) -> Optional[str]:
+        """Load the human-readable Markdown summary report safely."""
+        valid_id = validate_identifier(report_id, "report_id", self.metrology_dir)
+        md_file = self.metrology_dir / valid_id / "metrology_report.md"
+        if not md_file.exists():
+            return None
+        with open(md_file, "r", encoding="utf-8") as f:
+            return f.read()
+

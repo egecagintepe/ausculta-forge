@@ -19,6 +19,13 @@ import {
   SpringerSegmentationReport,
   ValidationBenchmarkSummary,
   ValidationBenchmarkReport,
+  VirtualBenchScenarioSummary,
+  VirtualBenchReport,
+  VirtualBenchScenarioResult,
+  SpectralFrameData,
+  PhantomTemplateItem,
+  PhantomExperimentRecord,
+  PhantomExperimentSummary,
 } from '../types';
 
 export interface SignalFrameData {
@@ -67,12 +74,7 @@ export interface DisplayFrameData {
   };
   recording_active: boolean;
   dropped_display_frames: number;
-  spectral_frame?: {
-    frequencies_hz: number[];
-    power_db: number[];
-    peak_frequency_hz: number;
-    dominant_band: string;
-  };
+  spectral_frame?: SpectralFrameData;
 }
 
 export interface StreamStateData {
@@ -94,6 +96,23 @@ export interface RecordingStateData {
   blocks_recorded: number;
   source: string;
   sample_rate_hz: number;
+}
+
+export interface SessionIntegrityCheck {
+  session_id: string;
+  is_valid: boolean;
+  status: string;
+  sha256_match: boolean;
+  expected_sha256: string;
+  actual_sha256: string;
+  sample_count_match: boolean;
+  metadata_samples: number;
+  wav_samples: number;
+  sample_rate_match: boolean;
+  metadata_sample_rate: number;
+  wav_sample_rate: number;
+  termination_reason: string;
+  details: string;
 }
 
 export interface SessionItem {
@@ -118,6 +137,12 @@ export interface SessionItem {
   acquisition_mode?: string;
   termination_reason?: string;
   device_info?: Record<string, unknown>;
+  schema_version?: string;
+  storage_format?: string;
+  wire_format?: string;
+  storage_disclaimer?: string;
+  processing_profile?: Record<string, unknown>;
+  status?: string;
 }
 
 type FrameCallback = (frame: SignalFrameData) => void;
@@ -365,10 +390,41 @@ class BridgeClient {
 
   public async replaySession(sessionId: string): Promise<boolean> {
     try {
-      const resp = await fetch(`${this.apiUrl}/sessions/${sessionId}/replay`, { method: 'POST' });
+      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}/replay`, { method: 'POST' });
       return resp.ok;
     } catch {
       return false;
+    }
+  }
+
+  public async verifySession(sessionId: string): Promise<SessionIntegrityCheck | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}/verify`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public async deleteSession(sessionId: string): Promise<boolean> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}`, {
+        method: 'DELETE',
+      });
+      return resp.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  public async getSessionManifest(sessionId: string): Promise<Record<string, unknown> | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/sessions/${encodeURIComponent(sessionId)}/manifest`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
     }
   }
 
@@ -597,6 +653,83 @@ class BridgeClient {
     }
   }
 
+  // =========================================================================
+  // Phantom Reference Playback & System Identification
+  // =========================================================================
+
+  public async listPhantomTemplates(): Promise<PhantomTemplateItem[]> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/phantom/templates`);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async generatePhantomStimulus(payload: {
+    stimulus_type: string;
+    duration_s?: number;
+    sample_rate_hz?: number;
+    amplitude_fs?: number;
+    save_as_asset?: boolean;
+    custom_params?: Record<string, any>;
+  }): Promise<any> {
+    const resp = await fetch(`${this.apiUrl}/scientific/phantom/stimulus/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Failed to generate phantom stimulus' }));
+      throw new Error(err.detail || `Stimulus generation failed (${resp.status})`);
+    }
+    return await resp.json();
+  }
+
+  public async characterizePhantom(payload: {
+    asset_id: string;
+    session_id: string;
+    template_id?: string;
+    trial_id?: string;
+    output_gain_dbfs?: number;
+    operator_notes?: string;
+    hardware_status?: string;
+    pipeline_buffer_delay_ms?: number;
+    max_display_points?: number;
+  }): Promise<PhantomExperimentRecord> {
+    const resp = await fetch(`${this.apiUrl}/scientific/phantom/characterize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Phantom characterization failed' }));
+      throw new Error(err.detail || `Phantom characterization failed (${resp.status})`);
+    }
+    return await resp.json();
+  }
+
+  public async listPhantomExperiments(): Promise<PhantomExperimentSummary[]> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/phantom/experiments`);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async getPhantomExperiment(trialId: string): Promise<PhantomExperimentRecord | null> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/scientific/phantom/experiments/${encodeURIComponent(trialId)}`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
   public async listSegmentationModels(): Promise<SpringerSegmentationModelSummary[]> {
     try {
       const resp = await fetch(`${this.apiUrl}/scientific/segmentation/models`);
@@ -668,6 +801,29 @@ class BridgeClient {
     } catch {
       return null;
     }
+  }
+
+  public async listBenchScenarios(): Promise<VirtualBenchScenarioSummary[]> {
+    try {
+      const resp = await fetch(`${this.apiUrl}/bench/scenarios`);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async runBenchScenario(scenarioId: string = 'all', seed: number = 42): Promise<VirtualBenchReport> {
+    const resp = await fetch(`${this.apiUrl}/bench/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario_id: scenarioId, seed }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Virtual bench run failed' }));
+      throw new Error(err.detail || `Virtual bench run failed with status ${resp.status}`);
+    }
+    return await resp.json();
   }
 }
 

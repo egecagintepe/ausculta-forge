@@ -290,7 +290,7 @@ def test_device_poll_and_disconnect_endpoints(test_app_and_dir):
 
 
 def test_device_lifecycle_states_and_transitions(test_app_and_dir):
-    from software.pcg_app.device_runtime import DeviceCandidate, DeviceState
+    from pcg_app.device_runtime import DeviceCandidate, DeviceState
 
     app, _ = test_app_and_dir
     # Directly inspect manager device_runtime transitions

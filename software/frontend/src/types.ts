@@ -120,6 +120,13 @@ export interface DiagnosticLogEvent {
   component: string;
 }
 
+export interface SpectralFrameData {
+  frequencies_hz: number[];
+  power_db: number[];
+  peak_frequency_hz: number;
+  dominant_band: string;
+}
+
 export interface AudioMetrics {
   currentPeakDb: number;
   currentRmsDb: number;
@@ -286,6 +293,7 @@ export interface ScientificSignalQuality {
   digital_saturation_count: number;
   digital_saturation_fraction: number;
   zero_crossing_rate: number | null;
+  quality_dimensions?: Record<string, any>;
   provenance: Record<string, unknown>;
 }
 
@@ -342,6 +350,7 @@ export interface ScientificSessionAnalysisResult {
   total_samples: number;
   duration_s: number;
   analysis_profile: string;
+  filter_metadata?: Record<string, unknown>;
   signal_quality: ScientificSignalQuality;
   spectral: ScientificSpectralData;
   envelope_lab: ScientificEnvelopeLabData;
@@ -595,4 +604,144 @@ export interface ValidationBenchmarkReport {
   provenance: Record<string, unknown>;
   warnings: string[];
   limitations: string[];
+}
+
+// =============================================================================
+// Virtual Integration Bench (Software-Only Known-Answer Testing)
+// =============================================================================
+
+export interface VirtualBenchMetric {
+  name: string;
+  expected: unknown;
+  observed: unknown;
+  tolerance?: number | null;
+  passed: boolean;
+  unit: string;
+  notes: string;
+}
+
+export interface VirtualBenchScenarioSummary {
+  id: string;
+  title: string;
+  category: string;
+  description: string;
+}
+
+export interface VirtualBenchScenarioResult {
+  scenario_id: string;
+  title: string;
+  category: string;
+  passed: boolean;
+  status_label: string; // "SOFTWARE_KNOWN_ANSWER"
+  duration_ms: number;
+  metrics: VirtualBenchMetric[];
+  artifacts: Record<string, string>;
+  telemetry_observed: Record<string, unknown>;
+  error_message?: string | null;
+  parameters: Record<string, unknown>;
+}
+
+export interface VirtualBenchReport {
+  bench_version: string;
+  timestamp_utc: string;
+  status_tag: string; // "SOFTWARE_KNOWN_ANSWER"
+  total_scenarios: number;
+  passed_scenarios: number;
+  failed_scenarios: number;
+  all_passed: boolean;
+  scenarios: VirtualBenchScenarioResult[];
+  environment_summary: Record<string, string>;
+}
+
+// =============================================================================
+// Phantom Reference Playback & System Identification (Sprint 07)
+// =============================================================================
+
+export interface PhantomTemplateItem {
+  template_id: string;
+  name: string;
+  description: string;
+  stimulus_type: string;
+  target_frequency_band_hz: [number, number];
+  default_output_gain_dbfs: number;
+  recommended_duration_s: number;
+  checklist: string[];
+  expected_excitation_bandwidth_hz: [number, number];
+}
+
+export interface LatencyDecompositionData {
+  estimated_acoustic_lag_ms: number;
+  playback_pipeline_buffer_delay_ms: number;
+  total_end_to_end_latency_estimate_ms: number;
+  delay_samples: number;
+  effective_sample_rate_hz: number;
+  is_hardware_synchronized: boolean;
+  notes: string;
+}
+
+export interface PhantomAlignmentData {
+  sync_status: 'SYNCHRONIZED' | 'MARGINAL_SYNC' | 'SYNC_FAILED';
+  normalized_cross_correlation: number;
+  estimated_delay_samples: number;
+  estimated_delay_ms: number;
+  overlap_samples: number;
+  overlap_duration_s: number;
+  least_squares_gain: number;
+  rms_gain_ratio: number;
+  peak_gain_ratio: number;
+  rmse: number;
+  normalized_rmse: number;
+  signal_to_error_ratio_db: number;
+  reference_clipping: Record<string, any>;
+  capture_clipping: Record<string, any>;
+  excitation_coverage: {
+    status: 'FULL_COVERAGE' | 'PARTIAL_COVERAGE' | 'INSUFFICIENT_EXCITATION';
+    coverage_fraction: number;
+    target_band_hz: [number, number];
+  };
+}
+
+export interface PhantomExperimentRecord {
+  schema_version: string;
+  trial_id: string;
+  template_id: string;
+  created_at_utc: string;
+  intended_device: string;
+  intended_chain: string;
+  hardware_status: 'PENDING_PHYSICAL_MEASUREMENT' | 'SIMULATED_BENCH_TEST' | 'PHYSICAL_VERIFIED';
+  output_gain_dbfs: number;
+  operator_notes: string;
+  stimulus: Record<string, any>;
+  capture: Record<string, any>;
+  latency: LatencyDecompositionData;
+  alignment: PhantomAlignmentData;
+  system_id: SystemIdentificationCoreData;
+  display: {
+    time_ms: number[];
+    aligned_reference: number[];
+    aligned_capture: number[];
+    aligned_error: number[];
+    frequency_hz: number[];
+    h1_magnitude_db: number[];
+    h1_phase_deg: number[];
+    coherence: number[];
+  };
+  metrological_disclaimer: string;
+  provenance: Record<string, any>;
+}
+
+export interface PhantomExperimentSummary {
+  trial_id: string;
+  template_id: string;
+  created_at_utc: string;
+  hardware_status: string;
+  stimulus_id?: string;
+  stimulus_type?: string;
+  session_id?: string;
+  sync_status?: string;
+  normalized_cross_correlation?: number;
+  estimated_acoustic_lag_ms?: number;
+  total_end_to_end_latency_estimate_ms?: number;
+  mean_coherence_over_excited_band?: number | null;
+  clipping_detected?: boolean;
 }

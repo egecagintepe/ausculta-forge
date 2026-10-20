@@ -422,8 +422,34 @@ BROADBAND_SYSTEM_ID_V1 = AnalysisProfile(
     literature_sources=("R002", "R003", "R004"),
 )
 
+PCG_CHARACTERIZATION_20_500_HZ = AnalysisProfile(
+    profile_id="PCG_CHARACTERIZATION_20_500_HZ",
+    profile_version="1.0.0",
+    purpose="Mandatory 20–500 Hz acoustic characterization band for PCG acquisition verification (C-W04-FR02).",
+    sample_rate_policy="native_or_resampled",
+    filter_policy="butterworth_bandpass_20_500_hz_order4_causal",
+    spectral_policy=SpectralAnalysisConfig(
+        window="hann",
+        nperseg=512,
+        noverlap=256,
+        scaling=SpectralScaling.DENSITY,
+        detrend=DetrendMode.CONSTANT,
+        frequency_min_hz=20.0,
+        frequency_max_hz=500.0,
+    ),
+    feature_policy={
+        "compute_rms": True,
+        "compute_crest_factor": True,
+        "band_energy_ratios": True,
+        "characterization_band_hz": [20.0, 500.0],
+    },
+    calibration_requirement="normalized_full_scale",
+    literature_sources=("R001", "R002", "R004"),
+)
+
 STANDARD_PROFILES: dict[str, AnalysisProfile] = {
     RAW_INTEGRITY_V1.profile_id: RAW_INTEGRITY_V1,
+    PCG_CHARACTERIZATION_20_500_HZ.profile_id: PCG_CHARACTERIZATION_20_500_HZ,
     GENERAL_PCG_V1.profile_id: GENERAL_PCG_V1,
     PHANTOM_VALIDATION_V1.profile_id: PHANTOM_VALIDATION_V1,
     PCG_EVENT_FEATURES_V1.profile_id: PCG_EVENT_FEATURES_V1,
