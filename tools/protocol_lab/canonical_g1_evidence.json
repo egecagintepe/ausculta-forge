@@ -1,0 +1,63 @@
+{
+  "benchmark": "AuscultaForge Canonical Protocol v0.1 G1 Verification",
+  "timestamp_utc": "2026-10-22T12:20:59Z",
+  "execution_domain": "SOFTWARE SIMULATION (Host CPU)",
+  "duration_seconds_wall_clock": 0.3302,
+  "chunk_size_bytes": 1024,
+  "criteria": {
+    "c1_host_samples_accepted": {
+      "expected": 480000,
+      "actual": 480000,
+      "pass": true
+    },
+    "c2_audio_frames_accepted": {
+      "expected": 1875,
+      "actual": 1875,
+      "pass": true
+    },
+    "c3_sample_value_errors": {
+      "expected": 0,
+      "actual": 0,
+      "pass": true
+    },
+    "c4_sequence_gaps": {
+      "expected": 0,
+      "actual": 0,
+      "pass": true
+    },
+    "c5_duplicate_frames": {
+      "expected": 0,
+      "actual": 0,
+      "pass": true
+    },
+    "c6_crc_corrupted_frames": {
+      "expected": 0,
+      "actual": 0,
+      "pass": true
+    },
+    "c7_session_id_match": {
+      "session_id": "0xcafefeed00000002",
+      "pass": true
+    },
+    "c8_mcu_telemetry_reconciliation": {
+      "mcu_generated_samples": 480000,
+      "mcu_fully_queued_samples": 480000,
+      "mcu_dropped_samples": 0,
+      "mcu_audio_frames_queued": 1875,
+      "mcu_audio_bytes_queued": 2002500,
+      "mcu_stop_reason": 1,
+      "mcu_error_code": 0,
+      "pass": true
+    }
+  },
+  "overall_software_simulation_pass": true,
+  "hardware_verification_gate": {
+    "host_c11_core_verified": true,
+    "host_python_protocol_verified": true,
+    "bidirectional_simulated_protocol_verified": true,
+    "desktop_compatibility_checked": true,
+    "esp_idf_target_build": "NOT VERIFIED (No ESP-IDF cross-compiler in host desktop environment)",
+    "physical_usb_transport": "NOT VERIFIED (Requires physical ESP32-S3 hardware attached)",
+    "physical_g1_gate": "NOT VERIFIED (Awaiting Module B physical board bring-up)"
+  }
+}

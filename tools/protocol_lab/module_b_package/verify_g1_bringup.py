@@ -4,7 +4,7 @@
 Course: EEE495 / EEE496 Senior Design Project — AuscultaForge
 Module: C (Computer Application / Software Integration)
 Author: Ege Çağın Tepe (Module C)
-Reviewer: Ozan (Module B)
+Joint Reviewer: Ozan (Module B)
 
 USAGE:
   # When ESP32-S3 board is plugged into USB COM port:
@@ -26,12 +26,22 @@ LAB_PYTHON_DIR = SCRIPT_DIR.parent / "python"
 if str(LAB_PYTHON_DIR) not in sys.path:
     sys.path.insert(0, str(LAB_PYTHON_DIR))
 
-from protocol_codec import StreamingProtocolDecoder, NOMINAL_SAMPLE_RATE_HZ, PROFILE_B_SAMPLES_PER_FRAME
+from protocol_codec import (
+    StreamingProtocolDecoder,
+    NOMINAL_SAMPLE_RATE_HZ,
+    PROFILE_B_SAMPLES_PER_FRAME,
+    build_hello_req_packet,
+    build_start_req_packet,
+    build_stop_req_packet,
+    StartReq,
+    MSG_TYPE_AUDIO_DATA,
+    MSG_TYPE_STREAM_STOP_ACK,
+)
 from protocol_validator import ProtocolValidator
 import numpy as np
 
 
-def run_serial_verification(port: str, baudrate: int, duration_s: float):
+def run_serial_verification(port: str, baudrate: int, duration_s: float, use_handshake: bool = True):
     try:
         import serial
     except ImportError:
@@ -45,31 +55,70 @@ def run_serial_verification(port: str, baudrate: int, duration_s: float):
     ser.rts = True
     time.sleep(0.1)
     ser.reset_input_buffer()
+    ser.reset_output_buffer()
 
     decoder = StreamingProtocolDecoder()
     accumulated_samples = []
 
+    target_samples = int(duration_s * NOMINAL_SAMPLE_RATE_HZ)
+
+    if use_handshake:
+        print("[HARDWARE] Initiating Canonical B/C HELLO handshake...")
+        ser.write(build_hello_req_packet(host_nonce=0x12345678))
+        time.sleep(0.05)
+
+        print(f"[HARDWARE] Requesting acquisition START for {target_samples} samples ({duration_s:.1f}s)...")
+        req = StartReq(
+            sample_rate_hz=NOMINAL_SAMPLE_RATE_HZ,
+            target_samples=target_samples,
+            source_mode=0,  # Live I2S MEMS
+            encoding=1,
+            channels=1,
+            profile_id=2,
+        )
+        ser.write(build_start_req_packet(req))
+
     print(f"[HARDWARE] Streaming for {duration_s:.1f} seconds...")
     t_start = time.perf_counter()
-    t_end = t_start + duration_s
+    t_end = t_start + duration_s + 1.0  # Allow margin
+
+    final_telemetry = None
 
     while time.perf_counter() < t_end:
         n_waiting = ser.in_waiting
-        chunk = ser.read(max(n_waiting, 1024))
+        chunk = ser.read(max(n_waiting, 1024)) if n_waiting > 0 else ser.read(1)
         if chunk:
             packets = decoder.feed_bytes(chunk)
             for p in packets:
-                if p.crc_ok and len(p.raw_samples) > 0:
+                if p.crc_ok and p.msg_type == MSG_TYPE_AUDIO_DATA and len(p.raw_samples) > 0:
                     accumulated_samples.append(p.raw_samples)
+                elif p.crc_ok and p.msg_type == MSG_TYPE_STREAM_STOP_ACK:
+                    final_telemetry = p.telemetry
+                    break
+        if len(accumulated_samples) * PROFILE_B_SAMPLES_PER_FRAME >= target_samples:
+            break
+
+    if use_handshake:
+        print("[HARDWARE] Sending STOP command...")
+        ser.write(build_stop_req_packet(session_id=0))
+        time.sleep(0.1)
+        remaining = ser.read(ser.in_waiting or 1024)
+        if remaining:
+            pkts = decoder.feed_bytes(remaining)
+            for p in pkts:
+                if p.msg_type == MSG_TYPE_STREAM_STOP_ACK:
+                    final_telemetry = p.telemetry
 
     ser.close()
     t_actual = time.perf_counter() - t_start
-    evaluate_stream_results(decoder, accumulated_samples, t_actual, duration_s, is_hardware=True)
+    evaluate_stream_results(decoder, accumulated_samples, t_actual, duration_s, is_hardware=True, telemetry=final_telemetry)
 
 
 def run_synthetic_dry_run(duration_s: float):
     import subprocess
     c_runner = SCRIPT_DIR.parent / "c" / "g1_sim_runner.exe"
+    if not c_runner.exists():
+        c_runner = SCRIPT_DIR.parent / "c" / "bin" / "g1_sim_runner.exe"
     if not c_runner.exists():
         print("[ERROR] g1_sim_runner.exe not found. Compile tools/protocol_lab/c first.")
         sys.exit(1)
@@ -97,7 +146,7 @@ def run_synthetic_dry_run(duration_s: float):
     evaluate_stream_results(decoder, accumulated_samples, t_actual, duration_s, is_hardware=False)
 
 
-def evaluate_stream_results(decoder, sample_arrays, t_actual, duration_nominal, is_hardware):
+def evaluate_stream_results(decoder, sample_arrays, t_actual, duration_nominal, is_hardware, telemetry=None):
     all_samples = np.concatenate(sample_arrays) if sample_arrays else np.zeros(0, dtype=np.int32)
     expected_samples = int(duration_nominal * NOMINAL_SAMPLE_RATE_HZ)
     expected_frames = expected_samples // PROFILE_B_SAMPLES_PER_FRAME
@@ -114,6 +163,15 @@ def evaluate_stream_results(decoder, sample_arrays, t_actual, duration_nominal, 
     print(f"Duplicate Frames: {decoder.total_duplicate_frames}")
     print(f"Timestamp Regressions: {decoder.total_timestamp_regressions}")
     print(f"Garbage Noise Discarded: {decoder.garbage_bytes_discarded} bytes")
+
+    if telemetry is not None:
+        print("\n--- Hardware Telemetry Reconciliation (STOP_ACK 72B) ---")
+        print(f"  MCU Generated Samples:     {telemetry.generated_samples}")
+        print(f"  MCU Fully Queued Samples:  {telemetry.fully_queued_samples}")
+        print(f"  MCU Dropped Samples:       {telemetry.dropped_samples}")
+        print(f"  MCU Audio Frames Queued:   {telemetry.audio_frames_queued}")
+        print(f"  MCU DMA Overflows:         {telemetry.dma_overflow_events}")
+        print(f"  MCU USB Partial Writes:    {telemetry.usb_partial_write_events}")
 
     passed = (
         decoder.total_frames_corrupted == 0 and
