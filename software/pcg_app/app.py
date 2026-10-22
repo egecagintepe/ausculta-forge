@@ -11,6 +11,7 @@ from typing import Any, Optional
 import time
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, File, UploadFile, Response
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -38,6 +39,13 @@ from .protocol import (
     make_device_stats_message,
     make_error_message,
 )
+from .diagnostics.fault_catalog import list_all_faults, get_fault_definition
+from .diagnostics.event_model import DiagnosticEvent, Severity, Subsystem, EvidenceOrigin
+from .diagnostics.flight_recorder import get_flight_recorder
+from .diagnostics.usb_doctor import UsbDiscoveryDoctor
+from .diagnostics.correlation_engine import RootCauseCorrelationEngine
+from .diagnostics.support_bundle import DiagnosticsSupportBundleExporter
+from .diagnostics.fault_injection_lab import FaultInjectionLab
 
 DEFAULT_ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -196,6 +204,13 @@ def create_app(
 
     class MetrologyRunRequest(BaseModel):
         config: dict[str, Any]
+
+    class FaultInjectRequest(BaseModel):
+        scenario_id: str
+
+    class FaultResolveRequest(BaseModel):
+        fault_code: str
+        resolution_message: Optional[str] = None
 
 
     # REST Endpoints
@@ -704,6 +719,121 @@ def create_app(
         )
         await manager.broadcast(rec_msg)
         return meta.to_dict()
+
+    # =========================================================================
+    # Engineering Diagnostics & Flight Recorder Endpoints
+    # =========================================================================
+
+    @app.get("/api/diagnostics/catalog")
+    def api_get_fault_catalog() -> list[dict[str, Any]]:
+        return [f.to_dict() for f in list_all_faults()]
+
+    @app.get("/api/diagnostics/events")
+    def api_get_diagnostic_events(
+        limit: int = 100,
+        subsystem: Optional[str] = None,
+        severity: Optional[str] = None,
+        fault_code: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        fr = get_flight_recorder()
+        sub_enum = None
+        if subsystem:
+            try:
+                sub_enum = Subsystem(subsystem.upper())
+            except ValueError:
+                pass
+        sev_enum = None
+        if severity:
+            try:
+                sev_enum = Severity(severity.upper())
+            except ValueError:
+                pass
+
+        events = fr.get_recent_events(
+            limit=limit,
+            subsystem=sub_enum,
+            severity=sev_enum,
+            fault_code=fault_code,
+            session_id=session_id,
+        )
+        return [e.to_dict() for e in events]
+
+    @app.get("/api/diagnostics/active-faults")
+    def api_get_active_faults() -> list[dict[str, Any]]:
+        fr = get_flight_recorder()
+        return [e.to_dict() for e in fr.get_active_faults()]
+
+    @app.get("/api/diagnostics/correlation")
+    def api_get_correlation_report() -> dict[str, Any]:
+        fr = get_flight_recorder()
+        doctor = UsbDiscoveryDoctor(flight_recorder=fr)
+        usb_ports = doctor.scan_ports()
+        current_port = usb_ports[0].port_name if usb_ports else None
+        engine = RootCauseCorrelationEngine(flight_recorder=fr)
+        dev_state = manager.device_runtime.get_state_dict()
+        is_conn = dev_state.get("state") in ("ready", "streaming")
+        report = engine.evaluate_incidents(
+            current_port=current_port,
+            is_device_connected=is_conn,
+            is_streaming=manager.is_streaming,
+            is_recording=bool(manager.recorder.is_recording),
+        )
+        return report.to_dict()
+
+    @app.get("/api/diagnostics/usb/scan")
+    def api_scan_usb_ports() -> list[dict[str, Any]]:
+        fr = get_flight_recorder()
+        doctor = UsbDiscoveryDoctor(flight_recorder=fr)
+        descriptors = doctor.scan_ports()
+        return [d.to_dict() for d in descriptors]
+
+    @app.post("/api/diagnostics/fault/inject")
+    def api_inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
+        fr = get_flight_recorder()
+        lab = FaultInjectionLab(journal=fr)
+        try:
+            res = lab.run_scenario(req.scenario_id)
+            return {
+                "scenario_id": res.scenario_id,
+                "name": res.name,
+                "target_fault_code": res.target_fault_code,
+                "passed": res.passed,
+                "diagnostic_message": res.diagnostic_message,
+                "emitted_event_id": res.emitted_event_id,
+                "severity": res.severity.value,
+                "subsystem": res.subsystem.value,
+            }
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.post("/api/diagnostics/fault/resolve")
+    def api_resolve_fault(req: FaultResolveRequest) -> dict[str, Any]:
+        fr = get_flight_recorder()
+        resolved_count = fr.resolve_fault(req.fault_code, req.resolution_message)
+        return {"fault_code": req.fault_code, "resolved_count": resolved_count}
+
+    @app.post("/api/diagnostics/export")
+    def api_export_diagnostics_bundle() -> FileResponse:
+        fr = get_flight_recorder()
+        doctor = UsbDiscoveryDoctor(flight_recorder=fr)
+        ports = doctor.scan_ports()
+        exporter = DiagnosticsSupportBundleExporter(flight_recorder=fr)
+        export_dir = Path("experiments/diagnostics-bundles")
+        export_dir.mkdir(parents=True, exist_ok=True)
+        zip_path = exporter.create_bundle(
+            output_dir=export_dir,
+            device_runtime_state=manager.device_runtime.get_state_dict(),
+            device_stats=manager.device_runtime.stats.to_dict(),
+            usb_descriptors=[p.to_dict() for p in ports],
+        )
+        if not zip_path.exists():
+            raise HTTPException(status_code=500, detail="Failed to create diagnostics bundle")
+        return FileResponse(
+            path=str(zip_path),
+            filename=zip_path.name,
+            media_type="application/zip",
+        )
 
     # WebSocket Real-Time Ingestion & Command Endpoint
     @app.websocket("/ws")

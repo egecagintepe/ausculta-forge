@@ -1211,6 +1211,33 @@ class DeviceEventLog:
         self._entries.append(evt)
         if len(self._entries) > self.max_entries:
             self._entries.pop(0)
+
+        # Forward to FlightRecorderJournal to ensure unified persistent flight recording
+        try:
+            from .diagnostics.flight_recorder import get_flight_recorder
+            from .diagnostics.event_model import Severity, Subsystem, EvidenceOrigin
+            fr = get_flight_recorder()
+            sev_map = {
+                "info": Severity.INFO,
+                "warning": Severity.WARNING,
+                "error": Severity.ERROR,
+                "critical": Severity.CRITICAL,
+                "debug": Severity.DEBUG,
+            }
+            sev = sev_map.get(str(severity).lower(), Severity.INFO)
+            sub = Subsystem.USB if any(k in code for k in ("USB", "DEVICE", "DISCOVERY", "TRANSPORT", "PORT")) else Subsystem.APP
+            fr.record(
+                fault_code=code,
+                message=message,
+                subsystem=sub,
+                severity=sev,
+                source_type="device_runtime",
+                evidence_origin=EvidenceOrigin.OBSERVED_HOST,
+                counter_snapshot=metadata or {},
+            )
+        except Exception:
+            pass
+
         return evt
 
     def get_recent(self, limit: int = 50) -> list[dict[str, Any]]:

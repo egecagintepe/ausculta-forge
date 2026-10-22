@@ -20,7 +20,7 @@ import {
   ChevronUp,
   Play,
 } from 'lucide-react';
-import { StethoscopeDevice, DeviceRuntimeState, DeviceIntegrityStats, AudioSourceType, VirtualBenchReport } from '../types';
+import { StethoscopeDevice, DeviceRuntimeState, DeviceIntegrityStats, AudioSourceType, VirtualBenchReport, UsbPortDescriptorItem } from '../types';
 import { bridgeClient } from '../api/bridgeClient';
 
 interface DeviceViewProps {
@@ -61,6 +61,23 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
   const [benchReport, setBenchReport] = useState<VirtualBenchReport | null>(null);
   const [benchError, setBenchError] = useState<string | null>(null);
   const [expandedScenarioId, setExpandedScenarioId] = useState<string | null>(null);
+
+  // USB Discovery Doctor state
+  const [detectedPorts, setDetectedPorts] = useState<UsbPortDescriptorItem[]>([]);
+  const [isScanningPorts, setIsScanningPorts] = useState(false);
+
+  const handleScanPorts = async () => {
+    setIsScanningPorts(true);
+    try {
+      const ports = await bridgeClient.scanUsbPorts();
+      setDetectedPorts(ports);
+      onDetectDevice();
+    } catch (err) {
+      console.error('Scan ports failed', err);
+    } finally {
+      setIsScanningPorts(false);
+    }
+  };
 
   const handleRunBench = async () => {
     setBenchRunning(true);
@@ -306,6 +323,42 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Real USB Discovery Doctor Port List */}
+              {detectedPorts.length > 0 && (
+                <div className="mt-2 p-3 rounded bg-[var(--surface-muted)]/50 border border-[var(--border-subtle)] flex flex-col gap-2">
+                  <span className="font-mono-code text-[11px] font-bold uppercase tracking-wider text-[var(--accent-oxblood)]">
+                    Enumerated Serial Hardware ({detectedPorts.length} Ports Found)
+                  </span>
+                  <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto font-mono-code text-[11px]">
+                    {detectedPorts.map((p) => (
+                      <div
+                        key={p.port_name}
+                        className={`p-2 rounded border flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+                          p.is_espressif_candidate
+                            ? 'bg-[var(--status-success)]/5 border-[var(--status-success)]/40'
+                            : 'bg-[var(--surface-card)] border-[var(--border-subtle)]'
+                        }`}
+                      >
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-1.5">
+                            <strong className="text-[var(--on-surface)] font-bold">{p.port_name}</strong>
+                            <span className="text-[10px] text-[var(--on-surface-variant)]">({p.description})</span>
+                            {p.is_espressif_candidate && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-[var(--status-success)]/15 text-[var(--status-success)]">
+                                ESP32 CANDIDATE
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-[var(--on-surface-variant)]">
+                            VID: {p.vid_hex ?? 'N/A'} · PID: {p.pid_hex ?? 'N/A'} · {p.candidate_reason}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Actions Bar */}
@@ -314,17 +367,17 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                 {/* Scan Button */}
                 <button
                   id="btn-scan-usb-bus"
-                  onClick={onDetectDevice}
-                  disabled={!backendConnected || isConnecting}
+                  onClick={handleScanPorts}
+                  disabled={!backendConnected || isConnecting || isScanningPorts}
                   className={`px-3 py-1.5 rounded-lg font-mono-code text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border ${
-                    !backendConnected || isConnecting
+                    !backendConnected || isConnecting || isScanningPorts
                       ? 'bg-[var(--surface-muted)] text-[var(--on-surface-variant)]/50 border-[var(--border-subtle)] cursor-not-allowed'
                       : 'bg-[var(--surface-muted)] text-[var(--on-surface)] border-[var(--border-strong)] hover:bg-[var(--surface-card)]'
                   }`}
                   title={!backendConnected ? 'Python Bridge must be connected to scan' : 'Scan system USB bus for AuscultaForge device'}
                 >
-                  <RefreshCw size={12} className={isConnecting ? 'animate-spin' : ''} />
-                  <span>{isConnecting ? 'Scanning...' : 'Scan USB Bus'}</span>
+                  <RefreshCw size={12} className={isConnecting || isScanningPorts ? 'animate-spin' : ''} />
+                  <span>{isConnecting || isScanningPorts ? 'Scanning...' : 'Scan USB Bus'}</span>
                 </button>
 
                 {/* Disconnect Button (Enabled only when connected) */}

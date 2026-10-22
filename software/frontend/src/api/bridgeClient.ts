@@ -30,6 +30,10 @@ import {
   PhantomTemplateItem,
   PhantomExperimentRecord,
   PhantomExperimentSummary,
+  DiagnosticFaultDefinition,
+  DiagnosticEventRecord,
+  DiagnosticCorrelationReport,
+  UsbPortDescriptorItem,
 } from '../types';
 
 export interface SignalFrameData {
@@ -959,6 +963,109 @@ class BridgeClient {
       throw new Error(err.detail || `Virtual bench run failed with status ${resp.status}`);
     }
     return await resp.json();
+  }
+
+  // =========================================================================
+  // Diagnostic Intelligence & Flight Recorder API Methods
+  // =========================================================================
+
+  public async listFaultCatalog(): Promise<DiagnosticFaultDefinition[]> {
+    try {
+      const resp = await this.request('/diagnostics/catalog');
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async fetchDiagnosticEvents(params?: {
+    limit?: number;
+    subsystem?: string;
+    severity?: string;
+    fault_code?: string;
+  }): Promise<DiagnosticEventRecord[]> {
+    try {
+      const query = new URLSearchParams();
+      if (params?.limit) query.set('limit', String(params.limit));
+      if (params?.subsystem) query.set('subsystem', params.subsystem);
+      if (params?.severity) query.set('severity', params.severity);
+      if (params?.fault_code) query.set('fault_code', params.fault_code);
+
+      const qs = query.toString();
+      const path = qs ? `/diagnostics/events?${qs}` : '/diagnostics/events';
+      const resp = await this.request(path);
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async fetchActiveFaults(): Promise<DiagnosticEventRecord[]> {
+    try {
+      const resp = await this.request('/diagnostics/active-faults');
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async fetchCorrelationReport(): Promise<DiagnosticCorrelationReport | null> {
+    try {
+      const resp = await this.request('/diagnostics/correlation');
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public async scanUsbPorts(): Promise<UsbPortDescriptorItem[]> {
+    try {
+      const resp = await this.request('/diagnostics/usb/scan');
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async injectFaultScenario(scenarioId: string): Promise<any> {
+    const resp = await this.request('/diagnostics/fault/inject', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario_id: scenarioId }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Failed to inject fault' }));
+      throw new Error(err.detail || `Fault injection failed (${resp.status})`);
+    }
+    return await resp.json();
+  }
+
+  public async resolveFault(faultCode: string, resolutionMessage?: string): Promise<any> {
+    const resp = await this.request('/diagnostics/fault/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fault_code: faultCode, resolution_message: resolutionMessage }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Failed to resolve fault' }));
+      throw new Error(err.detail || `Fault resolution failed (${resp.status})`);
+    }
+    return await resp.json();
+  }
+
+  public async exportDiagnosticsBundle(): Promise<Blob> {
+    const resp = await this.request('/diagnostics/export', {
+      method: 'POST',
+    });
+    if (!resp.ok) {
+      throw new Error(`Export diagnostics bundle failed with status ${resp.status}`);
+    }
+    return await resp.blob();
   }
 }
 

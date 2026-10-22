@@ -745,3 +745,81 @@ export interface PhantomExperimentSummary {
   mean_coherence_over_excited_band?: number | null;
   clipping_detected?: boolean;
 }
+
+export interface DiagnosticFaultDefinition {
+  code: string;
+  name: string;
+  subsystem: string;
+  severity: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
+  detection_condition: string;
+  evidence_needed: string;
+  description_en: string;
+  description_tr: string;
+  possible_causes: string[];
+  suggested_actions: string[];
+  auto_recovery_permitted: boolean;
+  affects_g1_acceptance: boolean;
+  observable_without_hardware: boolean;
+  emitting_component: string;
+  primary_owner: string;
+}
+
+export interface DiagnosticEventRecord {
+  event_id: string;
+  timestamp_utc: string;
+  host_monotonic_ns: number;
+  severity: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
+  subsystem: string;
+  fault_code: string;
+  message: string;
+  source_type: string;
+  evidence_origin: 'OBSERVED_HOST' | 'REPORTED_BY_FIRMWARE' | 'DERIVED_FROM_SAMPLES' | 'INFERRED_HYPOTHESIS' | 'INJECTED_SIMULATION' | 'NOT_MEASURED';
+  device_state: string;
+  session_id?: string | null;
+  connection_attempt_id?: string | null;
+  device_port?: string | null;
+  protocol_version?: string | null;
+  frame_sequence?: number | null;
+  first_sample_index?: number | null;
+  observed_value?: any;
+  expected_value?: any;
+  relevant_counter_snapshot?: Record<string, any>;
+  possible_causes: string[];
+  suggested_actions: string[];
+  event_status: 'active' | 'resolved' | 'transient';
+  correlation_id?: string | null;
+  occurrence_count: number;
+  last_occurred_utc?: string | null;
+}
+
+export interface DiagnosticHypothesisItem {
+  title: string;
+  subsystem: string;
+  probability: 'HIGH' | 'MEDIUM' | 'LOW' | 'INVESTIGATIVE';
+  reasoning: string;
+  recommended_actions: string[];
+}
+
+export interface DiagnosticCorrelationReport {
+  case_id: string;
+  summary: string;
+  active_incident_count: number;
+  ranked_hypotheses: DiagnosticHypothesisItem[];
+  evidence_demarcation: Record<string, string>;
+}
+
+export interface UsbPortDescriptorItem {
+  port_name: string;
+  description: string;
+  hwid: string;
+  vid?: number | null;
+  pid?: number | null;
+  vid_hex?: string | null;
+  pid_hex?: string | null;
+  serial_number?: string | null;
+  manufacturer?: string | null;
+  product?: string | null;
+  interface?: string | null;
+  is_espressif_candidate: boolean;
+  candidate_reason: string;
+}
