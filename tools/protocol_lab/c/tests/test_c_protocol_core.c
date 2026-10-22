@@ -5,7 +5,7 @@
  * Course: EEE495 / EEE496 Senior Design Project — AuscultaForge
  * Module: C (Computer Application / Software Integration)
  * Author: Ege Çağın Tepe (Module C)
- * Reviewer: Ozan (Module B)
+ * Joint Reviewer: Ozan (Module B)
  */
 
 #include "protocol_types.h"
@@ -129,7 +129,7 @@ static void test_explicit_header_wire_encoding(void) {
     b_in.magic = PROFILE_B_MAGIC_U32;
     b_in.version = 1;
     b_in.msg_type = MSG_TYPE_AUDIO_DATA;
-    b_in.flags = 0x1234;
+    b_in.flags = 0x8041;                /* 16-bit flags test */
     b_in.sequence_id = 0xA1B2C3D4U;
     b_in.sample_rate_hz = 48000;
     b_in.timestamp_us = 0x0102030405060708ULL;
@@ -150,7 +150,7 @@ static void test_explicit_header_wire_encoding(void) {
     TEST_ASSERT(wire[0] == 0x31 && wire[1] == 0x43 && wire[2] == 0x53 && wire[3] == 0xAF, "Offset 0..3: magic");
     TEST_ASSERT(wire[4] == 1, "Offset 4: version");
     TEST_ASSERT(wire[5] == 1, "Offset 5: msg_type");
-    TEST_ASSERT(wire[6] == 0x34 && wire[7] == 0x12, "Offset 6..7: flags (0x1234 LE)");
+    TEST_ASSERT(wire[6] == 0x41 && wire[7] == 0x80, "Offset 6..7: flags (0x8041 LE)");
     TEST_ASSERT(wire[8] == 0xD4 && wire[9] == 0xC3 && wire[10] == 0xB2 && wire[11] == 0xA1, "Offset 8..11: sequence");
     TEST_ASSERT(wire[12] == 0x80 && wire[13] == 0xBB && wire[14] == 0x00 && wire[15] == 0x00, "Offset 12..15: 48000 Hz LE");
     TEST_ASSERT(wire[16] == 0x08 && wire[23] == 0x01, "Offset 16..23: timestamp_us LE");
@@ -167,6 +167,7 @@ static void test_explicit_header_wire_encoding(void) {
     st = packet_decode_header_profile_b(wire, &b_out);
     TEST_ASSERT(st == PROTOCOL_OK, "Decode Profile B");
     TEST_ASSERT(b_out.magic == b_in.magic, "Magic match");
+    TEST_ASSERT(b_out.flags == 0x8041, "Full 16-bit flags match");
     TEST_ASSERT(b_out.sequence_id == b_in.sequence_id, "Seq match");
     TEST_ASSERT(b_out.timestamp_us == b_in.timestamp_us, "TS match");
     TEST_ASSERT(b_out.sample_index_start == b_in.sample_index_start, "Idx match");
@@ -269,7 +270,6 @@ static void *producer_thread_func(void *arg) {
         written += (uint32_t)pushed;
 
         if (st == PROTOCOL_ERR_BUFFER_FULL || pushed == 0) {
-            /* Yield CPU to allow consumer to read */
             sched_yield();
         }
     }
@@ -337,7 +337,191 @@ static void test_concurrent_spsc_stress(void) {
 }
 
 /* ========================================================================= */
-/* 6. Parser Robustness & Sequence Wrapping (Gate 5)                         */
+/* 6. Canonical Control Messages & 72B Telemetry Suite                        */
+/* ========================================================================= */
+
+static void test_canonical_control_messages(void) {
+    printf("[TEST] Testing all canonical control message encoders, decoders, builders & parsers...\n");
+
+    /* Gate 3 & Gate 7: Exact wire payload size assertions (Field-by-field wire encoding guarantee) */
+    TEST_ASSERT(START_ACK_PAYLOAD_SIZE == 32U, "START_ACK wire payload MUST be exactly 32 bytes");
+    TEST_ASSERT(START_REQ_PAYLOAD_SIZE == 16U, "START_REQ wire payload MUST be exactly 16 bytes");
+    TEST_ASSERT(HELLO_REQ_PAYLOAD_SIZE == 4U, "HELLO_REQ wire payload MUST be exactly 4 bytes");
+    TEST_ASSERT(HELLO_ACK_PAYLOAD_SIZE == 24U, "HELLO_ACK wire payload MUST be exactly 24 bytes");
+    TEST_ASSERT(STOP_REQ_PAYLOAD_SIZE == 8U, "STOP_REQ wire payload MUST be exactly 8 bytes");
+    TEST_ASSERT(STATUS_TELEMETRY_PAYLOAD_SIZE == 72U, "STATUS wire payload MUST be exactly 72 bytes");
+    TEST_ASSERT(ERROR_PAYLOAD_SIZE == 8U, "ERROR wire payload MUST be exactly 8 bytes");
+
+    /* Gate 5: Normative deterministic known-answer sequence vectors */
+    #define CALC_NORMATIVE_SAMPLE(idx) (((uint32_t)(((uint64_t)(idx) * 16807ULL + 7ULL) & 0x00FFFFFFULL) & 0x00800000U) ? \
+        ((int32_t)((uint32_t)(((uint64_t)(idx) * 16807ULL + 7ULL) & 0x00FFFFFFULL) - 0x01000000U)) : \
+        ((int32_t)(((uint64_t)(idx) * 16807ULL + 7ULL) & 0x00FFFFFFULL)))
+
+    TEST_ASSERT(CALC_NORMATIVE_SAMPLE(0) == 7, "Known vector n=0 -> 7");
+    TEST_ASSERT(CALC_NORMATIVE_SAMPLE(1) == 16814, "Known vector n=1 -> 16814");
+    TEST_ASSERT(CALC_NORMATIVE_SAMPLE(500) == -8373709, "Known vector n=500 -> -8373709");
+    TEST_ASSERT(CALC_NORMATIVE_SAMPLE(1000) == 29791, "Known vector n=1000 -> 29791");
+    TEST_ASSERT(CALC_NORMATIVE_SAMPLE(479999) == -2497696, "Known vector n=479999 -> -2497696");
+
+    StreamPacketParser parser;
+    parser_init(&parser);
+    DecodedFrame frames[10];
+    size_t emitted = 0;
+
+    /* 1. HELLO_REQ & HELLO_ACK */
+    uint8_t hello_req_wire[64];
+    size_t hello_req_len = 0;
+    ProtocolStatus st = packet_build_hello_req(0xDEADBEEF, hello_req_wire, sizeof(hello_req_wire), &hello_req_len);
+    TEST_ASSERT(st == PROTOCOL_OK && hello_req_len == 48, "Build HELLO_REQ (48B)");
+
+    st = parser_feed_bytes(&parser, hello_req_wire, hello_req_len, frames, 10, &emitted);
+    TEST_ASSERT(st == PROTOCOL_OK && emitted == 1, "Parse HELLO_REQ");
+    TEST_ASSERT(frames[0].msg_type == MSG_TYPE_HELLO_REQ, "Opcode HELLO_REQ");
+    TEST_ASSERT(frames[0].sample_count == 0, "Control sample_count MUST be 0");
+    TEST_ASSERT(frames[0].control_payload_len == 4, "Control payload len 4");
+    HelloReqPayload parsed_hello_req;
+    packet_decode_hello_req(frames[0].control_payload, &parsed_hello_req);
+    TEST_ASSERT(parsed_hello_req.host_nonce == 0xDEADBEEF, "Host nonce echo check");
+
+    HelloAckPayload ack_in = {
+        .nonce_echo = 0xDEADBEEF,
+        .protocol_version_major = 1,
+        .protocol_version_minor = 0,
+        .supported_profiles_mask = 0x02,
+        .supported_encodings_mask = 0x01,
+        .hardware_sample_rate_hz = 48000,
+        .firmware_version_major = 1,
+        .firmware_version_minor = 0,
+        .firmware_version_patch = 0,
+        .reserved = 0,
+        .max_frame_samples = 256,
+        .capability_flags = 0x0007,
+        .device_uid_low = 0x12345678
+    };
+    uint8_t hello_ack_wire[128];
+    size_t hello_ack_len = 0;
+    st = packet_build_hello_ack(&ack_in, hello_ack_wire, sizeof(hello_ack_wire), &hello_ack_len);
+    TEST_ASSERT(st == PROTOCOL_OK && hello_ack_len == 68, "Build HELLO_ACK (68B)");
+
+    st = parser_feed_bytes(&parser, hello_ack_wire, hello_ack_len, frames, 10, &emitted);
+    TEST_ASSERT(st == PROTOCOL_OK && emitted == 1, "Parse HELLO_ACK");
+    TEST_ASSERT(frames[0].msg_type == MSG_TYPE_HELLO_ACK, "Opcode HELLO_ACK");
+    HelloAckPayload ack_out;
+    packet_decode_hello_ack(frames[0].control_payload, &ack_out);
+    TEST_ASSERT(ack_out.nonce_echo == 0xDEADBEEF, "Nonce echo match");
+    TEST_ASSERT(ack_out.hardware_sample_rate_hz == 48000, "HW rate 48000");
+
+    /* 2. START_REQ & START_ACK */
+    StartReqPayload start_req_in = {
+        .sample_rate_hz = 48000,
+        .target_samples = 480000,
+        .source_mode = SOURCE_MODE_SYNTH_RAMP,
+        .encoding = ENCODING_SIGNED_PCM_LSB_ALIGNED,
+        .channels = 1,
+        .profile_id = 2
+    };
+    uint8_t start_req_wire[128];
+    size_t start_req_len = 0;
+    st = packet_build_start_req(&start_req_in, start_req_wire, sizeof(start_req_wire), &start_req_len);
+    TEST_ASSERT(st == PROTOCOL_OK && start_req_len == 60, "Build START_REQ (60B)");
+
+    st = parser_feed_bytes(&parser, start_req_wire, start_req_len, frames, 10, &emitted);
+    TEST_ASSERT(st == PROTOCOL_OK && emitted == 1, "Parse START_REQ");
+    TEST_ASSERT(frames[0].msg_type == MSG_TYPE_STREAM_START_REQ, "Opcode START_REQ");
+    StartReqPayload start_req_out;
+    packet_decode_start_req(frames[0].control_payload, &start_req_out);
+    TEST_ASSERT(start_req_out.target_samples == 480000, "Target samples 480000");
+
+    StartAckPayload start_ack_in = {
+        .session_id = 0x9876543210ABCDEFULL,
+        .session_reference_time_us = 1000000,
+        .accepted_sample_rate_hz = 48000,
+        .accepted_target_samples = 480000,
+        .accepted_source_mode = SOURCE_MODE_SYNTH_RAMP,
+        .encoding = ENCODING_SIGNED_PCM_LSB_ALIGNED,
+        .channels = 1,
+        .profile_id = 2
+    };
+    uint8_t start_ack_wire[128];
+    size_t start_ack_len = 0;
+    st = packet_build_start_ack(&start_ack_in, start_ack_wire, sizeof(start_ack_wire), &start_ack_len);
+    TEST_ASSERT(st == PROTOCOL_OK && start_ack_len == 76, "Build START_ACK (76B)");
+
+    st = parser_feed_bytes(&parser, start_ack_wire, start_ack_len, frames, 10, &emitted);
+    TEST_ASSERT(st == PROTOCOL_OK && emitted == 1, "Parse START_ACK");
+    TEST_ASSERT(frames[0].msg_type == MSG_TYPE_STREAM_START_ACK, "Opcode START_ACK");
+    StartAckPayload start_ack_out;
+    packet_decode_start_ack(frames[0].control_payload, &start_ack_out);
+    TEST_ASSERT(start_ack_out.session_id == 0x9876543210ABCDEFULL, "Session ID match");
+
+    /* 3. STATUS & STOP_ACK (72B Telemetry) */
+    StatusTelemetryPayload telem_in = {
+        .session_id = 0x9876543210ABCDEFULL,
+        .generated_samples = 480000,
+        .fully_queued_samples = 480000,
+        .dropped_samples = 0,
+        .audio_frames_queued = 1875,
+        .dma_overflow_events = 0,
+        .ring_overflow_events = 0,
+        .usb_partial_write_events = 0,
+        .usb_timeout_events = 0,
+        .usb_disconnect_events = 0,
+        .audio_bytes_queued = 1875 * 1068,
+        .stop_reason = STOP_REASON_NORMAL_TARGET_REACHED,
+        .error_code = 0
+    };
+    uint8_t status_wire[256];
+    size_t status_len = 0;
+    st = packet_build_status(&telem_in, 100, 2000000, status_wire, sizeof(status_wire), &status_len);
+    TEST_ASSERT(st == PROTOCOL_OK && status_len == 116, "Build STATUS (116B)");
+
+    st = parser_feed_bytes(&parser, status_wire, status_len, frames, 10, &emitted);
+    TEST_ASSERT(st == PROTOCOL_OK && emitted == 1, "Parse STATUS");
+    TEST_ASSERT(frames[0].msg_type == MSG_TYPE_HEARTBEAT_STATUS, "Opcode STATUS");
+    StatusTelemetryPayload telem_out;
+    packet_decode_status_telemetry(frames[0].control_payload, &telem_out);
+    TEST_ASSERT(telem_out.generated_samples == 480000, "Telemetry generated samples match");
+    TEST_ASSERT(telem_out.audio_frames_queued == 1875, "Telemetry frames queued match");
+
+    uint8_t stop_ack_wire[256];
+    size_t stop_ack_len = 0;
+    st = packet_build_stop_ack(&telem_in, stop_ack_wire, sizeof(stop_ack_wire), &stop_ack_len);
+    TEST_ASSERT(st == PROTOCOL_OK && stop_ack_len == 116, "Build STOP_ACK (116B)");
+
+    st = parser_feed_bytes(&parser, stop_ack_wire, stop_ack_len, frames, 10, &emitted);
+    TEST_ASSERT(st == PROTOCOL_OK && emitted == 1, "Parse STOP_ACK");
+    TEST_ASSERT(frames[0].msg_type == MSG_TYPE_STREAM_STOP_ACK, "Opcode STOP_ACK");
+
+    /* 4. STOP_REQ and ERROR */
+    uint8_t stop_req_wire[128];
+    size_t stop_req_len = 0;
+    st = packet_build_stop_req(0x9876543210ABCDEFULL, stop_req_wire, sizeof(stop_req_wire), &stop_req_len);
+    TEST_ASSERT(st == PROTOCOL_OK && stop_req_len == 52, "Build STOP_REQ (52B)");
+
+    uint8_t err_wire[128];
+    size_t err_len = 0;
+    st = packet_build_error(0x00000003, 0x00000042, err_wire, sizeof(err_wire), &err_len);
+    TEST_ASSERT(st == PROTOCOL_OK && err_len == 52, "Build ERROR (52B)");
+
+    /* Verify parser safely rejects unknown opcode */
+    uint8_t unknown_wire[64];
+    memcpy(unknown_wire, hello_req_wire, hello_req_len);
+    unknown_wire[5] = 0xEE; /* Invalid opcode */
+    /* Update CRC so it's not a CRC error but an opcode error */
+    uint32_t fake_crc = crc32_compute(unknown_wire, 44);
+    unknown_wire[44] = (uint8_t)(fake_crc & 0xFF);
+    unknown_wire[45] = (uint8_t)((fake_crc >> 8) & 0xFF);
+    unknown_wire[46] = (uint8_t)((fake_crc >> 16) & 0xFF);
+    unknown_wire[47] = (uint8_t)((fake_crc >> 24) & 0xFF);
+    uint32_t prev_malformed = parser.malformed_headers;
+    parser_feed_bytes(&parser, unknown_wire, hello_req_len, frames, 10, &emitted);
+    TEST_ASSERT(parser.malformed_headers == prev_malformed + 1, "Unknown opcode safely counted as malformed");
+
+    printf("  ✓ Canonical control messages (HELLO, START, STOP, STATUS, ERROR) and 72B telemetry verified.\n");
+}
+
+/* ========================================================================= */
+/* 7. Parser Robustness & Sequence Wrapping (Gate 5)                         */
 /* ========================================================================= */
 
 static void test_parser_robustness(void) {
@@ -353,7 +537,7 @@ static void test_parser_robustness(void) {
     uint8_t partial_wire[1024];
     size_t partial_size = 0;
     ProtocolStatus st = packet_build_profile_b(
-        1, 1000000ULL, 0ULL, partial_samples, 100, 48000, 24, 1, 1, 0,
+        1, 1000000ULL, 0ULL, partial_samples, 100, 48000, 24, 0x0001, 1, 0,
         partial_wire, sizeof(partial_wire), &partial_size
     );
     TEST_ASSERT(st == PROTOCOL_OK, "Build partial frame");
@@ -374,8 +558,8 @@ static void test_parser_robustness(void) {
     uint8_t f1[512], f2[512];
     size_t s1 = 0, s2 = 0;
 
-    packet_build_profile_b(UINT32_MAX, 1000000ULL, 0, s_wrap, 16, 48000, 24, 1, 1, 0, f1, sizeof(f1), &s1);
-    packet_build_profile_b(0, 1000333ULL, 16, s_wrap, 16, 48000, 24, 1, 1, 0, f2, sizeof(f2), &s2);
+    packet_build_profile_b(UINT32_MAX, 1000000ULL, 0, s_wrap, 16, 48000, 24, 0x0001, 1, 0, f1, sizeof(f1), &s1);
+    packet_build_profile_b(0, 1000333ULL, 16, s_wrap, 16, 48000, 24, 0x0001, 1, 0, f2, sizeof(f2), &s2);
 
     parser_feed_bytes(&parser, f1, s1, decoded, 10, &emitted);
     TEST_ASSERT(emitted == 1, "Frame 1 parsed");
@@ -388,7 +572,7 @@ static void test_parser_robustness(void) {
     /* 3. Reordered frame test: sequence 10 arrives after sequence 15 */
     uint8_t f_late[512];
     size_t s_late = 0;
-    packet_build_profile_b(10, 1005000ULL, 160, s_wrap, 16, 48000, 24, 1, 1, 0, f_late, sizeof(f_late), &s_late);
+    packet_build_profile_b(10, 1005000ULL, 160, s_wrap, 16, 48000, 24, 0x0001, 1, 0, f_late, sizeof(f_late), &s_late);
     /* Set last_sequence_id = 15 */
     parser.quality_stats.last_sequence_id = 15;
     parser_feed_bytes(&parser, f_late, s_late, decoded, 10, &emitted);
@@ -408,7 +592,7 @@ static void test_parser_robustness(void) {
 
 int main(void) {
     printf("=================================================================\n");
-    printf("AuscultaForge Protocol Core — C11 Portable & Concurrency Suite\n");
+    printf("AuscultaForge Protocol Core — C11 Portable & Canonical Suite\n");
     printf("=================================================================\n");
 
     test_crc_known_vectors();
@@ -416,10 +600,11 @@ int main(void) {
     test_explicit_header_wire_encoding();
     test_ring_buffer_basic();
     test_concurrent_spsc_stress();
+    test_canonical_control_messages();
     test_parser_robustness();
 
     printf("=================================================================\n");
-    printf("ALL PORTABLE C11 CORE & CONCURRENCY TESTS PASSED (100%%)!\n");
+    printf("ALL PORTABLE C11 CANONICAL & CONCURRENCY TESTS PASSED (100%%)!\n");
     printf("=================================================================\n");
     return 0;
 }

@@ -3,17 +3,17 @@
 Course: EEE495 / EEE496 Senior Design Project — AuscultaForge
 Module: C (Computer Application / Software Integration)
 Author: Ege Çağın Tepe (Module C)
-Reviewer: Ozan (Module B)
+Joint Reviewer: Ozan (Module B)
 """
 
 import binascii
 from dataclasses import dataclass, field
 import struct
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 import numpy as np
 
 # Magic sequences
-PROFILE_A_MAGIC = b"\x55\xaa"           # 0xAA55 in little-endian
+PROFILE_A_MAGIC = b"\x55\xaa"           # 0xAA55 in little-endian (Historical Legacy)
 PROFILE_B_MAGIC = b"\x31\x43\x53\xaf"   # "1CSA" in ASCII little-endian (0xAF534331)
 
 PROFILE_A_HEADER_SIZE = 16
@@ -33,6 +33,40 @@ INT24_SCALE = 8388608.0
 
 MAX_DECODER_BUFFER_BYTES = 65536  # Safety bound preventing unbounded memory accumulation
 
+# Protocol Message Types (Opcodes)
+MSG_TYPE_AUDIO_DATA         = 0x01
+MSG_TYPE_HEARTBEAT_STATUS   = 0x02
+MSG_TYPE_STREAM_START_REQ   = 0x03
+MSG_TYPE_STREAM_START_ACK   = 0x04
+MSG_TYPE_STREAM_STOP_REQ    = 0x05
+MSG_TYPE_STREAM_STOP_ACK    = 0x06
+MSG_TYPE_CALIBRATION_TONE   = 0x07
+MSG_TYPE_ERROR_NOTIFICATION = 0x0F
+MSG_TYPE_HELLO_REQ          = 0x10
+MSG_TYPE_HELLO_ACK          = 0x11
+
+# Frame Flags Bitmask (16-bit)
+FRAME_FLAG_TIMESTAMP_VALID      = 1 << 0
+FRAME_FLAG_SAMPLE_DISCONTINUITY = 1 << 1
+FRAME_FLAG_DMA_BUFFER_OVERFLOW  = 1 << 2
+FRAME_FLAG_USB_QUEUE_OVERFLOW   = 1 << 3
+FRAME_FLAG_CLIPPING_DETECTED    = 1 << 4
+FRAME_FLAG_SIMULATED_SOURCE     = 1 << 5
+FRAME_FLAG_DIAGNOSTIC_TONE      = 1 << 6
+FRAME_FLAG_SESSION_ACTIVE       = 1 << 7
+
+# Control payload sizes (in bytes)
+CONTROL_PAYLOAD_SIZES: Dict[int, int] = {
+    MSG_TYPE_HEARTBEAT_STATUS:   72,
+    MSG_TYPE_STREAM_START_REQ:   16,
+    MSG_TYPE_STREAM_START_ACK:   32,
+    MSG_TYPE_STREAM_STOP_REQ:    8,
+    MSG_TYPE_STREAM_STOP_ACK:    72,
+    MSG_TYPE_ERROR_NOTIFICATION: 8,
+    MSG_TYPE_HELLO_REQ:          4,
+    MSG_TYPE_HELLO_ACK:          24,
+    MSG_TYPE_CALIBRATION_TONE:   0,
+}
 
 
 def crc16_ccitt(data: bytes, init: int = 0xFFFF, poly: int = 0x1021) -> int:
@@ -53,6 +87,220 @@ def crc32_ieee(data: bytes) -> int:
     return binascii.crc32(data) & 0xFFFFFFFF
 
 
+# =========================================================================
+# Control Payload Dataclasses & Codecs
+# =========================================================================
+
+@dataclass(slots=True)
+class StatusTelemetry:
+    """72-Byte Exact Hardware Telemetry Payload (STATUS and STOP_ACK)."""
+    session_id: int
+    generated_samples: int
+    fully_queued_samples: int
+    dropped_samples: int
+    audio_frames_queued: int
+    dma_overflow_events: int
+    ring_overflow_events: int
+    usb_partial_write_events: int
+    usb_timeout_events: int
+    usb_disconnect_events: int
+    audio_bytes_queued: int
+    stop_reason: int
+    error_code: int
+
+
+def encode_status_telemetry(t: StatusTelemetry) -> bytes:
+    """Encode 72-byte telemetry payload to little-endian bytes."""
+    return struct.pack(
+        "<QQQQIIIIIIQII",
+        t.session_id,
+        t.generated_samples,
+        t.fully_queued_samples,
+        t.dropped_samples,
+        t.audio_frames_queued,
+        t.dma_overflow_events,
+        t.ring_overflow_events,
+        t.usb_partial_write_events,
+        t.usb_timeout_events,
+        t.usb_disconnect_events,
+        t.audio_bytes_queued,
+        t.stop_reason,
+        t.error_code,
+    )
+
+
+def decode_status_telemetry(b: bytes) -> StatusTelemetry:
+    """Decode 72-byte telemetry payload from little-endian bytes."""
+    if len(b) < 72:
+        raise ValueError(f"Telemetry payload requires 72 bytes, got {len(b)}")
+    fields = struct.unpack("<QQQQIIIIIIQII", b[:72])
+    return StatusTelemetry(*fields)
+
+
+@dataclass(slots=True)
+class StartReq:
+    """16-Byte Stream Start Request Payload (START_REQ)."""
+    sample_rate_hz: int
+    target_samples: int
+    source_mode: int
+    encoding: int
+    channels: int
+    profile_id: int
+
+
+def encode_start_req(r: StartReq) -> bytes:
+    """Encode 16-byte start request payload to little-endian bytes."""
+    return struct.pack("<IQBBBB", r.sample_rate_hz, r.target_samples, r.source_mode, r.encoding, r.channels, r.profile_id)
+
+
+def decode_start_req(b: bytes) -> StartReq:
+    """Decode 16-byte start request payload from little-endian bytes."""
+    if len(b) < 16:
+        raise ValueError(f"StartReq payload requires 16 bytes, got {len(b)}")
+    fields = struct.unpack("<IQBBBB", b[:16])
+    return StartReq(*fields)
+
+
+@dataclass(slots=True)
+class StartAck:
+    """32-Byte Stream Start Acknowledge Payload (START_ACK)."""
+    session_id: int
+    session_reference_time_us: int
+    accepted_sample_rate_hz: int
+    accepted_target_samples: int
+    accepted_source_mode: int
+    encoding: int
+    channels: int
+    profile_id: int
+
+
+def encode_start_ack(a: StartAck) -> bytes:
+    """Encode 32-byte start acknowledge payload to little-endian bytes."""
+    return struct.pack(
+        "<QQIQBBBB",
+        a.session_id,
+        a.session_reference_time_us,
+        a.accepted_sample_rate_hz,
+        a.accepted_target_samples,
+        a.accepted_source_mode,
+        a.encoding,
+        a.channels,
+        a.profile_id,
+    )
+
+
+def decode_start_ack(b: bytes) -> StartAck:
+    """Decode 32-byte start acknowledge payload from little-endian bytes."""
+    if len(b) < 32:
+        raise ValueError(f"StartAck payload requires 32 bytes, got {len(b)}")
+    fields = struct.unpack("<QQIQBBBB", b[:32])
+    return StartAck(*fields)
+
+
+@dataclass(slots=True)
+class StopReq:
+    """8-Byte Stream Stop Request Payload (STOP_REQ)."""
+    session_id: int
+
+
+def encode_stop_req(r: StopReq) -> bytes:
+    """Encode 8-byte stop request payload to little-endian bytes."""
+    return struct.pack("<Q", r.session_id)
+
+
+def decode_stop_req(b: bytes) -> StopReq:
+    """Decode 8-byte stop request payload from little-endian bytes."""
+    if len(b) < 8:
+        raise ValueError(f"StopReq payload requires 8 bytes, got {len(b)}")
+    (session_id,) = struct.unpack("<Q", b[:8])
+    return StopReq(session_id=session_id)
+
+
+@dataclass(slots=True)
+class HelloReq:
+    """4-Byte Hello Request Payload (HELLO_REQ)."""
+    host_nonce: int
+
+
+def encode_hello_req(r: HelloReq) -> bytes:
+    """Encode 4-byte hello request payload to little-endian bytes."""
+    return struct.pack("<I", r.host_nonce)
+
+
+def decode_hello_req(b: bytes) -> HelloReq:
+    """Decode 4-byte hello request payload from little-endian bytes."""
+    if len(b) < 4:
+        raise ValueError(f"HelloReq payload requires 4 bytes, got {len(b)}")
+    (host_nonce,) = struct.unpack("<I", b[:4])
+    return HelloReq(host_nonce=host_nonce)
+
+
+@dataclass(slots=True)
+class HelloAck:
+    """24-Byte Proposed Hello Acknowledge Payload (HELLO_ACK)."""
+    nonce_echo: int
+    protocol_version_major: int
+    protocol_version_minor: int
+    supported_profiles_mask: int
+    supported_encodings_mask: int
+    hardware_sample_rate_hz: int
+    firmware_version_major: int
+    firmware_version_minor: int
+    firmware_version_patch: int
+    reserved: int
+    max_frame_samples: int
+    capability_flags: int
+    device_uid_low: int
+
+
+def encode_hello_ack(a: HelloAck) -> bytes:
+    """Encode 24-byte hello acknowledge payload to little-endian bytes."""
+    return struct.pack(
+        "<IBBBBIBBBB HHI",
+        a.nonce_echo,
+        a.protocol_version_major,
+        a.protocol_version_minor,
+        a.supported_profiles_mask,
+        a.supported_encodings_mask,
+        a.hardware_sample_rate_hz,
+        a.firmware_version_major,
+        a.firmware_version_minor,
+        a.firmware_version_patch,
+        a.reserved,
+        a.max_frame_samples,
+        a.capability_flags,
+        a.device_uid_low,
+    )
+
+
+def decode_hello_ack(b: bytes) -> HelloAck:
+    """Decode 24-byte hello acknowledge payload from little-endian bytes."""
+    if len(b) < 24:
+        raise ValueError(f"HelloAck payload requires 24 bytes, got {len(b)}")
+    fields = struct.unpack("<IBBBBIBBBB HHI", b[:24])
+    return HelloAck(*fields)
+
+
+@dataclass(slots=True)
+class ErrorNotification:
+    """8-Byte Proposed Error Notification Payload (ERROR)."""
+    error_code: int
+    error_context: int
+
+
+def encode_error(e: ErrorNotification) -> bytes:
+    """Encode 8-byte error notification payload to little-endian bytes."""
+    return struct.pack("<II", e.error_code, e.error_context)
+
+
+def decode_error(b: bytes) -> ErrorNotification:
+    """Decode 8-byte error notification payload from little-endian bytes."""
+    if len(b) < 8:
+        raise ValueError(f"ErrorNotification payload requires 8 bytes, got {len(b)}")
+    code, ctx = struct.unpack("<II", b[:8])
+    return ErrorNotification(error_code=code, error_context=ctx)
+
+
 @dataclass(slots=True)
 class DecodedPacket:
     """Decoded protocol packet."""
@@ -62,14 +310,21 @@ class DecodedPacket:
     sample_count: int
     sample_rate_hz: int
     meaningful_bits: int
-    flags: int
+    flags: int                          # Retains full 16 bits!
     encoding: int
     mcu_buffer_drops: int
     is_profile_b: bool
     crc_ok: bool
-    raw_samples: np.ndarray  # int32 array
-    normalized_samples: np.ndarray  # float32 array in [-1.0, +1.0]
+    raw_samples: np.ndarray             # int32 array (empty for control packets)
+    normalized_samples: np.ndarray      # float32 array in [-1.0, +1.0] (empty for control)
+    msg_type: int = MSG_TYPE_AUDIO_DATA # Opcode
+    control_payload: Optional[Any] = None
+    telemetry: Optional[StatusTelemetry] = None
 
+
+# =========================================================================
+# Packet Builders
+# =========================================================================
 
 def build_profile_a_packet(
     sequence: int,
@@ -78,7 +333,7 @@ def build_profile_a_packet(
     flags: int = 0,
     corrupt_crc: bool = False,
 ) -> bytes:
-    """Build a Profile A raw wire packet."""
+    """Build a Profile A raw wire packet (16-byte header + payload + 2B CRC16)."""
     count = len(samples)
     payload = np.asarray(samples, dtype="<i4").tobytes()
     header = struct.pack("<2sBBIIHH", PROFILE_A_MAGIC, 1, 1, sequence, timestamp_us & 0xFFFFFFFF, count, flags)
@@ -101,16 +356,18 @@ def build_profile_b_packet(
     mcu_drops: int = 0,
     corrupt_crc: bool = False,
 ) -> bytes:
-    """Build a Profile B raw wire packet (40-byte header + payload + 4B CRC32)."""
+    """Build a Profile B standard audio raw wire packet (40B header + payload + 4B CRC32).
+
+    Retains full 16-bit flags.
+    """
     count = len(samples)
     payload = np.asarray(samples, dtype="<i4").tobytes()
-    # Format: magic(4B), ver(1B), msg_type(1B), flags(2B), seq(4B), rate(4B), ts(8B), idx(8B), count(2B), bits(1B), container(1B), chan(1B), enc(1B), drops(2B)
     header = struct.pack(
         "<4sBBHIIQQHBBBBH",
         PROFILE_B_MAGIC,
         1,  # version
-        1,  # msg_type (Audio)
-        flags,
+        MSG_TYPE_AUDIO_DATA,
+        flags & 0xFFFF,  # 16-bit flags
         sequence_id,
         sample_rate_hz,
         timestamp_us,
@@ -120,7 +377,7 @@ def build_profile_b_packet(
         32,  # container_bits
         1,   # channels
         encoding,
-        mcu_drops,
+        mcu_drops & 0xFFFF,
     )
     assert len(header) == PROFILE_B_HEADER_SIZE, f"Header size must be 40, got {len(header)}"
     body = header + payload
@@ -130,15 +387,119 @@ def build_profile_b_packet(
     return body + struct.pack("<I", crc)
 
 
+def _build_control_packet(
+    msg_type: int,
+    payload: bytes,
+    flags: int = FRAME_FLAG_TIMESTAMP_VALID,
+    sequence_id: int = 0,
+    timestamp_us: int = 0,
+    corrupt_crc: bool = False,
+) -> bytes:
+    """Helper to build a 40B Profile B control packet with sample_count == 0."""
+    header = struct.pack(
+        "<4sBBHIIQQHBBBBH",
+        PROFILE_B_MAGIC,
+        1,  # version
+        msg_type,
+        flags & 0xFFFF,
+        sequence_id,
+        NOMINAL_SAMPLE_RATE_HZ,
+        timestamp_us,
+        0,  # sample_index_start is 0 for control frames
+        0,  # CRITICAL: sample_count MUST be 0 for control frames
+        NOMINAL_MEANINGFUL_BITS,
+        32,
+        1,
+        1,
+        0,
+    )
+    body = header + payload
+    crc = crc32_ieee(body)
+    if corrupt_crc:
+        crc ^= 0xFFFFFFFF
+    return body + struct.pack("<I", crc)
+
+
+def build_hello_req_packet(host_nonce: int, flags: int = FRAME_FLAG_TIMESTAMP_VALID) -> bytes:
+    """Build a HELLO_REQ packet (48 bytes total)."""
+    p = HelloReq(host_nonce=host_nonce)
+    return _build_control_packet(MSG_TYPE_HELLO_REQ, encode_hello_req(p), flags=flags)
+
+
+def build_hello_ack_packet(ack: HelloAck, flags: int = FRAME_FLAG_TIMESTAMP_VALID) -> bytes:
+    """Build a HELLO_ACK packet (68 bytes total)."""
+    return _build_control_packet(MSG_TYPE_HELLO_ACK, encode_hello_ack(ack), flags=flags)
+
+
+def build_start_req_packet(req: StartReq, flags: int = FRAME_FLAG_TIMESTAMP_VALID) -> bytes:
+    """Build a START_REQ packet (60 bytes total)."""
+    return _build_control_packet(MSG_TYPE_STREAM_START_REQ, encode_start_req(req), flags=flags)
+
+
+def build_start_ack_packet(ack: StartAck, flags: int = (FRAME_FLAG_TIMESTAMP_VALID | FRAME_FLAG_SESSION_ACTIVE)) -> bytes:
+    """Build a START_ACK packet (76 bytes total)."""
+    return _build_control_packet(
+        MSG_TYPE_STREAM_START_ACK,
+        encode_start_ack(ack),
+        flags=flags,
+        timestamp_us=ack.session_reference_time_us,
+    )
+
+
+def build_stop_req_packet(session_id: int, flags: int = FRAME_FLAG_TIMESTAMP_VALID) -> bytes:
+    """Build a STOP_REQ packet (52 bytes total)."""
+    p = StopReq(session_id=session_id)
+    return _build_control_packet(MSG_TYPE_STREAM_STOP_REQ, encode_stop_req(p), flags=flags)
+
+
+def build_stop_ack_packet(telem: StatusTelemetry, flags: int = FRAME_FLAG_TIMESTAMP_VALID) -> bytes:
+    """Build a STOP_ACK packet (116 bytes total)."""
+    return _build_control_packet(
+        MSG_TYPE_STREAM_STOP_ACK,
+        encode_status_telemetry(telem),
+        flags=flags,
+        sequence_id=telem.audio_frames_queued,
+    )
+
+
+def build_status_packet(
+    telem: StatusTelemetry,
+    sequence_id: int = 0,
+    timestamp_us: int = 0,
+    flags: int = (FRAME_FLAG_TIMESTAMP_VALID | FRAME_FLAG_SESSION_ACTIVE),
+) -> bytes:
+    """Build a STATUS telemetry packet (116 bytes total)."""
+    return _build_control_packet(
+        MSG_TYPE_HEARTBEAT_STATUS,
+        encode_status_telemetry(telem),
+        flags=flags,
+        sequence_id=sequence_id,
+        timestamp_us=timestamp_us,
+    )
+
+
+def build_error_packet(error_code: int, error_context: int = 0, flags: int = FRAME_FLAG_TIMESTAMP_VALID) -> bytes:
+    """Build an ERROR packet (52 bytes total)."""
+    p = ErrorNotification(error_code=error_code, error_context=error_context)
+    return _build_control_packet(MSG_TYPE_ERROR_NOTIFICATION, encode_error(p), flags=flags)
+
+
+# =========================================================================
+# Streaming Protocol Decoder
+# =========================================================================
+
 class StreamingProtocolDecoder:
-    """Streaming multi-fragment byte receiver and protocol decoder.
+    """Streaming multi-fragment byte receiver and canonical protocol decoder.
 
     Guarantees:
     - Never emits partial/fragmented packets prematurely.
     - Recovers stream lock automatically after encountering arbitrary line noise.
     - Slices combined / concatenated packets arriving in a single socket/pipe read.
     - Validates CRC-16 (Profile A) and CRC-32 (Profile B).
-    - Maintains exact sample-level continuity and error telemetry using RFC 3550 sequence logic.
+    - Accurately decodes all canonical control messages with sample_count == 0.
+    - Safely rejects unknown message types or malformed frames.
+    - Preserves all 16 bits of status flags.
+    - Maintains exact sample-level continuity and error telemetry on AUDIO frames only.
     - Strictly bounds internal memory accumulation to MAX_DECODER_BUFFER_BYTES.
     """
 
@@ -220,12 +581,30 @@ class StreamingProtocolDecoder:
                     bytes(self._buffer[:PROFILE_B_HEADER_SIZE]),
                 )
 
-                if ver != 1 or count == 0 or count > 2048:
+                if ver != 1:
                     self.malformed_headers += 1
                     del self._buffer[:4]
                     continue
 
-                payload_bytes = count * 4
+                if mtype == MSG_TYPE_AUDIO_DATA:
+                    if count == 0 or count > 2048:
+                        self.malformed_headers += 1
+                        del self._buffer[:4]
+                        continue
+                    payload_bytes = count * 4
+                elif mtype in CONTROL_PAYLOAD_SIZES:
+                    if count != 0:
+                        # Control frames MUST have sample_count == 0
+                        self.malformed_headers += 1
+                        del self._buffer[:4]
+                        continue
+                    payload_bytes = CONTROL_PAYLOAD_SIZES[mtype]
+                else:
+                    # Unknown opcode: reject safely
+                    self.malformed_headers += 1
+                    del self._buffer[:4]
+                    continue
+
                 total_frame_len = PROFILE_B_HEADER_SIZE + payload_bytes + PROFILE_B_TRAILER_SIZE
 
                 if len(self._buffer) < total_frame_len:
@@ -253,43 +632,90 @@ class StreamingProtocolDecoder:
                         crc_ok=False,
                         raw_samples=np.zeros(0, dtype=np.int32),
                         normalized_samples=np.zeros(0, dtype=np.float32),
+                        msg_type=mtype,
                     )
                     packets.append(pkt)
                     continue
 
-                # Parse payload
                 payload_bytes_raw = frame_bytes[PROFILE_B_HEADER_SIZE:-PROFILE_B_TRAILER_SIZE]
-                raw_samples = np.frombuffer(payload_bytes_raw, dtype="<i4").copy()
 
-                # Conversion to float32
-                if enc == 2:  # MSB aligned
-                    lsb_samples = np.right_shift(raw_samples, 8)
+                if mtype == MSG_TYPE_AUDIO_DATA:
+                    raw_samples = np.frombuffer(payload_bytes_raw, dtype="<i4").copy()
+                    if enc == 2:  # MSB aligned
+                        lsb_samples = np.right_shift(raw_samples, 8)
+                    else:
+                        lsb_samples = raw_samples
+
+                    scale = float(1 << (bits - 1))
+                    norm_samples = np.clip(lsb_samples.astype(np.float32) / scale, -1.0, 1.0)
+
+                    pkt = DecodedPacket(
+                        sequence_id=seq,
+                        timestamp_us=ts_us,
+                        sample_index_start=idx_start,
+                        sample_count=count,
+                        sample_rate_hz=rate,
+                        meaningful_bits=bits,
+                        flags=flags,
+                        encoding=enc,
+                        mcu_buffer_drops=drops,
+                        is_profile_b=True,
+                        crc_ok=True,
+                        raw_samples=raw_samples,
+                        normalized_samples=norm_samples,
+                        msg_type=mtype,
+                    )
+                    self._update_quality_stats(pkt)
+                    packets.append(pkt)
+
                 else:
-                    lsb_samples = raw_samples
+                    # Control message parsing
+                    control_obj = None
+                    telem_obj = None
 
-                scale = float(1 << (bits - 1))
-                norm_samples = np.clip(lsb_samples.astype(np.float32) / scale, -1.0, 1.0)
+                    try:
+                        if mtype in (MSG_TYPE_HEARTBEAT_STATUS, MSG_TYPE_STREAM_STOP_ACK):
+                            telem_obj = decode_status_telemetry(payload_bytes_raw)
+                            control_obj = telem_obj
+                        elif mtype == MSG_TYPE_STREAM_START_REQ:
+                            control_obj = decode_start_req(payload_bytes_raw)
+                        elif mtype == MSG_TYPE_STREAM_START_ACK:
+                            control_obj = decode_start_ack(payload_bytes_raw)
+                        elif mtype == MSG_TYPE_STREAM_STOP_REQ:
+                            control_obj = decode_stop_req(payload_bytes_raw)
+                        elif mtype == MSG_TYPE_HELLO_REQ:
+                            control_obj = decode_hello_req(payload_bytes_raw)
+                        elif mtype == MSG_TYPE_HELLO_ACK:
+                            control_obj = decode_hello_ack(payload_bytes_raw)
+                        elif mtype == MSG_TYPE_ERROR_NOTIFICATION:
+                            control_obj = decode_error(payload_bytes_raw)
+                    except Exception:
+                        self.malformed_headers += 1
+                        continue
 
-                pkt = DecodedPacket(
-                    sequence_id=seq,
-                    timestamp_us=ts_us,
-                    sample_index_start=idx_start,
-                    sample_count=count,
-                    sample_rate_hz=rate,
-                    meaningful_bits=bits,
-                    flags=flags,
-                    encoding=enc,
-                    mcu_buffer_drops=drops,
-                    is_profile_b=True,
-                    crc_ok=True,
-                    raw_samples=raw_samples,
-                    normalized_samples=norm_samples,
-                )
-                self._update_quality_stats(pkt)
-                packets.append(pkt)
+                    pkt = DecodedPacket(
+                        sequence_id=seq,
+                        timestamp_us=ts_us,
+                        sample_index_start=0,
+                        sample_count=0,
+                        sample_rate_hz=rate,
+                        meaningful_bits=bits,
+                        flags=flags,
+                        encoding=enc,
+                        mcu_buffer_drops=drops,
+                        is_profile_b=True,
+                        crc_ok=True,
+                        raw_samples=np.zeros(0, dtype=np.int32),
+                        normalized_samples=np.zeros(0, dtype=np.float32),
+                        msg_type=mtype,
+                        control_payload=control_obj,
+                        telemetry=telem_obj,
+                    )
+                    # Control frames MUST NOT update audio quality stats
+                    packets.append(pkt)
 
             else:
-                # Profile A (16-byte header)
+                # Profile A (Historical 16-byte header)
                 if len(self._buffer) < PROFILE_A_HEADER_SIZE:
                     break
 
@@ -331,6 +757,7 @@ class StreamingProtocolDecoder:
                         crc_ok=False,
                         raw_samples=np.zeros(0, dtype=np.int32),
                         normalized_samples=np.zeros(0, dtype=np.float32),
+                        msg_type=MSG_TYPE_AUDIO_DATA,
                     )
                     packets.append(pkt)
                     continue
@@ -353,6 +780,7 @@ class StreamingProtocolDecoder:
                     crc_ok=True,
                     raw_samples=raw_samples,
                     normalized_samples=norm_samples,
+                    msg_type=MSG_TYPE_AUDIO_DATA,
                 )
                 self._update_quality_stats(pkt)
                 packets.append(pkt)
