@@ -47,8 +47,15 @@ from .diagnostics.usb_doctor import UsbDiscoveryDoctor
 from .diagnostics.correlation_engine import RootCauseCorrelationEngine
 from .diagnostics.support_bundle import DiagnosticsSupportBundleExporter
 from .diagnostics.fault_injection_lab import FaultInjectionLab
+from .ml import (
+    ResearchModelRegistry,
+    ResearchInferenceService,
+    AudioValidationError,
+    ModelUnavailableError,
+)
 
 DEFAULT_ALLOWED_ORIGINS = [
+
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:5173",
@@ -225,6 +232,11 @@ def create_app(
         encoding: Optional[int] = 1
         channels: Optional[int] = 1
         timeout_s: Optional[float] = 3.0
+
+    class ResearchPredictRequest(BaseModel):
+        file_paths: list[str] = Field(..., min_length=1, max_length=4, description="1 to 4 PCG WAV recordings belonging to the patient")
+        model_id: Optional[str] = Field(default="af_murmur_mil_1.0", description="ID of the research model")
+        patient_identifier: Optional[str] = Field(default=None, description="Optional patient/subject identifier")
 
 
 
@@ -507,6 +519,38 @@ def create_app(
         if not engine or not engine.last_g1_evidence:
             raise HTTPException(status_code=404, detail="No deterministic G1 evidence report found.")
         return engine.last_g1_evidence
+
+    # ML Research Lab Endpoints
+    ml_registry = ResearchModelRegistry()
+    ml_service = ResearchInferenceService(registry=ml_registry)
+
+    @app.get("/api/research/ml/models")
+    def api_list_research_models() -> list[dict[str, Any]]:
+        return [m.to_dict() for m in ml_registry.list_models()]
+
+    @app.get("/api/research/ml/models/{model_id}")
+    def api_get_research_model(model_id: str) -> dict[str, Any]:
+        m = ml_registry.get_model(model_id)
+        if not m:
+            raise HTTPException(status_code=404, detail=f"Research model '{model_id}' not found.")
+        return m.to_dict()
+
+    @app.post("/api/research/ml/predict")
+    async def api_predict_research(req: ResearchPredictRequest) -> dict[str, Any]:
+        try:
+            return await ml_service.run_patient_murmur_inference(
+                file_paths=req.file_paths,
+                model_id=req.model_id or "af_murmur_mil_1.0",
+                patient_identifier=req.patient_identifier,
+            )
+        except AudioValidationError as ave:
+            raise HTTPException(status_code=400, detail=str(ave))
+        except ModelUnavailableError as mue:
+            raise HTTPException(status_code=503, detail=str(mue))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Research inference failed: {e}")
+
+
 
 
     # Virtual Integration Bench Endpoints (Software-Only Known-Answer Testing)
