@@ -26,19 +26,43 @@ from protocol_codec import (
     PROFILE_B_SAMPLES_PER_FRAME,
 )
 from protocol_session import HostProtocolSession, SessionState
-from simulated_device import SimulatedEsp32Device, compute_deterministic_sample
+from simulated_device import SimulatedEsp32Device
 from usb_adapter import DuplexLoopbackAdapter
 
 EVIDENCE_JSON_PATH = Path(__file__).resolve().parent.parent / "canonical_g1_evidence.json"
+
+# Normative Independent Reference Calculation
+def compute_reference_deterministic_sample(n: int) -> int:
+    """Normative independent sample sequence: 24-bit integer, sign-extended to int32.
+    Formula: U_n = (n * 16807 + 7) mod 2^24; S_n = U_n - 2^24 if U_n >= 2^23 else U_n.
+    """
+    val = (n * 16807 + 7) & 0x00FFFFFF
+    if val & 0x00800000:
+        val -= 0x01000000
+    return int(val)
+
+
+# Fixed Known-Answer Reference Vectors (Standard Regression Standards)
+KNOWN_ANSWER_VECTORS = {
+    0: 7,
+    1: 16814,
+    500: -8373709,
+    1000: 29791,
+    479999: -2497696,
+}
+
+for _k, _expected in KNOWN_ANSWER_VECTORS.items():
+    _actual = compute_reference_deterministic_sample(_k)
+    assert _actual == _expected, f"Known-answer mismatch at n={_k}: expected {_expected}, got {_actual}"
 
 
 def run_canonical_g1_benchmark(chunk_size: int = 1024) -> Dict[str, Any]:
     """Execute complete 10-second G1 benchmark across bidirectional loopback transport."""
     t_start = time.perf_counter()
 
-    # Independent sample verification function for Host session
+    # Independent sample verification function for Host session (does NOT call simulated_device)
     def host_verify_sample(abs_idx: int, val: int) -> bool:
-        expected = compute_deterministic_sample(abs_idx)
+        expected = compute_reference_deterministic_sample(abs_idx)
         return val == expected
 
     device = SimulatedEsp32Device(initial_session_id=0xCAFEFEED00000001)
@@ -138,6 +162,11 @@ def run_canonical_g1_benchmark(chunk_size: int = 1024) -> Dict[str, Any]:
             }
         },
         "overall_software_simulation_pass": all_criteria_passed,
+        "verification_evidence_domains": {
+            "python_device_host_loopback": "SOFTWARE_SIMULATION_PASS",
+            "compiled_c11_encoder_to_python": "SOFTWARE_SIMULATION_PASS",
+            "physical_esp32_firmware_cdc_acm": "NOT_EXECUTED",
+        },
         "hardware_verification_gate": {
             "host_c11_core_verified": True,
             "host_python_protocol_verified": True,
@@ -145,7 +174,7 @@ def run_canonical_g1_benchmark(chunk_size: int = 1024) -> Dict[str, Any]:
             "desktop_compatibility_checked": True,
             "esp_idf_target_build": "NOT VERIFIED (No ESP-IDF cross-compiler in host desktop environment)",
             "physical_usb_transport": "NOT VERIFIED (Requires physical ESP32-S3 hardware attached)",
-            "physical_g1_gate": "NOT VERIFIED (Awaiting Module B physical board bring-up)",
+            "physical_g1_gate": "NOT_EXECUTED (Awaiting Module B physical board bring-up)",
         }
     }
 

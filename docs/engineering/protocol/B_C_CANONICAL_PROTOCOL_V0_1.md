@@ -29,7 +29,7 @@ Operation **CANONICAL PROTOCOL v0.1** establishes a single, byte-exact, bidirect
 
 ## 2. Byte-Exact Profile B Header (40 Bytes)
 
-The Profile B header is exactly 40 bytes (`0x28`). All multi-byte numeric fields are encoded in **standard Little-Endian (`<`) byte order**. Every field is placed on its natural alignment boundary (1, 2, 4, or 8 bytes), guaranteeing identical memory layout across Xtensa LX7 (ESP32-S3), x86_64, and ARM64.
+The Profile B header is exactly 40 bytes (`0x28`). All multi-byte numeric fields are encoded in **standard Little-Endian (`<`) byte order**. While fields are intentionally laid out along natural alignment boundaries (1, 2, 4, or 8 bytes) to simplify parsing, **in-memory C struct layout is not assumed to be automatically identical across disparate compilers or ABIs**. The normative cross-platform wire guarantee is strictly provided by explicit, field-by-field little-endian serialization and deserialization in both C and Python implementations.
 
 ### 2.1 Header Field Map (Offsets 0x00 .. 0x27)
 
@@ -145,7 +145,8 @@ Sent by ESP32 to acknowledge stream initiation and establish session:
 | `0x1D` | `encoding` | `uint8_t` | Confirmed sample encoding. |
 | `0x1E` | `channels` | `uint8_t` | Confirmed channel count (`1`). |
 | `0x1F` | `profile_id` | `uint8_t` | Confirmed profile (`2`). |
-| `0x20 .. 0x27` | *reserved* | `uint8_t[8]` | Alignment padding; must be all `0`. |
+
+**Total START_ACK Payload Size:** Exactly `32 bytes` (`0x20`). There is no reserved padding trailer.
 
 ### 5.5 `STOP_REQ` Payload (8 Bytes) — Host → ESP32
 Sent by host to command orderly termination of an ongoing stream:
@@ -249,6 +250,24 @@ stateDiagram-v2
   - Positive full scale (+FS): `0x007FFFFF` (+8,388,607)
 - **Normalization Formula to Float32 [-1.0, +1.0]:**
   $$\text{normalized} = \text{clip}\left(\frac{\text{raw\_sample}}{8388608.0}, -1.0, +1.0\right)$$
+
+### 7.1 Normative Deterministic Integer Sequence (G1 Source Mode 1)
+
+For hardware bring-up and G1 verification, `source_mode = 1` requires the ESP32 transmitter to emit a deterministic, mathematically verifiable pseudo-random integer sequence rather than non-deterministic live microphone audio:
+
+1. **Origin & Indexing:** Sample index $n \in \{0, 1, 2, \dots, 479999\}$ is the 0-indexed absolute cumulative sample counter for the active session.
+2. **Modulo Arithmetic (24-bit unsigned):**
+   $$U_n = (n \times 16807 + 7) \bmod 2^{24}$$
+3. **Sign Extension to Signed 32-bit Container (`int32_t`):**
+   $$S_n = \begin{cases} U_n - 2^{24}, & \text{if } U_n \ge 2^{23} \\ U_n, & \text{if } U_n < 2^{23} \end{cases}$$
+4. **Known-Answer Reference Vectors (Regression Standards):**
+   - $n = 0 \implies S_0 = 7$ (`0x00000007`)
+   - $n = 1 \implies S_1 = 16814$ (`0x000041AE`)
+   - $n = 500 \implies S_{500} = -8373709$ (`0xFF803A33`)
+   - $n = 1000 \implies S_{1000} = 29791$ (`0x0000745F`)
+   - $n = 479999 \implies S_{479999} = -2497696$ (`0xFFD9E360`)
+
+Every physical or simulated G1 verification must independently evaluate $S_n$ without sharing generator functions across the observer and generator boundaries.
 
 ---
 

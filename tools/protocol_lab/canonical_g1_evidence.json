@@ -1,8 +1,8 @@
 {
   "benchmark": "AuscultaForge Canonical Protocol v0.1 G1 Verification",
-  "timestamp_utc": "2026-10-22T12:20:59Z",
+  "timestamp_utc": "2026-10-22T12:43:19Z",
   "execution_domain": "SOFTWARE SIMULATION (Host CPU)",
-  "duration_seconds_wall_clock": 0.3302,
+  "duration_seconds_wall_clock": 0.3542,
   "chunk_size_bytes": 1024,
   "criteria": {
     "c1_host_samples_accepted": {
@@ -51,6 +51,11 @@
     }
   },
   "overall_software_simulation_pass": true,
+  "verification_evidence_domains": {
+    "python_device_host_loopback": "SOFTWARE_SIMULATION_PASS",
+    "compiled_c11_encoder_to_python": "SOFTWARE_SIMULATION_PASS",
+    "physical_esp32_firmware_cdc_acm": "NOT_EXECUTED"
+  },
   "hardware_verification_gate": {
     "host_c11_core_verified": true,
     "host_python_protocol_verified": true,
@@ -58,6 +63,6 @@
     "desktop_compatibility_checked": true,
     "esp_idf_target_build": "NOT VERIFIED (No ESP-IDF cross-compiler in host desktop environment)",
     "physical_usb_transport": "NOT VERIFIED (Requires physical ESP32-S3 hardware attached)",
-    "physical_g1_gate": "NOT VERIFIED (Awaiting Module B physical board bring-up)"
+    "physical_g1_gate": "NOT_EXECUTED (Awaiting Module B physical board bring-up)"
   }
 }

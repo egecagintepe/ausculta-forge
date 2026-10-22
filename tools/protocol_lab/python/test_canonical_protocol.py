@@ -461,3 +461,88 @@ class TestTransportAdapterSafety:
         telem = adapter.get_telemetry()
         assert telem["transport_type"] == "USB_CDC_ACM"
         assert telem["state"] == "ERROR"
+
+
+class TestControlWireRegressionVectors:
+    """Exact wire sizing and regression vectors for B/C protocol wire contract."""
+
+    def test_start_ack_exact_size_and_layout(self):
+        """Gate 3: START_ACK payload MUST be exactly 32 bytes without contradictory 8 reserved bytes."""
+        ack = StartAck(
+            session_id=0x0102030405060708,
+            session_reference_time_us=0x1122334455667788,
+            accepted_sample_rate_hz=48000,
+            accepted_target_samples=480000,
+            accepted_source_mode=1,
+            encoding=1,
+            channels=1,
+            profile_id=2,
+        )
+        wire = encode_start_ack(ack)
+        assert len(wire) == 32, f"START_ACK payload must be exactly 32 bytes, got {len(wire)}"
+
+        # Verify exact byte layout (little-endian)
+        # 0x00..0x07: session_id
+        assert wire[0:8] == bytes([0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01])
+        # 0x08..0x0F: reference time
+        assert wire[8:16] == bytes([0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11])
+        # 0x10..0x13: 48000 Hz = 0x0000BB80
+        assert wire[16:20] == bytes([0x80, 0xBB, 0x00, 0x00])
+        # 0x14..0x1B: 480000 samples = 0x0000000000075300
+        assert wire[20:28] == bytes([0x00, 0x53, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00])
+        # 0x1C: source_mode = 1
+        assert wire[28] == 1
+        # 0x1D: encoding = 1
+        assert wire[29] == 1
+        # 0x1E: channels = 1
+        assert wire[30] == 1
+        # 0x1F: profile_id = 2
+        assert wire[31] == 2
+
+        # Roundtrip decode
+        decoded = decode_start_ack(wire)
+        assert decoded.session_id == 0x0102030405060708
+        assert decoded.accepted_sample_rate_hz == 48000
+        assert decoded.accepted_target_samples == 480000
+        assert decoded.accepted_source_mode == 1
+        assert decoded.encoding == 1
+        assert decoded.channels == 1
+        assert decoded.profile_id == 2
+
+    def test_all_control_payload_sizes_strict(self):
+        """Gate 7: Verify all canonical control message payload sizes match spec."""
+        # HELLO_REQ = 4 bytes
+        assert len(encode_hello_req(HelloReq(host_nonce=0x12345678))) == 4
+        # HELLO_ACK = 24 bytes
+        h_ack = HelloAck(
+            nonce_echo=0x12345678, protocol_version_major=1, protocol_version_minor=0,
+            supported_profiles_mask=2, supported_encodings_mask=1, hardware_sample_rate_hz=48000,
+            firmware_version_major=1, firmware_version_minor=0, firmware_version_patch=0,
+            reserved=0, max_frame_samples=256, capability_flags=7, device_uid_low=0x53433332
+        )
+        assert len(encode_hello_ack(h_ack)) == 24
+        # START_REQ = 16 bytes
+        s_req = StartReq(sample_rate_hz=48000, target_samples=480000, source_mode=1, encoding=1, channels=1, profile_id=2)
+        assert len(encode_start_req(s_req)) == 16
+        # START_ACK = 32 bytes
+        s_ack = StartAck(session_id=1, session_reference_time_us=0, accepted_sample_rate_hz=48000,
+                         accepted_target_samples=480000, accepted_source_mode=1, encoding=1, channels=1, profile_id=2)
+        assert len(encode_start_ack(s_ack)) == 32
+        # STOP_REQ = 8 bytes
+        assert len(encode_stop_req(StopReq(session_id=1))) == 8
+        # STATUS / STOP_ACK = 72 bytes
+        telem = StatusTelemetry(
+            session_id=1, generated_samples=480000, fully_queued_samples=480000, dropped_samples=0,
+            audio_frames_queued=1875, dma_overflow_events=0, ring_overflow_events=0,
+            usb_partial_write_events=0, usb_timeout_events=0, usb_disconnect_events=0,
+            audio_bytes_queued=1875 * 1068, stop_reason=0, error_code=0
+        )
+        assert len(encode_status_telemetry(telem)) == 72
+        # ERROR = 8 bytes
+        assert len(encode_error(ErrorNotification(error_code=1, error_context=0))) == 8
+
+    def test_normative_deterministic_known_answer_vectors(self):
+        """Gate 5: Test known-answer vectors for normative integer sequence."""
+        from canonical_g1_bench import compute_reference_deterministic_sample, KNOWN_ANSWER_VECTORS
+        for n, expected_val in KNOWN_ANSWER_VECTORS.items():
+            assert compute_reference_deterministic_sample(n) == expected_val

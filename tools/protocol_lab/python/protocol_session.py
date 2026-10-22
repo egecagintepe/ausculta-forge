@@ -9,6 +9,7 @@ Session Lifecycle:
 DISCONNECTED -> HELLO_PENDING -> READY -> START_PENDING -> STREAMING -> STOPPING -> COMPLETE.
 """
 
+from collections import deque
 from enum import Enum
 import random
 import time
@@ -84,7 +85,11 @@ class SessionState(str, Enum):
 class HostProtocolSession:
     """Deterministic, testable host-side session manager for B/C protocol."""
 
-    def __init__(self, sample_validator: Optional[Callable[[int, int], bool]] = None) -> None:
+    def __init__(
+        self,
+        sample_validator: Optional[Callable[[int, int], bool]] = None,
+        max_stored_audio_frames: int = 128,
+    ) -> None:
         self.state: SessionState = SessionState.DISCONNECTED
         self.active_session_id: Optional[int] = None
         self.host_nonce: Optional[int] = None
@@ -104,9 +109,10 @@ class HostProtocolSession:
         self.expected_next_sample_index: int = 0
         self.last_audio_sequence: Optional[int] = None
 
-        # Diagnostic records
+        # Diagnostic records & bounded memory ring for audio frames
         self.error_log: List[str] = []
-        self.received_audio_frames: List[DecodedPacket] = []
+        self.max_stored_audio_frames = max_stored_audio_frames
+        self.received_audio_frames: deque = deque(maxlen=max_stored_audio_frames)
 
     def reset_session(self) -> None:
         """Invalidate session ID and reset accounting for new session."""
@@ -147,6 +153,7 @@ class HostProtocolSession:
     ) -> bytes:
         """Transition from READY to START_PENDING and emit START_REQ."""
         if self.state != SessionState.READY:
+            self.state = SessionState.ERROR
             raise RuntimeError(f"Cannot request start in state {self.state}; must be READY.")
 
         self.active_start_config = StartReq(
@@ -163,9 +170,11 @@ class HostProtocolSession:
     def request_stop(self) -> bytes:
         """Transition to STOPPING and emit STOP_REQ."""
         if self.state not in (SessionState.STREAMING, SessionState.START_PENDING):
+            self.state = SessionState.ERROR
             raise RuntimeError(f"Cannot request stop in state {self.state}; must be STREAMING or START_PENDING.")
 
         if self.active_session_id is None:
+            self.state = SessionState.ERROR
             raise RuntimeError("Cannot stop without an active session ID.")
 
         self.state = SessionState.STOPPING
@@ -181,6 +190,7 @@ class HostProtocolSession:
     def _dispatch_packet(self, pkt: DecodedPacket) -> None:
         if not pkt.crc_ok:
             self.error_log.append(f"CRC error detected on seq {pkt.sequence_id}, opcode {pkt.msg_type}")
+            self.state = SessionState.ERROR
             return
 
         opcode = pkt.msg_type
@@ -200,10 +210,15 @@ class HostProtocolSession:
 
     def _handle_hello_ack(self, pkt: DecodedPacket) -> None:
         if self.state != SessionState.HELLO_PENDING:
-            self.error_log.append(f"Unexpected HELLO_ACK received in state {self.state}")
+            self.error_log.append(f"Unexpected or stale HELLO_ACK received in state {self.state}")
+            self.state = SessionState.ERROR
             return
 
         ack: HelloAck = pkt.control_payload
+        if ack.protocol_version_major != 1:
+            self.error_log.append(f"HELLO_ACK protocol version mismatch: expected 1, got {ack.protocol_version_major}")
+            self.state = SessionState.ERROR
+            return
         if ack.nonce_echo != self.host_nonce:
             self.state = SessionState.ERROR
             self.error_log.append(f"HELLO_ACK nonce mismatch: expected {self.host_nonce:#x}, got {ack.nonce_echo:#x}")
@@ -214,7 +229,8 @@ class HostProtocolSession:
 
     def _handle_start_ack(self, pkt: DecodedPacket) -> None:
         if self.state != SessionState.START_PENDING:
-            self.error_log.append(f"Unexpected START_ACK received in state {self.state}")
+            self.error_log.append(f"Unexpected or stale START_ACK received in state {self.state}")
+            self.state = SessionState.ERROR
             return
 
         ack: StartAck = pkt.control_payload
@@ -222,6 +238,45 @@ class HostProtocolSession:
             self.state = SessionState.ERROR
             self.error_log.append("Device returned invalid zero session_id in START_ACK")
             return
+
+        # Strict Configuration Verification
+        if self.active_start_config is not None:
+            if ack.accepted_sample_rate_hz != self.active_start_config.sample_rate_hz:
+                self.state = SessionState.ERROR
+                self.error_log.append(
+                    f"START_ACK sample rate mismatch: expected {self.active_start_config.sample_rate_hz}, got {ack.accepted_sample_rate_hz}"
+                )
+                return
+            if ack.accepted_target_samples != self.active_start_config.target_samples:
+                self.state = SessionState.ERROR
+                self.error_log.append(
+                    f"START_ACK target samples mismatch: expected {self.active_start_config.target_samples}, got {ack.accepted_target_samples}"
+                )
+                return
+            if ack.accepted_source_mode != self.active_start_config.source_mode:
+                self.state = SessionState.ERROR
+                self.error_log.append(
+                    f"START_ACK source mode mismatch: expected {self.active_start_config.source_mode}, got {ack.accepted_source_mode}"
+                )
+                return
+            if ack.encoding != self.active_start_config.encoding:
+                self.state = SessionState.ERROR
+                self.error_log.append(
+                    f"START_ACK encoding mismatch: expected {self.active_start_config.encoding}, got {ack.encoding}"
+                )
+                return
+            if ack.channels != self.active_start_config.channels:
+                self.state = SessionState.ERROR
+                self.error_log.append(
+                    f"START_ACK channels mismatch: expected {self.active_start_config.channels}, got {ack.channels}"
+                )
+                return
+            if ack.profile_id != self.active_start_config.profile_id:
+                self.state = SessionState.ERROR
+                self.error_log.append(
+                    f"START_ACK profile mismatch: expected {self.active_start_config.profile_id}, got {ack.profile_id}"
+                )
+                return
 
         self.active_session_id = ack.session_id
 
@@ -239,6 +294,12 @@ class HostProtocolSession:
     def _handle_audio_frame(self, pkt: DecodedPacket) -> None:
         if self.state not in (SessionState.STREAMING, SessionState.STOPPING):
             self.error_log.append(f"AUDIO frame received in invalid state {self.state}")
+            self.state = SessionState.ERROR
+            return
+
+        if pkt.sample_count == 0:
+            self.error_log.append("AUDIO frame with sample_count == 0 received")
+            self.state = SessionState.ERROR
             return
 
         # Check sample index continuity
@@ -261,12 +322,7 @@ class HostProtocolSession:
         self.last_audio_sequence = pkt.sequence_id
         self.received_audio_frames.append(pkt)
 
-        # Check target samples auto-stop condition
-        if self.active_start_config and self.active_start_config.target_samples > 0:
-            if self.host_samples_accepted >= self.active_start_config.target_samples:
-                if self.state == SessionState.STREAMING:
-                    # Host target reached
-                    pass
+        # Note: Target reached does NOT transition to COMPLETE. STOP_ACK is required.
 
     def _handle_status(self, pkt: DecodedPacket) -> None:
         self.latest_telemetry = pkt.telemetry
@@ -274,6 +330,20 @@ class HostProtocolSession:
     def _handle_stop_ack(self, pkt: DecodedPacket) -> None:
         if self.state != SessionState.STOPPING:
             self.error_log.append(f"Unexpected STOP_ACK received in state {self.state}")
+            self.state = SessionState.ERROR
+            return
+
+        if pkt.telemetry is None:
+            self.error_log.append("STOP_ACK packet missing telemetry payload")
+            self.state = SessionState.ERROR
+            return
+
+        if pkt.telemetry.session_id != self.active_session_id:
+            self.error_log.append(
+                f"STOP_ACK session_id mismatch: expected {self.active_session_id:#x}, got {pkt.telemetry.session_id:#x}"
+            )
+            self.state = SessionState.ERROR
+            return
 
         self.final_telemetry = pkt.telemetry
         self.latest_telemetry = pkt.telemetry
@@ -286,6 +356,7 @@ class HostProtocolSession:
 
     def handle_disconnect(self) -> None:
         """Physical or transport disconnect event."""
+        self.error_log.append(f"Transport disconnected (previous state: {self.state})")
         self.active_session_id = None
         self.state = SessionState.DISCONNECTED
         self.decoder.reset()

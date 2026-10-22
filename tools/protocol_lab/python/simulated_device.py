@@ -121,9 +121,18 @@ class SimulatedEsp32Device:
         self.corrupt_crc_frames: Set[int] = set()
         self.drop_frames: Set[int] = set()
         self.duplicate_frames: Set[int] = set()
+        self.corrupt_sample_indices: Set[int] = set()
         self.corrupt_nonce: bool = False
+        self.missing_hello_ack: bool = False
         self.reject_config: bool = False
+        self.wrong_start_encoding: bool = False
+        self.zero_session_id: bool = False
         self.stale_session_id: bool = False
+        self.missing_stop_ack: bool = False
+        self.wrong_stop_session_id: bool = False
+        self.falsify_telemetry: Optional[Dict[str, int]] = None
+        self.stall_streaming: bool = False
+        self.cap_samples: Optional[int] = None
         self.status_interval_frames: int = 0
 
     def connect(self) -> None:
@@ -150,6 +159,8 @@ class SimulatedEsp32Device:
                 continue
 
             if pkt.msg_type == MSG_TYPE_HELLO_REQ:
+                if self.missing_hello_ack:
+                    continue
                 req: HelloReq = pkt.control_payload
                 nonce = (req.host_nonce ^ 0xFF) if self.corrupt_nonce else req.host_nonce
                 ack = HelloAck(
@@ -185,13 +196,16 @@ class SimulatedEsp32Device:
                 self.samples_dropped = 0
                 self.audio_frames_queued = 0
 
+                assigned_session_id = 0 if self.zero_session_id else self.current_session_id
+                assigned_encoding = 99 if self.wrong_start_encoding else req_start.encoding
+
                 ack_start = StartAck(
-                    session_id=self.current_session_id,
+                    session_id=assigned_session_id,
                     session_reference_time_us=self.t0_us,
                     accepted_sample_rate_hz=req_start.sample_rate_hz,
                     accepted_target_samples=req_start.target_samples,
                     accepted_source_mode=req_start.source_mode,
-                    encoding=req_start.encoding,
+                    encoding=assigned_encoding,
                     channels=req_start.channels,
                     profile_id=req_start.profile_id,
                 )
@@ -199,6 +213,8 @@ class SimulatedEsp32Device:
                 reply.extend(build_start_ack_packet(ack_start))
 
             elif pkt.msg_type == MSG_TYPE_STREAM_STOP_REQ:
+                if self.missing_stop_ack:
+                    continue
                 stop_req: StopReq = pkt.control_payload
                 if self.stale_session_id or stop_req.session_id != self.current_session_id:
                     err = build_error_packet(error_code=0x00000003, error_context=int(stop_req.session_id & 0xFFFFFFFF))
@@ -207,6 +223,22 @@ class SimulatedEsp32Device:
 
                 self.device_state = "STOPPED"
                 telem = self.get_current_telemetry(stop_reason=1)
+                if self.wrong_stop_session_id:
+                    telem = StatusTelemetry(
+                        session_id=0xDEADBEEF00000000,
+                        generated_samples=telem.generated_samples,
+                        fully_queued_samples=telem.fully_queued_samples,
+                        dropped_samples=telem.dropped_samples,
+                        audio_frames_queued=telem.audio_frames_queued,
+                        dma_overflow_events=telem.dma_overflow_events,
+                        ring_overflow_events=telem.ring_overflow_events,
+                        usb_partial_write_events=telem.usb_partial_write_events,
+                        usb_timeout_events=telem.usb_timeout_events,
+                        usb_disconnect_events=telem.usb_disconnect_events,
+                        audio_bytes_queued=telem.audio_bytes_queued,
+                        stop_reason=telem.stop_reason,
+                        error_code=telem.error_code,
+                    )
                 reply.extend(build_stop_ack_packet(telem))
 
         return bytes(reply)
@@ -216,28 +248,44 @@ class SimulatedEsp32Device:
         if self.device_state != "STREAMING":
             return b""
 
-        # Cap generation at target_samples if configured
-        if self.active_config and self.active_config.target_samples > 0:
-            if self.samples_generated >= self.active_config.target_samples:
-                return b""
+        if self.stall_streaming:
+            return b""
+
+        # Cap generation at target_samples or injected cap_samples if configured
+        target_limit = self.active_config.target_samples if (self.active_config and self.active_config.target_samples > 0) else None
+        if self.cap_samples is not None:
+            target_limit = min(target_limit, self.cap_samples) if target_limit is not None else self.cap_samples
+
+        if target_limit is not None and self.samples_generated >= target_limit:
+            return b""
+
+        n_samples = PROFILE_B_SAMPLES_PER_FRAME
+        if target_limit is not None and (self.samples_generated + n_samples) > target_limit:
+            n_samples = target_limit - self.samples_generated
+        if n_samples <= 0:
+            return b""
 
         frame_idx = self.frames_generated
-        first_sample_idx = frame_idx * PROFILE_B_SAMPLES_PER_FRAME
+        first_sample_idx = self.samples_generated
 
-        # Generate 256 samples
-        samples = np.empty(PROFILE_B_SAMPLES_PER_FRAME, dtype=np.int32)
-        for s in range(PROFILE_B_SAMPLES_PER_FRAME):
-            samples[s] = compute_deterministic_sample(first_sample_idx + s)
+        # Generate n_samples with possible sample corruption
+        samples = np.empty(n_samples, dtype=np.int32)
+        for s in range(n_samples):
+            abs_s = first_sample_idx + s
+            val = compute_deterministic_sample(abs_s)
+            if abs_s in self.corrupt_sample_indices:
+                val ^= 0x000000FF  # Corrupt sample value
+            samples[s] = val
 
         # Monotonic timestamp: t0 + floor(first_sample_idx * 1e6 / 48000)
         ts_us = self.t0_us + (first_sample_idx * 1000000 // NOMINAL_SAMPLE_RATE_HZ)
 
         self.frames_generated += 1
-        self.samples_generated += PROFILE_B_SAMPLES_PER_FRAME
+        self.samples_generated += n_samples
 
         # Check drop simulation
         if frame_idx in self.drop_frames:
-            self.samples_dropped += PROFILE_B_SAMPLES_PER_FRAME
+            self.samples_dropped += n_samples
             return b""
 
         corrupt_crc = (frame_idx in self.corrupt_crc_frames)
@@ -256,7 +304,7 @@ class SimulatedEsp32Device:
             corrupt_crc=corrupt_crc,
         )
 
-        self.samples_queued += PROFILE_B_SAMPLES_PER_FRAME
+        self.samples_queued += n_samples
         self.audio_frames_queued += 1
 
         out = bytearray(wire_bytes)
@@ -273,18 +321,31 @@ class SimulatedEsp32Device:
 
     def get_current_telemetry(self, stop_reason: int = 0, error_code: int = 0) -> StatusTelemetry:
         """Construct the agreed 72-byte telemetry record."""
+        gen = self.samples_generated
+        queued = self.samples_queued
+        dropped = self.samples_dropped
+        frames_q = self.audio_frames_queued
+        err = error_code
+
+        if self.falsify_telemetry:
+            gen = self.falsify_telemetry.get("generated_samples", gen)
+            queued = self.falsify_telemetry.get("fully_queued_samples", queued)
+            dropped = self.falsify_telemetry.get("dropped_samples", dropped)
+            frames_q = self.falsify_telemetry.get("audio_frames_queued", frames_q)
+            err = self.falsify_telemetry.get("error_code", err)
+
         return StatusTelemetry(
             session_id=self.current_session_id,
-            generated_samples=self.samples_generated,
-            fully_queued_samples=self.samples_queued,
-            dropped_samples=self.samples_dropped,
-            audio_frames_queued=self.audio_frames_queued,
+            generated_samples=gen,
+            fully_queued_samples=queued,
+            dropped_samples=dropped,
+            audio_frames_queued=frames_q,
             dma_overflow_events=self.dma_overflow_events,
             ring_overflow_events=self.ring_overflow_events,
             usb_partial_write_events=self.usb_partial_write_events,
             usb_timeout_events=self.usb_timeout_events,
             usb_disconnect_events=self.usb_disconnect_events,
-            audio_bytes_queued=self.audio_frames_queued * 1068,
+            audio_bytes_queued=frames_q * 1068,
             stop_reason=stop_reason,
-            error_code=error_code,
+            error_code=err,
         )

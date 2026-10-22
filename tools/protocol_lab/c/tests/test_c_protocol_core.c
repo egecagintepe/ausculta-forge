@@ -343,6 +343,26 @@ static void test_concurrent_spsc_stress(void) {
 static void test_canonical_control_messages(void) {
     printf("[TEST] Testing all canonical control message encoders, decoders, builders & parsers...\n");
 
+    /* Gate 3 & Gate 7: Exact wire payload size assertions (Field-by-field wire encoding guarantee) */
+    TEST_ASSERT(START_ACK_PAYLOAD_SIZE == 32U, "START_ACK wire payload MUST be exactly 32 bytes");
+    TEST_ASSERT(START_REQ_PAYLOAD_SIZE == 16U, "START_REQ wire payload MUST be exactly 16 bytes");
+    TEST_ASSERT(HELLO_REQ_PAYLOAD_SIZE == 4U, "HELLO_REQ wire payload MUST be exactly 4 bytes");
+    TEST_ASSERT(HELLO_ACK_PAYLOAD_SIZE == 24U, "HELLO_ACK wire payload MUST be exactly 24 bytes");
+    TEST_ASSERT(STOP_REQ_PAYLOAD_SIZE == 8U, "STOP_REQ wire payload MUST be exactly 8 bytes");
+    TEST_ASSERT(STATUS_TELEMETRY_PAYLOAD_SIZE == 72U, "STATUS wire payload MUST be exactly 72 bytes");
+    TEST_ASSERT(ERROR_PAYLOAD_SIZE == 8U, "ERROR wire payload MUST be exactly 8 bytes");
+
+    /* Gate 5: Normative deterministic known-answer sequence vectors */
+    #define CALC_NORMATIVE_SAMPLE(idx) (((uint32_t)(((uint64_t)(idx) * 16807ULL + 7ULL) & 0x00FFFFFFULL) & 0x00800000U) ? \
+        ((int32_t)((uint32_t)(((uint64_t)(idx) * 16807ULL + 7ULL) & 0x00FFFFFFULL) - 0x01000000U)) : \
+        ((int32_t)(((uint64_t)(idx) * 16807ULL + 7ULL) & 0x00FFFFFFULL)))
+
+    TEST_ASSERT(CALC_NORMATIVE_SAMPLE(0) == 7, "Known vector n=0 -> 7");
+    TEST_ASSERT(CALC_NORMATIVE_SAMPLE(1) == 16814, "Known vector n=1 -> 16814");
+    TEST_ASSERT(CALC_NORMATIVE_SAMPLE(500) == -8373709, "Known vector n=500 -> -8373709");
+    TEST_ASSERT(CALC_NORMATIVE_SAMPLE(1000) == 29791, "Known vector n=1000 -> 29791");
+    TEST_ASSERT(CALC_NORMATIVE_SAMPLE(479999) == -2497696, "Known vector n=479999 -> -2497696");
+
     StreamPacketParser parser;
     parser_init(&parser);
     DecodedFrame frames[10];
