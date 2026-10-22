@@ -1,0 +1,92 @@
+# G1 firmware delivery evidence — 2026-10-22
+
+Tested firmware/core commit: `543d90c` on `main`. No branch or worktree created.
+Authorship: Ege and the AuscultaForge team; historical lab author/reviewer credits
+are preserved. No hardware contribution or physical measurement is invented.
+
+| Status | Actual result |
+| --- | --- |
+| SOFTWARE VERIFIED | Portable C session/source/shared serializer + real Python decoder/session and acceptance validator passed |
+| COMPILED BUT NOT FLASHED | **NOT ESTABLISHED** for ESP32; desktop GCC compilation is not an ESP build |
+| BUILD_NOT_EXECUTED | ESP-IDF unavailable: no `idf.py` in PATH, no IDF_PATH environment variable, no installation in inspected common locations |
+| HARDWARE NOT TESTED | No board identified, flashed, wired or measured in this operation |
+| PHYSICAL G1 PASSED | **PENDING**, never inferred from software acceptance |
+| Component resolver lock | **PENDING**: exact manifest pins exist; hash-bearing `dependencies.lock` has not been generated |
+
+## Executed checks
+
+Windows, existing repository Python 3.11 virtual environment, MSYS2 UCRT GCC
+16.2.0 (`Rev4, Built by MSYS2 project`). Host GCC is deliberately separate from
+the required ESP compiler. All shared-core builds use C11, Wall/Wextra/Werror, O2.
+
+```powershell
+.venv\Scripts\python.exe -m pytest firmware/tests tools/protocol_lab/python/test_canonical_protocol.py -q --basetemp=firmware/build/host-final
+# 31 passed in 13.56s (11 firmware + 20 existing canonical tests)
+
+.venv\Scripts\python.exe -m pytest tools/protocol_lab/python/test_physical_acceptance_gates.py -q
+# 19 passed in 9.74s (simulation/fault-injection acceptance tests)
+
+gcc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -Itools/protocol_lab/c/include tools/protocol_lab/c/tests/test_c_protocol_core.c tools/protocol_lab/c/src/packet_framing.c tools/protocol_lab/c/src/ring_buffer.c tools/protocol_lab/c/src/waveform_gen.c -lm -lpthread -o firmware/build/test_c_protocol_core.exe
+& firmware/build/test_c_protocol_core.exe
+# All 7 C suites passed, including 500000-sample concurrent SPSC stress.
+
+git diff --check
+# Passed.
+```
+
+`firmware/build` must exist if reproducing these exact custom output paths;
+ordinary `pytest firmware/tests -q` uses the default temporary directory.
+
+Frozen vectors cover all nine message types (HELLO pair, START pair, AUDIO,
+STATUS, STOP pair, ERROR). C HELLO/START/AUDIO/STOP output is compared byte for
+byte with an independent struct/CRC oracle. Real Python decoder tests every
+vector and a corrupted copy. Virtual-time C G1 checks every sample, all 1875
+sequence/index/timestamp values, simulated flags and final telemetry. Negative
+tests cover corrupted commands, malformed headers, byte fragments/noise,
+wrong nonce rejection by the host, invalid state/session/config/source,
+backpressure/drop accounting, partial writes, early STOP/drain ordering,
+disconnect/fresh session, timeout, control flooding, short final frame,
+acquisition input boundaries and session counter wrap past zero.
+
+The actual firmware core also runs against the **existing** physical acceptance
+validator with `is_physical=False`, using workstation `perf_counter_ns()` pacing.
+The resulting unmodified metrics JSON is
+[g1_software_acceptance.json](evidence/g1_software_acceptance.json):
+
+- 10.0018 seconds elapsed; 480000 accepted samples; 1875 AUDIO frames.
+- Zero sample mismatches, CRC errors, sequence gaps, duplicates, index
+  discontinuities and timestamp regressions.
+- HELLO, START and STOP_ACK received; session `0x4155534300000001` is a fixed
+  **test seed**, not a claimed physical device session.
+- Final generated=fully_queued=480000, dropped=0, frames=1875,
+  audio_bytes_queued=2002500, all transport overflow/timeout/error counters zero.
+- Verdict assertion: SOFTWARE_SIMULATION_PASS. No physical USB endpoint or I2S
+  clock is exercised by this test.
+
+A broader combined run including `software/tests/test_usb_integration_bridge.py`
+stopped making progress after the firmware/acceptance cases and was interrupted.
+No completed desktop HTTP integration-suite pass is claimed. The isolated
+canonical, firmware and acceptance suites above completed normally. Existing
+host protocol implementation was not changed to accommodate firmware.
+
+## Build evidence and remaining gate
+
+No ESP binary, map/size report, ESP compiler log or resolved component hashes are
+available. A registry metadata download through the shell failed DNS resolution,
+including an escalated read attempt; this was a network failure, not an approval
+rejection. The Component Manager package is also absent. Official release source
+APIs and Kconfig were inspected through web access, but source inspection does
+not establish successful compilation.
+
+Pinned target: ESP-IDF v5.5.1, Xtensa esp-14.2.0_20241119, esp_tinyusb 2.2.0,
+tinyusb 0.19.0~3. Follow the exact installation/build/flash/recovery commands in
+the [physical guide](../docs/engineering/hardware/FIRST_PHYSICAL_USB_BRINGUP_GUIDE.md).
+First generate and review the genuine dependencies.lock, run `idf.py set-target
+esp32s3` and `idf.py build`, fix any compiler/configuration findings, and save
+the successful build evidence. The absence of that lock/build is a remaining
+delivery gap; this project is prepared for that gate, not certified hardware-ready.
+
+Ege then identifies the actual board/programming route before flashing and runs
+Desktop HELLO/full physical G1 with preserved evidence. Kaan confirms photographs,
+PCB/USB/power routing and later the microphone header/power/clock connections.
+The guide contains the complete checklist and unresolved board-specific questions.
