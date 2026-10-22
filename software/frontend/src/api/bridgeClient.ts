@@ -34,6 +34,8 @@ import {
   DiagnosticEventRecord,
   DiagnosticCorrelationReport,
   UsbPortDescriptorItem,
+  UsbSessionSummary,
+  G1EvidenceData,
 } from '../types';
 
 export interface SignalFrameData {
@@ -1066,6 +1068,98 @@ class BridgeClient {
       throw new Error(`Export diagnostics bundle failed with status ${resp.status}`);
     }
     return await resp.blob();
+  }
+
+  // =========================================================================
+  // Production USB CDC-ACM Device Control & Acquisition Methods
+  // =========================================================================
+
+  public async getUsbPorts(): Promise<UsbPortDescriptorItem[]> {
+    try {
+      const resp = await this.request('/device/usb/ports');
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async connectUsbDevice(port: string, baudrate: number = 115200, timeoutS: number = 3.0): Promise<any> {
+    const resp = await this.request('/device/usb/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port, baudrate, timeout_s: timeoutS }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Failed to connect to device' }));
+      throw new Error(err.detail || `Connect failed with status ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
+  public async startUsbAcquisition(params?: {
+    sourceMode?: number;
+    targetSamples?: number;
+    sampleRateHz?: number;
+    timeoutS?: number;
+  }): Promise<any> {
+    const resp = await this.request('/device/usb/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source_mode: params?.sourceMode ?? 1,
+        target_samples: params?.targetSamples ?? 480000,
+        sample_rate_hz: params?.sampleRateHz ?? 48000,
+        timeout_s: params?.timeoutS ?? 3.0,
+      }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Failed to start acquisition' }));
+      throw new Error(err.detail || `Start acquisition failed with status ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
+  public async stopUsbAcquisition(): Promise<any> {
+    const resp = await this.request('/device/usb/stop', {
+      method: 'POST',
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Failed to stop acquisition' }));
+      throw new Error(err.detail || `Stop acquisition failed with status ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
+  public async disconnectUsbDevice(): Promise<any> {
+    const resp = await this.request('/device/usb/disconnect', {
+      method: 'POST',
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Failed to disconnect device' }));
+      throw new Error(err.detail || `Disconnect failed with status ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
+  public async getUsbSession(): Promise<UsbSessionSummary | null> {
+    try {
+      const resp = await this.request('/device/usb/session');
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public async getG1Evidence(): Promise<G1EvidenceData | null> {
+    try {
+      const resp = await this.request('/device/usb/g1-evidence');
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
   }
 }
 

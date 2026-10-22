@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowRight,
   Cpu,
@@ -19,8 +19,22 @@ import {
   ChevronDown,
   ChevronUp,
   Play,
+  Square,
+  Activity,
+  Layers,
+  ShieldCheck,
+  Check,
 } from 'lucide-react';
-import { StethoscopeDevice, DeviceRuntimeState, DeviceIntegrityStats, AudioSourceType, VirtualBenchReport, UsbPortDescriptorItem } from '../types';
+import {
+  StethoscopeDevice,
+  DeviceRuntimeState,
+  DeviceIntegrityStats,
+  AudioSourceType,
+  VirtualBenchReport,
+  UsbPortDescriptorItem,
+  UsbSessionSummary,
+  G1EvidenceData,
+} from '../types';
 import { bridgeClient } from '../api/bridgeClient';
 
 interface DeviceViewProps {
@@ -53,29 +67,133 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
   onSelectMockSource,
   onNavigateToSamples,
 }) => {
-  const isHardwareConnected = deviceRuntimeState?.connected ?? false;
-  const hardwareLifecycle = (deviceRuntimeState?.state ?? 'absent').toLowerCase();
-
   // Virtual Bench state
   const [benchRunning, setBenchRunning] = useState(false);
   const [benchReport, setBenchReport] = useState<VirtualBenchReport | null>(null);
   const [benchError, setBenchError] = useState<string | null>(null);
   const [expandedScenarioId, setExpandedScenarioId] = useState<string | null>(null);
 
-  // USB Discovery Doctor state
+  // USB Discovery Doctor & Port Selection state
   const [detectedPorts, setDetectedPorts] = useState<UsbPortDescriptorItem[]>([]);
+  const [selectedPort, setSelectedPort] = useState<string>('SIMULATED_ESP32_S3');
+  const [sourceMode, setSourceMode] = useState<number>(1); // 1 = G1, 0 = Real Acoustic
   const [isScanningPorts, setIsScanningPorts] = useState(false);
+
+  // Real USB Session Engine State
+  const [usbSession, setUsbSession] = useState<UsbSessionSummary | null>(null);
+  const [g1Evidence, setG1Evidence] = useState<G1EvidenceData | null>(null);
+  const [usbActionLoading, setUsbActionLoading] = useState(false);
+  const [usbActionError, setUsbActionError] = useState<string | null>(null);
+
+  // Polling USB Session
+  useEffect(() => {
+    if (!backendConnected) return;
+    let isMounted = true;
+
+    const pollSession = async () => {
+      try {
+        const session = await bridgeClient.getUsbSession();
+        if (isMounted) setUsbSession(session);
+      } catch (_) {}
+    };
+
+    pollSession();
+    const interval = setInterval(pollSession, 1200);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [backendConnected]);
+
+  // Initial port scan
+  useEffect(() => {
+    if (!backendConnected) return;
+    handleScanPorts();
+  }, [backendConnected]);
 
   const handleScanPorts = async () => {
     setIsScanningPorts(true);
+    setUsbActionError(null);
     try {
-      const ports = await bridgeClient.scanUsbPorts();
+      const ports = await bridgeClient.getUsbPorts();
       setDetectedPorts(ports);
+      if (ports.length > 0 && selectedPort === 'SIMULATED_ESP32_S3') {
+        const esp = ports.find((p) => p.is_espressif_candidate);
+        if (esp) {
+          setSelectedPort(esp.port_name);
+        }
+      }
       onDetectDevice();
     } catch (err) {
       console.error('Scan ports failed', err);
     } finally {
       setIsScanningPorts(false);
+    }
+  };
+
+  const handleConnectUsb = async () => {
+    if (!selectedPort) return;
+    setUsbActionLoading(true);
+    setUsbActionError(null);
+    try {
+      const summary = await bridgeClient.connectUsbDevice(selectedPort);
+      setUsbSession(summary);
+      onDetectDevice();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setUsbActionError(`Connect failed: ${msg}`);
+    } finally {
+      setUsbActionLoading(false);
+    }
+  };
+
+  const handleDisconnectUsb = async () => {
+    setUsbActionLoading(true);
+    setUsbActionError(null);
+    try {
+      const summary = await bridgeClient.disconnectUsbDevice();
+      setUsbSession(summary);
+      onDisconnectDevice();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setUsbActionError(`Disconnect failed: ${msg}`);
+    } finally {
+      setUsbActionLoading(false);
+    }
+  };
+
+  const handleStartAcquisition = async () => {
+    setUsbActionLoading(true);
+    setUsbActionError(null);
+    try {
+      const summary = await bridgeClient.startUsbAcquisition(sourceMode);
+      setUsbSession(summary);
+      onUseDevice();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setUsbActionError(`Start acquisition failed: ${msg}`);
+    } finally {
+      setUsbActionLoading(false);
+    }
+  };
+
+  const handleStopAcquisition = async () => {
+    setUsbActionLoading(true);
+    setUsbActionError(null);
+    try {
+      const summary = await bridgeClient.stopUsbAcquisition();
+      setUsbSession(summary);
+      if (sourceMode === 1) {
+        try {
+          const ev = await bridgeClient.getG1Evidence();
+          setG1Evidence(ev);
+        } catch (_) {}
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setUsbActionError(`Stop acquisition failed: ${msg}`);
+    } finally {
+      setUsbActionLoading(false);
     }
   };
 
@@ -93,118 +211,114 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
     }
   };
 
+  const isSessionStreaming = usbSession?.state === 'STREAMING';
+  const isSessionReady = usbSession?.state === 'READY';
+  const isSessionConnected = isSessionReady || isSessionStreaming;
+  const isHardwareConnected = isSessionConnected || (deviceRuntimeState?.connected ?? false);
+  const effectiveLifecycle = usbSession ? usbSession.state.toLowerCase() : (deviceRuntimeState?.state ?? 'absent').toLowerCase();
+
   // Helper for rendering truthful state badges
   const renderStateBadge = () => {
-    switch (hardwareLifecycle) {
-      case 'ready':
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-success)]/15 text-[var(--status-success)] border border-[var(--status-success)]/40 shadow-xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)]" />
-            <span>READY · IDLE</span>
-          </span>
-        );
-      case 'streaming':
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-success)]/15 text-[var(--status-success)] border border-[var(--status-success)]/40 shadow-xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] animate-pulse" />
-            <span>LIVE HARDWARE STREAMING</span>
-          </span>
-        );
-      case 'detected':
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-warning)]/15 text-[var(--status-warning)] border border-[var(--status-warning)]/40">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)]" />
-            <span>CANDIDATE DETECTED</span>
-          </span>
-        );
-      case 'opening':
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-warning)]/15 text-[var(--status-warning)] border border-[var(--status-warning)]/40 animate-pulse">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)]" />
-            <span>OPENING USB PORT...</span>
-          </span>
-        );
-      case 'handshaking':
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-warning)]/15 text-[var(--status-warning)] border border-[var(--status-warning)]/40 animate-pulse">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)]" />
-            <span>PROTOCOL HANDSHAKE...</span>
-          </span>
-        );
-      case 'interrupted':
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-warning)]/20 text-[var(--status-warning)] border border-[var(--status-warning)]/40">
-            <AlertTriangle size={12} />
-            <span>CONNECTION INTERRUPTED</span>
-          </span>
-        );
-      case 'error':
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-danger)]/15 text-[var(--status-danger)] border border-[var(--status-danger)]/40">
-            <ShieldAlert size={12} />
-            <span>HARDWARE ERROR</span>
-          </span>
-        );
-      case 'incompatible':
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-danger)]/15 text-[var(--status-danger)] border border-[var(--status-danger)]/40">
-            <AlertTriangle size={12} />
-            <span>INCOMPATIBLE DESCRIPTOR</span>
-          </span>
-        );
-      case 'absent':
-      default:
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--surface-muted)] text-[var(--on-surface-variant)] border border-[var(--border-subtle)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--on-surface-variant)]/40" />
-            <span>WAITING FOR HARDWARE (ABSENT)</span>
-          </span>
-        );
+    if (isSessionStreaming) {
+      return (
+        <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-success)]/15 text-[var(--status-success)] border border-[var(--status-success)]/40 shadow-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] animate-pulse" />
+          <span>ACQUIRING · {usbSession?.source_mode === 1 ? 'G1 DETERMINISTIC' : 'REAL ACOUSTIC'}</span>
+        </span>
+      );
     }
+    if (isSessionReady) {
+      return (
+        <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-success)]/15 text-[var(--status-success)] border border-[var(--status-success)]/40 shadow-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)]" />
+          <span>HARDWARE VERIFIED / READY</span>
+        </span>
+      );
+    }
+    if (effectiveLifecycle === 'opening' || effectiveLifecycle === 'hello_pending' || effectiveLifecycle === 'start_pending' || effectiveLifecycle === 'handshaking') {
+      return (
+        <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-warning)]/15 text-[var(--status-warning)] border border-[var(--status-warning)]/40 animate-pulse">
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)]" />
+          <span>NEGOTIATING HANDSHAKE...</span>
+        </span>
+      );
+    }
+    if (effectiveLifecycle === 'interrupted') {
+      return (
+        <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-warning)]/20 text-[var(--status-warning)] border border-[var(--status-warning)]/40">
+          <AlertTriangle size={12} />
+          <span>CONNECTION INTERRUPTED</span>
+        </span>
+      );
+    }
+    if (effectiveLifecycle === 'error') {
+      return (
+        <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-danger)]/15 text-[var(--status-danger)] border border-[var(--status-danger)]/40">
+          <ShieldAlert size={12} />
+          <span>HARDWARE ERROR</span>
+        </span>
+      );
+    }
+    if (detectedPorts.length > 0) {
+      return (
+        <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-warning)]/15 text-[var(--status-warning)] border border-[var(--status-warning)]/40">
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)]" />
+          <span>PORT AVAILABLE — DEVICE NOT VERIFIED</span>
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--surface-muted)] text-[var(--on-surface-variant)] border border-[var(--border-subtle)]">
+        <span className="w-1.5 h-1.5 rounded-full bg-[var(--on-surface-variant)]/40" />
+        <span>HARDWARE DISCONNECTED</span>
+      </span>
+    );
   };
 
   // Helper for title & description based on state
   const getStateCopy = () => {
-    switch (hardwareLifecycle) {
-      case 'ready':
-      case 'streaming':
-        return {
-          title: 'ESP32-S3 Physical Transducer Stream',
-          desc: 'Connected to physical AuscultaForge ESP32-S3 Native USB link. Ready for real-time acoustic phonocardiographic streaming.'
-        };
-      case 'detected':
-        return {
-          title: 'Compatible USB Candidate Found',
-          desc: `Candidate device detected on ${deviceRuntimeState?.candidate?.port || 'USB bus'}. Initializing protocol handshake.`
-        };
-      case 'opening':
-      case 'handshaking':
-        return {
-          title: 'Negotiating Hardware Link...',
-          desc: 'Establishing CDC-ACM transport and verifying device descriptors.'
-        };
-      case 'interrupted':
-        return {
-          title: 'USB Transport Interrupted',
-          desc: 'Physical USB link dropped or stalled. Rolling buffers are preserved. Re-seat the USB cable or scan the bus.'
-        };
-      case 'error':
-        return {
-          title: 'Hardware Transport Error',
-          desc: 'Communication failure encountered on USB endpoint. Check wiring, descriptor integrity, or power supply.'
-        };
-      case 'incompatible':
-        return {
-          title: 'Incompatible Device Protocol',
-          desc: 'A USB candidate was detected, but its descriptor or semantic version does not match AuscultaForge requirements.'
-        };
-      case 'absent':
-      default:
-        return {
-          title: 'Waiting for AuscultaForge device...',
-          desc: 'No compatible ESP32-S3 hardware detected on host bus. The application strictly reflects real hardware state and never fabricates fake hardware telemetry.'
-        };
+    if (isSessionStreaming) {
+      return {
+        title: usbSession?.is_simulated ? 'Simulated ESP32-S3 Canonical Stream' : 'ESP32-S3 Physical Transducer Stream',
+        desc: usbSession?.source_mode === 1
+          ? 'Streaming 48 kHz mono signed PCM via deterministic G1 known-answer generator. Host is verifying frame integrity and sample exactness in real-time.'
+          : 'Streaming live acoustic transducer samples via Profile B canonical frames. Stateful DSP filtering active.'
+      };
     }
+    if (isSessionReady) {
+      return {
+        title: 'Hardware Link Verified & Ready',
+        desc: `Canonical HELLO handshake succeeded on ${usbSession?.port_name || 'port'}. Protocol semantic v0.1 accepted. Ready to configure acquisition mode and initiate session.`
+      };
+    }
+    if (effectiveLifecycle === 'opening' || effectiveLifecycle === 'hello_pending' || effectiveLifecycle === 'start_pending') {
+      return {
+        title: 'Negotiating Canonical Link...',
+        desc: 'Opening transport adapter, sending HELLO request with cryptographic nonce, and awaiting verified capabilities.'
+      };
+    }
+    if (effectiveLifecycle === 'interrupted') {
+      return {
+        title: 'USB Transport Interrupted',
+        desc: 'Physical USB link dropped or stalled. Rolling buffers are preserved. Re-seat the USB cable or scan the bus.'
+      };
+    }
+    if (effectiveLifecycle === 'error') {
+      return {
+        title: 'Hardware Transport Error',
+        desc: 'Communication failure encountered on USB endpoint. Check wiring, descriptor integrity, or power supply.'
+      };
+    }
+    if (detectedPorts.length > 0) {
+      return {
+        title: 'Serial Port(s) Detected — Device Not Verified',
+        desc: `${detectedPorts.length} serial interface(s) available on host bus. Select port and connect to execute canonical HELLO handshake.`
+      };
+    }
+    return {
+      title: 'Hardware Disconnected',
+      desc: 'No AuscultaForge ESP32-S3 detected on host USB bus. Connect device or use SIMULATED_ESP32_S3 for in-memory protocol loopback.'
+    };
   };
 
   const stateCopy = getStateCopy();
@@ -289,73 +403,270 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                 </p>
               </div>
 
+              {/* Canonical Port Selection & Session Control Card */}
+              <div className="p-3.5 rounded-lg bg-[var(--surface-muted)]/70 border border-[var(--border-subtle)] flex flex-col gap-3 font-mono-code text-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--accent-oxblood)]">
+                      Target Interface:
+                    </span>
+                    <select
+                      id="usb-port-selector"
+                      value={selectedPort}
+                      onChange={(e) => setSelectedPort(e.target.value)}
+                      disabled={isSessionConnected || usbActionLoading}
+                      className="px-2.5 py-1 rounded bg-[var(--surface-card)] border border-[var(--border-strong)] text-[var(--on-surface)] text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[var(--accent-oxblood)] disabled:opacity-50"
+                    >
+                      <option value="SIMULATED_ESP32_S3">
+                        SIMULATED_ESP32_S3 (In-Memory CDC Loopback)
+                      </option>
+                      {detectedPorts.map((p) => (
+                        <option key={p.port_name} value={p.port_name}>
+                          {p.port_name} {p.is_espressif_candidate ? '★ [ESP32 Candidate]' : ''} - {p.description}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      id="btn-scan-usb-bus"
+                      onClick={handleScanPorts}
+                      disabled={!backendConnected || isConnecting || isScanningPorts || isSessionConnected}
+                      className={`px-2.5 py-1 rounded font-mono-code text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                        !backendConnected || isConnecting || isScanningPorts || isSessionConnected
+                          ? 'bg-[var(--surface-muted)] text-[var(--on-surface-variant)]/50 border-[var(--border-subtle)] cursor-not-allowed'
+                          : 'bg-[var(--surface-card)] text-[var(--on-surface)] border-[var(--border-strong)] hover:bg-[var(--surface-muted)]'
+                      }`}
+                    >
+                      <RefreshCw size={11} className={isScanningPorts ? 'animate-spin' : ''} />
+                      <span>{isScanningPorts ? 'Scanning...' : 'Scan USB'}</span>
+                    </button>
+
+                    {!isSessionConnected ? (
+                      <button
+                        id="btn-connect-usb"
+                        onClick={handleConnectUsb}
+                        disabled={!backendConnected || usbActionLoading || !selectedPort}
+                        className={`px-3 py-1 rounded font-mono-code text-[11px] font-bold text-white flex items-center gap-1.5 transition-colors cursor-pointer ${
+                          !backendConnected || usbActionLoading || !selectedPort
+                            ? 'bg-[var(--surface-muted)] text-[var(--on-surface-variant)]/50 cursor-not-allowed'
+                            : 'bg-[var(--status-success)] hover:opacity-90 shadow-xs'
+                        }`}
+                      >
+                        {usbActionLoading ? <RefreshCw size={11} className="animate-spin" /> : <CheckCircle2 size={11} />}
+                        <span>Connect &amp; HELLO</span>
+                      </button>
+                    ) : (
+                      <button
+                        id="btn-disconnect-usb"
+                        onClick={handleDisconnectUsb}
+                        disabled={usbActionLoading}
+                        className="px-3 py-1 rounded font-mono-code text-[11px] font-bold text-[var(--status-danger)] bg-[var(--status-danger)]/10 border border-[var(--status-danger)]/30 hover:bg-[var(--status-danger)]/20 flex items-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <PowerOff size={11} />
+                        <span>Disconnect</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Acquisition Mode & Start/Stop controls */}
+                <div className="pt-2 border-t border-[var(--border-subtle)]/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[11px] font-bold uppercase text-[var(--on-surface-variant)]">Mode:</span>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="acquisition-source-mode"
+                        checked={sourceMode === 1}
+                        onChange={() => setSourceMode(1)}
+                        disabled={isSessionStreaming || usbActionLoading}
+                        className="accent-[var(--accent-oxblood)]"
+                      />
+                      <span className="text-[11px] text-[var(--on-surface)] font-medium">
+                        Deterministic G1 (Mode 1)
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="acquisition-source-mode"
+                        checked={sourceMode === 0}
+                        onChange={() => setSourceMode(0)}
+                        disabled={isSessionStreaming || usbActionLoading}
+                        className="accent-[var(--accent-oxblood)]"
+                      />
+                      <span className="text-[11px] text-[var(--on-surface)] font-medium">
+                        Real Acoustic (Mode 0)
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {isSessionReady && !isSessionStreaming && (
+                      <button
+                        id="btn-start-usb-acquisition"
+                        onClick={handleStartAcquisition}
+                        disabled={usbActionLoading}
+                        className="px-3.5 py-1 rounded bg-[var(--accent-oxblood)] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs hover:opacity-90 cursor-pointer"
+                      >
+                        {usbActionLoading ? <RefreshCw size={12} className="animate-spin" /> : <Play size={12} />}
+                        <span>Start Acquisition</span>
+                      </button>
+                    )}
+
+                    {isSessionStreaming && (
+                      <button
+                        id="btn-stop-usb-acquisition"
+                        onClick={handleStopAcquisition}
+                        disabled={usbActionLoading}
+                        className="px-3.5 py-1 rounded bg-[var(--status-danger)] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs hover:opacity-90 cursor-pointer"
+                      >
+                        {usbActionLoading ? <RefreshCw size={12} className="animate-spin" /> : <Square size={12} />}
+                        <span>Stop Acquisition</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Error Banner */}
+                {usbActionError && (
+                  <div className="p-2 rounded bg-[var(--status-danger)]/10 border border-[var(--status-danger)]/30 text-[11px] text-[var(--status-danger)] flex items-center gap-1.5">
+                    <ShieldAlert size={12} className="shrink-0" />
+                    <span>{usbActionError}</span>
+                  </div>
+                )}
+              </div>
+
               {/* Status Note / Telemetry grid */}
               <div
                 className="p-3 rounded bg-[var(--surface-muted)] border border-[var(--border-subtle)] flex flex-col gap-2 font-mono-code text-xs"
               >
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-[var(--on-surface-variant)]">DISCOVERY STATUS:</span>
+                  <span className="text-[var(--on-surface-variant)]">ACTIVE INTERFACE:</span>
                   <span className="text-[var(--on-surface)] font-semibold text-right max-w-md">
-                    {deviceRuntimeState?.discovery_status ?? 'No discovery scan executed or bridge offline'}
+                    {usbSession?.is_simulated ? 'SIMULATED_ESP32_S3 (In-Memory Loopback)' : (usbSession?.port_name || deviceRuntimeState?.port || 'Not connected')}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[var(--border-subtle)]/50 text-[10px]">
                   <div>
                     <span className="text-[var(--on-surface-variant)] block">TRANSPORT</span>
-                    <strong className="text-[var(--on-surface)]">ESP32-S3 Native USB</strong>
-                  </div>
-                  <div>
-                    <span className="text-[var(--on-surface-variant)] block">USB PORT / PATH</span>
-                    <strong className="text-[var(--on-surface)] truncate block" title={deviceRuntimeState?.candidate?.port || deviceRuntimeState?.port || 'None'}>
-                      {deviceRuntimeState?.candidate?.port || deviceRuntimeState?.port || 'Scanning / None'}
+                    <strong className="text-[var(--on-surface)]">
+                      {usbSession?.is_simulated ? 'Duplex Loopback Adapter' : 'CDC-ACM Host (pyserial)'}
                     </strong>
                   </div>
                   <div>
-                    <span className="text-[var(--on-surface-variant)] block">DEVICE ID</span>
-                    <strong className="text-[var(--on-surface)] truncate block" title={deviceRuntimeState?.device_id || 'None'}>
-                      {deviceRuntimeState?.device_id || (deviceRuntimeState?.candidate ? deviceRuntimeState.candidate.description || 'USB Candidate' : 'None')}
+                    <span className="text-[var(--on-surface-variant)] block">SESSION ID</span>
+                    <strong className="text-[var(--on-surface)] truncate block">
+                      {usbSession?.active_session_id ? `0x${usbSession.active_session_id.toString(16).toUpperCase()}` : 'None (Idle)'}
                     </strong>
                   </div>
                   <div>
-                    <span className="text-[var(--on-surface-variant)] block">PACKET PROTOCOL</span>
-                    <strong className="text-[var(--on-surface)]">Semantic v1.0</strong>
+                    <span className="text-[var(--on-surface-variant)] block">RATE / ENCODING</span>
+                    <strong className="text-[var(--on-surface)]">48 kHz · S32_LE (24b)</strong>
+                  </div>
+                  <div>
+                    <span className="text-[var(--on-surface-variant)] block">CANONICAL PROTOCOL</span>
+                    <strong className="text-[var(--on-surface)]">Profile B v0.1 (CRC-32)</strong>
                   </div>
                 </div>
               </div>
 
-              {/* Real USB Discovery Doctor Port List */}
-              {detectedPorts.length > 0 && (
-                <div className="mt-2 p-3 rounded bg-[var(--surface-muted)]/50 border border-[var(--border-subtle)] flex flex-col gap-2">
-                  <span className="font-mono-code text-[11px] font-bold uppercase tracking-wider text-[var(--accent-oxblood)]">
-                    Enumerated Serial Hardware ({detectedPorts.length} Ports Found)
-                  </span>
-                  <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto font-mono-code text-[11px]">
-                    {detectedPorts.map((p) => (
-                      <div
-                        key={p.port_name}
-                        className={`p-2 rounded border flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
-                          p.is_espressif_candidate
-                            ? 'bg-[var(--status-success)]/5 border-[var(--status-success)]/40'
-                            : 'bg-[var(--surface-card)] border-[var(--border-subtle)]'
-                        }`}
-                      >
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-1.5">
-                            <strong className="text-[var(--on-surface)] font-bold">{p.port_name}</strong>
-                            <span className="text-[10px] text-[var(--on-surface-variant)]">({p.description})</span>
-                            {p.is_espressif_candidate && (
-                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-[var(--status-success)]/15 text-[var(--status-success)]">
-                                ESP32 CANDIDATE
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-[var(--on-surface-variant)]">
-                            VID: {p.vid_hex ?? 'N/A'} · PID: {p.pid_hex ?? 'N/A'} · {p.candidate_reason}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+              {/* Live Canonical Counters Panel */}
+              {usbSession && (
+                <div className="p-3 rounded bg-[var(--surface-card)] border border-[var(--border-subtle)] flex flex-col gap-2 font-mono-code text-xs">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold uppercase tracking-wider text-[var(--accent-metal)] flex items-center gap-1.5">
+                      <Activity size={13} />
+                      <span>Live Transport &amp; Frame Counters</span>
+                    </span>
+                    <span className="text-[10px] text-[var(--on-surface-variant)]">
+                      State: <strong>{usbSession.state}</strong>
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 text-[11px]">
+                    <div>
+                      <span className="text-[10px] text-[var(--on-surface-variant)] block">SAMPLES ACCEPTED</span>
+                      <strong className="text-[var(--on-surface)]">{usbSession.counters.sample_count.toLocaleString()}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-[var(--on-surface-variant)] block">VALIDATED FRAMES</span>
+                      <strong className="text-[var(--on-surface)]">{usbSession.counters.frame_count.toLocaleString()}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-[var(--on-surface-variant)] block">SEQUENCE GAPS</span>
+                      <strong className={usbSession.counters.seq_discontinuities > 0 ? 'text-[var(--status-warning)]' : 'text-[var(--on-surface)]'}>
+                        {usbSession.counters.seq_discontinuities}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-[var(--on-surface-variant)] block">CRC ERRORS</span>
+                      <strong className={usbSession.counters.crc_errors > 0 ? 'text-[var(--status-danger)]' : 'text-[var(--on-surface)]'}>
+                        {usbSession.counters.crc_errors}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-[var(--on-surface-variant)] block">DEVICE DROPS</span>
+                      <strong className={usbSession.counters.device_buffer_overflows > 0 ? 'text-[var(--status-danger)]' : 'text-[var(--on-surface)]'}>
+                        {usbSession.counters.device_buffer_overflows}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* G1 Evidence Report Card */}
+              {g1Evidence && (
+                <div className="p-3.5 rounded-lg bg-[var(--surface-muted)] border border-[var(--border-subtle)] flex flex-col gap-2.5 font-mono-code text-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck size={14} className={g1Evidence.all_samples_matched ? 'text-[var(--status-success)]' : 'text-[var(--status-danger)]'} />
+                      <span className="font-bold uppercase tracking-wider text-[var(--on-surface)]">
+                        Hardware G1 Verification Evidence
+                      </span>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                        g1Evidence.all_samples_matched
+                          ? 'bg-[var(--status-success)]/15 text-[var(--status-success)] border-[var(--status-success)]/40'
+                          : 'bg-[var(--status-danger)]/15 text-[var(--status-danger)] border-[var(--status-danger)]/40'
+                      }`}
+                    >
+                      {g1Evidence.conclusion}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] pt-1 border-t border-[var(--border-subtle)]/50">
+                    <div>
+                      <span className="text-[var(--on-surface-variant)] block">EVIDENCE ID</span>
+                      <strong className="text-[var(--on-surface)] truncate block" title={g1Evidence.evidence_id}>
+                        {g1Evidence.evidence_id}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[var(--on-surface-variant)] block">EXACT SAMPLES</span>
+                      <strong className="text-[var(--on-surface)]">
+                        {g1Evidence.accepted_samples} / {g1Evidence.expected_samples}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[var(--on-surface-variant)] block">SESSION TIME</span>
+                      <strong className="text-[var(--on-surface)]">{g1Evidence.duration_seconds.toFixed(2)}s</strong>
+                    </div>
+                    <div>
+                      <span className="text-[var(--on-surface-variant)] block">PROVENANCE</span>
+                      <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${g1Evidence.is_simulated ? 'bg-[var(--accent-oxblood)]/15 text-[var(--accent-oxblood)]' : 'bg-[var(--status-success)]/15 text-[var(--status-success)]'}`}>
+                        {g1Evidence.is_simulated ? 'SOFTWARE SIMULATED' : 'PHYSICAL HARDWARE'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-[10px] text-[var(--on-surface-variant)] flex items-center justify-between pt-1">
+                    <span>SHA-256 Digest: <code className="text-[var(--on-surface)] select-all">{g1Evidence.sha256_hash.substring(0, 32)}...</code></span>
+                    <span>Bit-exact match: <strong className={g1Evidence.all_samples_matched ? 'text-[var(--status-success)]' : 'text-[var(--status-danger)]'}>{g1Evidence.all_samples_matched ? '100.00%' : 'MISMATCH'}</strong></span>
                   </div>
                 </div>
               )}
@@ -364,33 +675,9 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
             {/* Actions Bar */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[var(--border-subtle)]">
               <div className="flex items-center gap-2">
-                {/* Scan Button */}
-                <button
-                  id="btn-scan-usb-bus"
-                  onClick={handleScanPorts}
-                  disabled={!backendConnected || isConnecting || isScanningPorts}
-                  className={`px-3 py-1.5 rounded-lg font-mono-code text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border ${
-                    !backendConnected || isConnecting || isScanningPorts
-                      ? 'bg-[var(--surface-muted)] text-[var(--on-surface-variant)]/50 border-[var(--border-subtle)] cursor-not-allowed'
-                      : 'bg-[var(--surface-muted)] text-[var(--on-surface)] border-[var(--border-strong)] hover:bg-[var(--surface-card)]'
-                  }`}
-                  title={!backendConnected ? 'Python Bridge must be connected to scan' : 'Scan system USB bus for AuscultaForge device'}
-                >
-                  <RefreshCw size={12} className={isConnecting || isScanningPorts ? 'animate-spin' : ''} />
-                  <span>{isConnecting || isScanningPorts ? 'Scanning...' : 'Scan USB Bus'}</span>
-                </button>
-
-                {/* Disconnect Button (Enabled only when connected) */}
-                {isHardwareConnected && (
-                  <button
-                    id="btn-disconnect-device"
-                    onClick={onDisconnectDevice}
-                    className="px-3 py-1.5 rounded-lg font-mono-code text-xs font-semibold text-[var(--status-danger)] bg-[var(--status-danger)]/10 border border-[var(--status-danger)]/30 hover:bg-[var(--status-danger)]/20 flex items-center gap-1.5 cursor-pointer transition-colors"
-                  >
-                    <PowerOff size={12} />
-                    <span>Disconnect</span>
-                  </button>
-                )}
+                <span className="text-[10px] font-mono-code text-[var(--on-surface-variant)]">
+                  Session State: <strong>{usbSession?.state || 'DISCONNECTED'}</strong>
+                </span>
               </div>
 
               <div className="flex items-center gap-2">

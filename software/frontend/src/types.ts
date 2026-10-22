@@ -823,3 +823,55 @@ export interface UsbPortDescriptorItem {
   is_espressif_candidate: boolean;
   candidate_reason: string;
 }
+
+export interface UsbSessionCounters {
+  host_samples_accepted: number;
+  host_frames_accepted: number;
+  host_sample_value_errors: number;
+  host_index_discontinuities: number;
+  expected_next_sample_index: number;
+  last_audio_sequence: number | null;
+}
+
+export interface UsbSessionSummary {
+  session_state: string;
+  port: string | null;
+  is_simulated: boolean;
+  active_session_id: string | null;
+  device_capabilities: {
+    protocol_version: string;
+    firmware_version: string;
+    hardware_sample_rate_hz: number;
+    supported_profiles_mask: number;
+    max_frame_samples: number;
+    device_uid_low: string;
+  } | null;
+  active_config: {
+    sample_rate_hz: number;
+    target_samples: number;
+    source_mode: number;
+    encoding: number;
+    channels: number;
+    profile_id: number;
+  } | null;
+  counters: UsbSessionCounters;
+  latest_telemetry: Record<string, any> | null;
+  final_telemetry: Record<string, any> | null;
+  has_g1_evidence: boolean;
+}
+
+export interface G1EvidenceData {
+  session_id: string;
+  mode: string;
+  target_samples: number;
+  host_samples_accepted: number;
+  host_frames_accepted: number;
+  host_sample_value_errors: number;
+  host_index_discontinuities: number;
+  firmware_samples_generated: number;
+  firmware_samples_dropped: number;
+  verification_result: 'PASS' | 'FAIL';
+  verified_at_utc: string;
+  is_simulated: boolean;
+}
+
