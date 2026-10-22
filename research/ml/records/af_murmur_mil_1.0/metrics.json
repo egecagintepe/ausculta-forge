@@ -1,0 +1,59 @@
+{
+  "research_only": true,
+  "no_clinical_claims": true,
+  "model_version": "af_murmur_mil_1.0",
+  "dataset": "PhysioNet CirCor 1.0.3 public training subset",
+  "patient_group_split": {
+    "train": {
+      "patients": 610,
+      "present": 130
+    },
+    "val": {
+      "patients": 132,
+      "present": 25
+    },
+    "test": {
+      "patients": 132,
+      "present": 24
+    }
+  },
+  "best_epoch": 6,
+  "validation_threshold": 0.5199999999999998,
+  "validation": {
+    "n_patients": 132,
+    "positives": 25,
+    "roc_auc": 0.794392523364486,
+    "average_precision": 0.6780892511833392,
+    "balanced_accuracy": 0.7639252336448599,
+    "f1": 0.6037735849056604,
+    "confusion_matrix_tn_fp_fn_tp": [
+      95,
+      12,
+      9,
+      16
+    ],
+    "threshold": 0.5199999999999998
+  },
+  "internal_heldout_test": {
+    "n_patients": 132,
+    "positives": 24,
+    "roc_auc": 0.8734567901234568,
+    "average_precision": 0.7610817398389247,
+    "balanced_accuracy": 0.7777777777777778,
+    "f1": 0.5714285714285714,
+    "confusion_matrix_tn_fp_fn_tp": [
+      87,
+      21,
+      6,
+      18
+    ],
+    "threshold": 0.5199999999999998
+  },
+  "provenance": {
+    "config_sha256": "a764ed5583c240c92cdf0c4e23d1bbe03c66f9ae438312ba5c462189373fb78d",
+    "csv_sha256": "ed10e63a2079639d475f72473d0ca1cee49fa82ea7c23fff9c6c6e8b0621d205",
+    "split_sha256": "db60aa8b0a4d6be3179849b64b50951c26dca698c1cfbcd23f1dfc667b8db2c3"
+  },
+  "code": "AuscultaForge research/ml",
+  "warning": "Internal heldout test within CirCor publicly released training patients; no independent clinical validation."
+}

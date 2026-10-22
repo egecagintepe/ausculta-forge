@@ -62,6 +62,8 @@ data/external/
 *.tar.gz
 *.zip
 *.7z
+*.pt
+*.onnx
 
 # Segmentation benchmark runs, models, and caches
 experiments/benchmarks/

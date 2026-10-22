@@ -1,0 +1,11 @@
+# Never commit third-party heart-sound WAV/annotations, raw exports, local caches or patient-linked splits.
+data/
+work/
+runs/
+artifacts/
+*.pt
+*.onnx
+*.npz
+.ipynb_checkpoints/
+__pycache__/
+.pytest_cache/

@@ -1,0 +1,55 @@
+{
+  "verifier": "AuscultaForge ML Verification Suite v1.0",
+  "model_version": "af_murmur_mil_1.0",
+  "artifact_dir": "C:\\Dev\\Antigravity\\bitirme\\ausculta-forge\\research\\ml\\artifacts\\circor_mil_v1",
+  "files_checked": {
+    "murmur_mil_cpu.pt": {
+      "exists": true,
+      "sha256": "60ee906eb204c5c5bc94d0285e0f6b25f7d2c9532b6394939d902813a86a49e0",
+      "match": true
+    },
+    "weights.pt": {
+      "exists": true,
+      "sha256": "63728ddc49dc24399fc4c523ced67d3cf7aeb8046bca8a742a68f64609256280",
+      "match": true
+    },
+    "manifest.json": {
+      "exists": true,
+      "sha256": "efb961e529cba6df4825860d8e375ac3d0c49569cdc699e1f246c4aee602e1ea",
+      "match": true
+    },
+    "metrics.json": {
+      "exists": true,
+      "sha256": "7c788a5fef982eead586e3de44c16c2216481b45eb94100becccfadf8c245a30",
+      "match": true
+    },
+    "training_config.yaml": {
+      "exists": true,
+      "sha256": "a764ed5583c240c92cdf0c4e23d1bbe03c66f9ae438312ba5c462189373fb78d",
+      "match": true
+    }
+  },
+  "sha256_checks_passed": true,
+  "torchscript_load_passed": true,
+  "pytorch_weights_load_passed": true,
+  "numerical_agreement_passed": true,
+  "max_numerical_discrepancy": 0.0,
+  "shape_contract_passed": true,
+  "real_circor_validation": {
+    "14241": {
+      "recordings_count": 4,
+      "positive_probability": 0.9333934187889099,
+      "threshold": 0.5199999999999998,
+      "predicted_label": "research_pattern_present",
+      "status": "PASS"
+    },
+    "2530": {
+      "recordings_count": 4,
+      "positive_probability": 0.26133251190185547,
+      "threshold": 0.5199999999999998,
+      "predicted_label": "research_pattern_absent",
+      "status": "PASS"
+    }
+  },
+  "overall_status": "VERIFIED_PASS"
+}

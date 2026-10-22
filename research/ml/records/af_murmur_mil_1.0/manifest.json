@@ -1,0 +1,29 @@
+{
+  "model_version": "af_murmur_mil_1.0",
+  "format": "torchscript + pytorch weights",
+  "input": [
+    "batch",
+    "recordings",
+    "channel",
+    "frequency_bins",
+    "crop_frames"
+  ],
+  "input_dtype": "float32",
+  "attention_mask": "bool[batch,recordings]",
+  "sample_rate": 2000,
+  "stft_n_fft": 512,
+  "stft_hop": 128,
+  "band_low_hz": 15,
+  "band_high_hz": 650,
+  "crop_seconds": 5.0,
+  "max_recordings": 4,
+  "threshold": 0.5199999999999998,
+  "dataset": "CirCor 1.0.3 public training subset",
+  "provenance": {
+    "config_sha256": "a764ed5583c240c92cdf0c4e23d1bbe03c66f9ae438312ba5c462189373fb78d",
+    "csv_sha256": "ed10e63a2079639d475f72473d0ca1cee49fa82ea7c23fff9c6c6e8b0621d205",
+    "split_sha256": "db60aa8b0a4d6be3179849b64b50951c26dca698c1cfbcd23f1dfc667b8db2c3"
+  },
+  "strictly_nonclinical": true,
+  "restriction": "Do not show as medical diagnosis or deploy on real acquisition before external and domain validation."
+}
