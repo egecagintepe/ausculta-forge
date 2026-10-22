@@ -1,0 +1,5 @@
+espressif/esp_tinyusb 2.2.0: HASH_VERIFIED 8e57a14ac14d8e4d4588b5b9222977b96475323bcebae3c838919bb4e8587887
+espressif/tinyusb 0.19.0~3: HASH_VERIFIED a40b7f67df6ac254a4afd96c6401cc56f2059ae747d6d7e66b568bca53ad0edc
+Manifest hash and esp32s3 target: VERIFIED
+Component Manager 2.4.11; lock format 2.0.0; declared IDF 5.5.1
+ESP_BUILD_NOT_EXECUTED; HARDWARE_NOT_TESTED

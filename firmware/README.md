@@ -14,11 +14,11 @@ purchased ESP32-S3-WROOM-1-N16R8, not an Arduino/UART demonstration. Read the
 - Managed `espressif/esp_tinyusb` **2.2.0** and `espressif/tinyusb` **0.19.0~3**.
 - 16 MB flash, DIO 80 MHz; 8 MB octal PSRAM 80 MHz. These are module settings,
   not a claim that the purchased PCB and power supply have been verified.
-- Explicit fixed versions are in `main/idf_component.yml`. The IDF-generated,
-  hash-bearing **dependencies.lock is NOT YET GENERATED**: IDF/Component Manager
-  are unavailable here, and the shell cannot resolve the registry hostname.
-  It must be generated, reviewed and committed after the first real configure;
-  no synthetic lockfile or invented component hashes are supplied.
+- Explicit fixed versions are in `main/idf_component.yml`; the genuine
+  hash-bearing `dependencies.lock` was generated with Espressif Component Manager
+  2.4.11 for declared IDF 5.5.1 / esp32s3. This standalone dependency resolution
+  does not imply that ESP-IDF or its cross compiler is installed. Preserve and
+  review the lock during the first real `idf.py build`.
 
 Sources used to verify APIs and versions:
 [esp_tinyusb 2.2.0 source](https://github.com/espressif/esp-usb/tree/c04934a51fb0f4db4b63b2500af793d1c0abf742/device/esp_tinyusb),
@@ -34,6 +34,7 @@ uses the managed component's current `tinyusb_cdcacm_init` and default config AP
 firmware/
   CMakeLists.txt                 ESP-IDF project / version and target gate
   sdkconfig.defaults            N16R8, UART console, CDC buffers, 1 kHz RTOS
+  dependencies.lock             real registry resolution, exact component hashes
   partitions.csv                factory app; no OTA or persistent recordings
   main/
     idf_component.yml           exact component requirements
@@ -68,7 +69,7 @@ idf.py build
 
 Save the real build log, `build/project_description.json`, `sdkconfig`,
 `dependencies.lock`, `build/flasher_args.json`, and the firmware binary SHA-256.
-Review that the lock resolves exactly the pinned versions before committing it.
+Review that the lock remains at exactly the pinned versions.
 A successful host GCC test is not an ESP32 build. Do not flash until the board,
 connector, chip identity, flash size, power routing and selected COM port have
 been positively identified. No eFuse operations are needed.
