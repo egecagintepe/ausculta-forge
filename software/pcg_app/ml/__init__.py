@@ -9,6 +9,8 @@ from .service import (
     AudioValidationError,
     ModelUnavailableError,
     ResearchInferenceService,
+    SubjectIntegrityError,
+    UnauthorizedPathError,
 )
 
 __all__ = [
@@ -17,6 +19,8 @@ __all__ = [
     "ModelTaskType",
     "ResearchModelRegistry",
     "AudioValidationError",
+    "SubjectIntegrityError",
+    "UnauthorizedPathError",
     "ModelUnavailableError",
     "ResearchInferenceService",
 ]

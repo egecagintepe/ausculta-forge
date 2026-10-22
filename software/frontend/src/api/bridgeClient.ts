@@ -1184,7 +1184,8 @@ class BridgeClient {
   public async predictResearch(
     filePaths: string[],
     modelId: string = 'af_murmur_mil_1.0',
-    patientIdentifier?: string
+    patientIdentifier?: string,
+    sameSubjectAttestation: boolean = false
   ): Promise<ResearchPredictionResponse> {
     const resp = await this.request('/research/ml/predict', {
       method: 'POST',
@@ -1193,6 +1194,7 @@ class BridgeClient {
         file_paths: filePaths,
         model_id: modelId,
         patient_identifier: patientIdentifier,
+        same_subject_attestation: sameSubjectAttestation,
       }),
     });
     if (!resp.ok) {

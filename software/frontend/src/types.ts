@@ -892,7 +892,7 @@ export interface ResearchModelInfo {
   name: string;
   version: string;
   task: string;
-  status: 'AVAILABLE' | 'MISSING_ARTIFACT' | 'DEPENDENCY_MISSING' | 'PLANNED_FUTURE' | 'RULE_BASED_FOUNDATION';
+  status: 'AVAILABLE' | 'MISSING_ARTIFACT' | 'DEPENDENCY_MISSING' | 'CORRUPTED_ARTIFACT' | 'PLANNED_FUTURE' | 'RULE_BASED_FOUNDATION';
   is_research_only: boolean;
   description: string;
   author: string;
@@ -906,21 +906,33 @@ export interface ResearchModelInfo {
 }
 
 export interface RecordingEvaluationItem {
-  file_path: string;
   file_name: string;
+  display_path?: string;
+  file_path?: string;
   channels: number;
   sample_rate_hz: number;
   duration_sec: number;
   sample_width_bytes: number;
 }
 
+export interface SubjectIntegrityInfo {
+  patient_identifier: string;
+  integrity_status: 'VERIFIED' | 'USER-ATTESTED';
+  provenance: string;
+  same_subject_attestation: boolean;
+  note?: string;
+}
+
 export interface ResearchPredictionResponse {
   research_only: boolean;
   strictly_nonclinical: boolean;
+  is_clinically_calibrated: boolean;
+  score_interpretation: string;
   model_id: string;
   model_version: string;
   task: string;
   patient_identifier: string;
+  subject_integrity: SubjectIntegrityInfo;
   positive_probability: number;
   validation_selected_threshold: number;
   predicted_label: string;

@@ -51,6 +51,8 @@ from .ml import (
     ResearchModelRegistry,
     ResearchInferenceService,
     AudioValidationError,
+    SubjectIntegrityError,
+    UnauthorizedPathError,
     ModelUnavailableError,
 )
 
@@ -237,6 +239,7 @@ def create_app(
         file_paths: list[str] = Field(..., min_length=1, max_length=4, description="1 to 4 PCG WAV recordings belonging to the patient")
         model_id: Optional[str] = Field(default="af_murmur_mil_1.0", description="ID of the research model")
         patient_identifier: Optional[str] = Field(default=None, description="Optional patient/subject identifier")
+        same_subject_attestation: Optional[bool] = Field(default=False, description="User attestation that all recordings belong to the same person")
 
 
 
@@ -542,13 +545,20 @@ def create_app(
                 file_paths=req.file_paths,
                 model_id=req.model_id or "af_murmur_mil_1.0",
                 patient_identifier=req.patient_identifier,
+                same_subject_attestation=bool(req.same_subject_attestation),
             )
+        except SubjectIntegrityError as sie:
+            raise HTTPException(status_code=400, detail=str(sie))
+        except UnauthorizedPathError as upe:
+            raise HTTPException(status_code=400, detail=str(upe))
         except AudioValidationError as ave:
             raise HTTPException(status_code=400, detail=str(ave))
         except ModelUnavailableError as mue:
             raise HTTPException(status_code=503, detail=str(mue))
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Research inference failed: {e}")
+            # Avoid leaking local drive paths in unexpected exception text
+            sanitized = str(e).replace("\\", "/")
+            raise HTTPException(status_code=500, detail=f"Research inference failed: {sanitized}")
 
 
 

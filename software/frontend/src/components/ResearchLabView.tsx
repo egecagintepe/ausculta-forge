@@ -48,6 +48,15 @@ export const ResearchLabView: React.FC<ResearchLabViewProps> = ({
   const [inferenceError, setInferenceError] = useState<string | null>(null);
   const [prediction, setPrediction] = useState<ResearchPredictionResponse | null>(null);
   const [showRoadmap, setShowRoadmap] = useState<boolean>(false);
+  const [sameSubjectAttestation, setSameSubjectAttestation] = useState<boolean>(false);
+
+  // Group integrity heuristic
+  const isCirCorGroup =
+    recordingPaths.length > 0 &&
+    recordingPaths.every((p) => {
+      const filename = p.split(/[/\\]/).pop() || '';
+      return /^\d+_[A-Za-z0-9]+\.wav$/i.test(filename);
+    });
 
   // Load models on mount
   useEffect(() => {
@@ -81,6 +90,7 @@ export const ResearchLabView: React.FC<ResearchLabViewProps> = ({
     setRecordingPaths(paths);
     setPrediction(null);
     setInferenceError(null);
+    setSameSubjectAttestation(true);
   };
 
   const handleAddCustomPath = () => {
@@ -104,12 +114,32 @@ export const ResearchLabView: React.FC<ResearchLabViewProps> = ({
       return;
     }
 
+    if (!isCirCorGroup && !sameSubjectAttestation) {
+      if (addToast) {
+        addToast(
+          'Subject attestation required: You must confirm all custom recordings belong to the same person.',
+          'warning'
+        );
+      }
+      return;
+    }
+
     setIsRunningInference(true);
     setInferenceError(null);
     try {
-      const res = await bridgeClient.predictResearch(recordingPaths, selectedModelId, patientId);
+      const res = await bridgeClient.predictResearch(
+        recordingPaths,
+        selectedModelId,
+        patientId,
+        isCirCorGroup || sameSubjectAttestation
+      );
       setPrediction(res);
-      if (addToast) addToast(`Evaluated Subject ${res.patient_identifier}: ${res.predicted_label}`, 'info');
+      if (addToast) {
+        addToast(
+          `Evaluated Subject ${res.patient_identifier} [${res.subject_integrity?.integrity_status}]: ${res.predicted_label}`,
+          'info'
+        );
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setInferenceError(msg);
@@ -200,10 +230,20 @@ export const ResearchLabView: React.FC<ResearchLabViewProps> = ({
                   className={`px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold border ${
                     selectedModel.status === 'AVAILABLE'
                       ? 'bg-[var(--status-success)]/15 text-[var(--status-success)] border-[var(--status-success)]/40'
+                      : selectedModel.status === 'CORRUPTED_ARTIFACT'
+                      ? 'bg-[var(--status-danger)]/15 text-[var(--status-danger)] border-[var(--status-danger)]/40'
                       : 'bg-[var(--status-warning)]/15 text-[var(--status-warning)] border-[var(--status-warning)]/40'
                   }`}
                 >
-                  {selectedModel.status === 'AVAILABLE' ? 'ARTIFACT LOADED · READY' : selectedModel.status}
+                  {selectedModel.status === 'AVAILABLE'
+                    ? 'ARTIFACT LOADED · READY'
+                    : selectedModel.status === 'CORRUPTED_ARTIFACT'
+                    ? 'INTEGRITY FAILED · HASH MISMATCH'
+                    : selectedModel.status === 'MISSING_ARTIFACT'
+                    ? 'ARTIFACT WEIGHTS MISSING'
+                    : selectedModel.status === 'DEPENDENCY_MISSING'
+                    ? 'PYTORCH MISSING'
+                    : selectedModel.status}
                 </span>
               </div>
             </div>
@@ -371,6 +411,21 @@ export const ResearchLabView: React.FC<ResearchLabViewProps> = ({
                 </button>
               </div>
             )}
+            {/* Subject-Group Attestation for custom recordings */}
+            {!isCirCorGroup && recordingPaths.length > 0 && (
+              <div className="p-3 rounded-lg border border-[var(--status-warning)]/40 bg-[var(--status-warning)]/5 flex items-start gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  id="same-subject-attestation-cb"
+                  checked={sameSubjectAttestation}
+                  onChange={(e) => setSameSubjectAttestation(e.target.checked)}
+                  className="mt-0.5 cursor-pointer accent-[var(--accent-oxblood)]"
+                />
+                <label htmlFor="same-subject-attestation-cb" className="cursor-pointer text-[var(--on-surface)] select-none leading-relaxed">
+                  <strong>Explicit Same-Subject Attestation:</strong> I attest that all audio recordings in this group originate from the <strong>same individual</strong>. (Required for unverified audio; results will be marked as <em>USER-ATTESTED</em> rather than <em>VERIFIED</em>).
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Action Bar */}
@@ -383,9 +438,19 @@ export const ResearchLabView: React.FC<ResearchLabViewProps> = ({
             <button
               id="btn-run-research-inference"
               onClick={handleRunInference}
-              disabled={!backendConnected || isRunningInference || recordingPaths.length === 0}
+              disabled={
+                !backendConnected ||
+                isRunningInference ||
+                recordingPaths.length === 0 ||
+                (!isCirCorGroup && !sameSubjectAttestation) ||
+                selectedModel.status !== 'AVAILABLE'
+              }
               className={`px-4 py-2 rounded-lg font-mono-code text-xs font-bold text-white flex items-center gap-2 transition-all cursor-pointer shadow-xs ${
-                !backendConnected || isRunningInference || recordingPaths.length === 0
+                !backendConnected ||
+                isRunningInference ||
+                recordingPaths.length === 0 ||
+                (!isCirCorGroup && !sameSubjectAttestation) ||
+                selectedModel.status !== 'AVAILABLE'
                   ? 'bg-[var(--surface-muted)] text-[var(--on-surface-variant)]/50 cursor-not-allowed'
                   : 'bg-[var(--accent-oxblood)] hover:opacity-90'
               }`}
@@ -422,6 +487,18 @@ export const ResearchLabView: React.FC<ResearchLabViewProps> = ({
                 <h3 className="font-serif-display text-lg font-semibold text-[var(--on-surface)]">
                   Patient Inference Outcome: Subject {prediction.patient_identifier}
                 </h3>
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono-code font-bold border ${
+                    prediction.subject_integrity?.integrity_status === 'VERIFIED'
+                      ? 'bg-[var(--status-success)]/15 text-[var(--status-success)] border-[var(--status-success)]/40'
+                      : 'bg-[var(--accent-metal)]/15 text-[var(--on-surface)] border-[var(--border-strong)]'
+                  }`}
+                  title={prediction.subject_integrity?.provenance}
+                >
+                  {prediction.subject_integrity?.integrity_status === 'VERIFIED'
+                    ? 'VERIFIED CIRCOR COHORT'
+                    : 'USER-ATTESTED COHORT'}
+                </span>
               </div>
               <span
                 className={`px-3 py-1 rounded text-xs font-mono-code font-bold border ${
@@ -439,7 +516,10 @@ export const ResearchLabView: React.FC<ResearchLabViewProps> = ({
             {/* Probability Gauge Bar */}
             <div className="flex flex-col gap-2 p-4 rounded-xl bg-[var(--surface-muted)] border border-[var(--border-subtle)] font-mono-code">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--on-surface-variant)] uppercase">Murmur Acoustic Probability:</span>
+                <div>
+                  <span className="text-[var(--on-surface-variant)] uppercase">Murmur Acoustic Probability: </span>
+                  <span className="text-[10px] text-[var(--on-surface-variant)]">(Uncalibrated Research Score)</span>
+                </div>
                 <span className="font-bold text-base text-[var(--on-surface)]">
                   {(prediction.positive_probability * 100).toFixed(1)}%
                 </span>
@@ -464,12 +544,16 @@ export const ResearchLabView: React.FC<ResearchLabViewProps> = ({
                 </span>
                 <span>1.0 (Present)</span>
               </div>
+
+              <div className="text-[10px] text-[var(--on-surface-variant)] pt-1 border-t border-[var(--border-subtle)]/50">
+                Notice: Score is uncalibrated binary cross-entropy research output. Not a calibrated clinical disease probability.
+              </div>
             </div>
 
             {/* Recordings breakdown table */}
             <div className="flex flex-col gap-2 font-mono-code text-xs">
               <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--on-surface-variant)]">
-                Evaluated Audio Recordings ({prediction.recording_count})
+                Evaluated Audio Recordings ({prediction.recording_count}) — Safe Confinement
               </span>
               <table className="w-full text-left border-collapse text-[11px]">
                 <thead>
@@ -483,7 +567,9 @@ export const ResearchLabView: React.FC<ResearchLabViewProps> = ({
                 <tbody>
                   {prediction.recordings_evaluated.map((rec, i) => (
                     <tr key={i} className="border-b border-[var(--border-subtle)]/40">
-                      <td className="py-1.5 font-semibold text-[var(--on-surface)]">{rec.file_name}</td>
+                      <td className="py-1.5 font-semibold text-[var(--on-surface)]" title={rec.file_name}>
+                        {rec.display_path || rec.file_name}
+                      </td>
                       <td className="py-1.5 text-[var(--on-surface-variant)]">{rec.duration_sec.toFixed(2)}s</td>
                       <td className="py-1.5 text-[var(--on-surface-variant)]">{rec.sample_rate_hz} Hz</td>
                       <td className="py-1.5 text-right">

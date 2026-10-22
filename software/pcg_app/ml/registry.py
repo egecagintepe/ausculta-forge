@@ -27,8 +27,27 @@ class ModelStatus(str, Enum):
     AVAILABLE = "AVAILABLE"
     MISSING_ARTIFACT = "MISSING_ARTIFACT"
     DEPENDENCY_MISSING = "DEPENDENCY_MISSING"
+    CORRUPTED_ARTIFACT = "CORRUPTED_ARTIFACT"
     PLANNED_FUTURE = "PLANNED_FUTURE"
     RULE_BASED_FOUNDATION = "RULE_BASED_FOUNDATION"
+
+
+EXPECTED_MURMUR_MIL_CHECKSUMS: dict[str, str] = {
+    "murmur_mil_cpu.pt": "60ee906eb204c5c5bc94d0285e0f6b25f7d2c9532b6394939d902813a86a49e0",
+    "weights.pt": "63728ddc49dc24399fc4c523ced67d3cf7aeb8046bca8a742a68f64609256280",
+    "manifest.json": "efb961e529cba6df4825860d8e375ac3d0c49569cdc699e1f246c4aee602e1ea",
+    "metrics.json": "7c788a5fef982eead586e3de44c16c2216481b45eb94100becccfadf8c245a30",
+    "training_config.yaml": "a764ed5583c240c92cdf0c4e23d1bbe03c66f9ae438312ba5c462189373fb78d",
+}
+
+
+def compute_file_sha256(path: Path) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(65536):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 @dataclass(frozen=True)
@@ -61,35 +80,119 @@ class ResearchModelRegistry:
 
     def __init__(self, root_dir: Path | None = None) -> None:
         if root_dir is None:
-            # Default to repo root
-            root_dir = Path(__file__).parent.parent.parent.parent
+            # Check environment variable first
+            import os
+            env_root = os.environ.get("AUSCULTAFORGE_REPO_ROOT") or os.environ.get("AUSCULTAFORGE_RESEARCH_DIR")
+            if env_root and Path(env_root).exists():
+                root_dir = Path(env_root)
+            else:
+                # Default to repo root relative to this file
+                root_dir = Path(__file__).parent.parent.parent.parent
         self.root_dir = Path(root_dir)
+        self._verification_cache: dict[str, tuple[float, ModelStatus]] = {}
 
     def _torch_available(self) -> bool:
         try:
             import torch  # noqa: F401
             return True
-        except ImportError:
+        except (ImportError, Exception):
             return False
 
     def _locate_artifact_dir(self, version: str) -> Path | None:
-        """Find the local directory containing model weights."""
-        candidates = [
+        """Find the local directory containing model weights with packaged desktop heuristics."""
+        import os
+        import sys
+
+        candidates: list[Path] = []
+
+        # 1. Explicit environment override
+        env_model_dir = os.environ.get("AUSCULTAFORGE_MODEL_DIR")
+        if env_model_dir:
+            candidates.append(Path(env_model_dir))
+            candidates.append(Path(env_model_dir) / version)
+
+        # 2. PyInstaller bundle extraction dir (_MEIPASS)
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "research" / "ml" / "artifacts" / "circor_mil_v1")
+            candidates.append(Path(meipass) / "research" / "ml" / "records" / version)
+            candidates.append(Path(meipass) / "models" / version)
+
+        # 3. Standard repository paths
+        candidates.extend([
             self.root_dir / "research" / "ml" / "artifacts" / "circor_mil_v1",
             self.root_dir / "research" / "ml" / "records" / version,
             self.root_dir / "models" / version,
-        ]
+        ])
+
+        # 4. Executable parent directory (when packaged)
+        exe_dir = Path(sys.executable).parent
+        candidates.append(exe_dir / "models" / version)
+        candidates.append(exe_dir / "research" / "ml" / "records" / version)
+
         for c in candidates:
-            if (c / "murmur_mil_cpu.pt").exists() or (c / "weights.pt").exists():
+            if c.exists() and ((c / "murmur_mil_cpu.pt").exists() or (c / "weights.pt").exists()):
                 return c
+
         # If weights are missing, check if records dir exists with metadata
-        rec_dir = self.root_dir / "research" / "ml" / "records" / version
-        if rec_dir.exists() and (rec_dir / "manifest.json").exists():
-            return rec_dir
+        for c in candidates:
+            if c.exists() and (c / "manifest.json").exists():
+                return c
+
         return None
 
+    def _verify_artifact_integrity(self, artifact_dir: Path) -> ModelStatus:
+        """Verify presence of required files, manifest version, and SHA-256 hashes."""
+        # Required files for full operation
+        ts_path = artifact_dir / "murmur_mil_cpu.pt"
+        manifest_path = artifact_dir / "manifest.json"
+
+        if not ts_path.exists() or not manifest_path.exists():
+            return ModelStatus.MISSING_ARTIFACT
+
+        # Cache check using mtime
+        cache_key = str(artifact_dir)
+        mtime = ts_path.stat().st_mtime
+        if cache_key in self._verification_cache:
+            cached_mtime, cached_status = self._verification_cache[cache_key]
+            if cached_mtime == mtime:
+                return cached_status
+
+        # 1. Verify manifest version
+        try:
+            m_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if m_data.get("model_version") != "af_murmur_mil_1.0":
+                self._verification_cache[cache_key] = (mtime, ModelStatus.CORRUPTED_ARTIFACT)
+                return ModelStatus.CORRUPTED_ARTIFACT
+        except Exception:
+            self._verification_cache[cache_key] = (mtime, ModelStatus.CORRUPTED_ARTIFACT)
+            return ModelStatus.CORRUPTED_ARTIFACT
+
+        # 2. Verify TorchScript file hash
+        ts_hash = compute_file_sha256(ts_path)
+        if ts_hash != EXPECTED_MURMUR_MIL_CHECKSUMS["murmur_mil_cpu.pt"]:
+            self._verification_cache[cache_key] = (mtime, ModelStatus.CORRUPTED_ARTIFACT)
+            return ModelStatus.CORRUPTED_ARTIFACT
+
+        # 3. Verify manifest hash
+        manifest_hash = compute_file_sha256(manifest_path)
+        if manifest_hash != EXPECTED_MURMUR_MIL_CHECKSUMS["manifest.json"]:
+            self._verification_cache[cache_key] = (mtime, ModelStatus.CORRUPTED_ARTIFACT)
+            return ModelStatus.CORRUPTED_ARTIFACT
+
+        # 4. If weights.pt is present, verify its hash
+        weights_path = artifact_dir / "weights.pt"
+        if weights_path.exists():
+            weights_hash = compute_file_sha256(weights_path)
+            if weights_hash != EXPECTED_MURMUR_MIL_CHECKSUMS["weights.pt"]:
+                self._verification_cache[cache_key] = (mtime, ModelStatus.CORRUPTED_ARTIFACT)
+                return ModelStatus.CORRUPTED_ARTIFACT
+
+        self._verification_cache[cache_key] = (mtime, ModelStatus.AVAILABLE)
+        return ModelStatus.AVAILABLE
+
     def get_murmur_mil_registration(self) -> ModelRegistration:
-        """Inspect and register af_murmur_mil_1.0."""
+        """Inspect and register af_murmur_mil_1.0 with strict fail-closed verification."""
         version = "af_murmur_mil_1.0"
         artifact_dir = self._locate_artifact_dir(version)
         has_torch = self._torch_available()
@@ -108,17 +211,13 @@ class ResearchModelRegistry:
             except Exception:
                 pass
 
-        # Determine status
-        weights_exist = False
-        if artifact_dir:
-            weights_exist = (artifact_dir / "murmur_mil_cpu.pt").exists() or (artifact_dir / "weights.pt").exists()
-
+        # Determine status with fail-closed integrity checks
         if not has_torch:
             status = ModelStatus.DEPENDENCY_MISSING
-        elif not weights_exist:
+        elif not artifact_dir:
             status = ModelStatus.MISSING_ARTIFACT
         else:
-            status = ModelStatus.AVAILABLE
+            status = self._verify_artifact_integrity(artifact_dir)
 
         # Metrics summary
         metrics_summary = None
