@@ -375,11 +375,8 @@ class ReferenceFramedPacketDecoder(DevicePacketDecoder):
     """Illustrative reference decoder demonstrating robust multi-fragment frame assembly.
 
     NOTE: The byte-level wire format is PROPOSED / NOT APPROVED pending joint Module B/C agreement.
-    This reference decoder demonstrates the transport supervisor's ability to:
-    - Buffer fragmented chunk reads until a complete frame is assembled.
-    - Recover framing synchronization after encountering garbage bytes or line noise.
-    - Slice concatenated / combined frames arriving in a single read.
-    - Reject corrupted frames via application CRC-16 check.
+    QUARANTINED FOR LEGACY LAB TESTS ONLY: Uses obsolete CRC-16 and 0xAA55 framing.
+    For production physical ESP32-S3 communications, use CanonicalProfileBDecoder.
     """
 
     MAGIC: bytes = b"\xaa\x55"
@@ -604,6 +601,58 @@ class ProposedProfileBPacketDecoder(DevicePacketDecoder):
             packets.append(pkt)
 
         return packets
+
+
+class CanonicalProfileBDecoder(DevicePacketDecoder):
+    """Authoritative production Module B/C Profile B decoder (40-byte header, CRC-32/IEEE).
+    
+    Wire format:
+    - Magic: 0xAF534331 ("1CSA" in little-endian)
+    - 40-byte header Profile B
+    - CRC-32/IEEE 4-byte trailer
+    - 256 samples of S32_LE per frame (1068 total wire bytes)
+    """
+
+    def __init__(self, meaningful_bits: int = 24, sample_rate_hz: int = 48000) -> None:
+        from .canonical.codec import StreamingProtocolDecoder
+        self.meaningful_bits = meaningful_bits
+        self.sample_rate_hz = sample_rate_hz
+        self._decoder = StreamingProtocolDecoder()
+
+    def reset(self) -> None:
+        self._decoder.reset()
+
+    @property
+    def buffer_len(self) -> int:
+        return self._decoder.buffer_bytes
+
+    @property
+    def malformed_count(self) -> int:
+        return self._decoder.total_magic_resync_events
+
+    @property
+    def crc_failure_count(self) -> int:
+        return self._decoder.total_crc_errors
+
+    def feed_bytes(self, chunk: bytes) -> list[DeviceSamplePacket]:
+        from .canonical.codec import MSG_TYPE_AUDIO_DATA
+        packets = self._decoder.feed_bytes(chunk)
+        device_packets: list[DeviceSamplePacket] = []
+        for pkt in packets:
+            if pkt.msg_type == MSG_TYPE_AUDIO_DATA:
+                device_packets.append(
+                    DeviceSamplePacket(
+                        sequence=pkt.sequence_id,
+                        timestamp_s=float(pkt.timestamp_us) / 1_000_000.0,
+                        raw_samples=pkt.raw_samples,
+                        flags=pkt.flags,
+                        crc_ok=pkt.crc_ok,
+                        meaningful_bits=self.meaningful_bits,
+                        sample_rate_hz=pkt.sample_rate_hz or self.sample_rate_hz,
+                    )
+                )
+        return device_packets
+
 
 
 # ==============================================================================
@@ -1277,6 +1326,15 @@ class DeviceRuntime:
         self._last_error: Optional[str] = None
         self._connected_at_utc: Optional[str] = None
         self._disconnected_at_utc: Optional[str] = None
+        self._canonical_engine: Optional[Any] = None
+
+    @property
+    def canonical_engine(self) -> Optional[Any]:
+        return self._canonical_engine
+
+    @canonical_engine.setter
+    def canonical_engine(self, engine: Any) -> None:
+        self._canonical_engine = engine
 
     @property
     def state(self) -> DeviceState:
@@ -1522,4 +1580,6 @@ class DeviceRuntime:
             "acquisition_profile": self.profile.to_dict(),
             "supervisor_active": self._supervisor.is_running if self._supervisor else False,
             "decoder_type": self._decoder.__class__.__name__ if self._decoder else None,
+            "canonical_session": self._canonical_engine.get_summary() if self._canonical_engine else None,
         }
+

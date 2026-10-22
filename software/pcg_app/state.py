@@ -547,17 +547,71 @@ class StreamManager:
                 pass
             self._loop_task = None
 
-    async def ingest_device_packet(self, packet: DeviceSamplePacket) -> None:
-        """Entry point for push-driven physical hardware sample packets.
+    def ingest_device_packet_sync(self, packet: DeviceSamplePacket) -> None:
+        """Synchronous entry point for push-driven physical hardware sample packets.
 
-        Called by the transport decoder when new physical packets arrive from USB.
-        Flow:
-        1. Only accept packets when hardware is actively STREAMING and stream manager is active
-        2. Update DeviceIntegrityStats
-        3. Drop CRC-failed packets without feeding DSP or recording
-        4. Convert valid packet to SampleBlock (checks integer range, normalizes to float32)
-        5. Process through DSP pipeline, record if active, and broadcast signal_frame
+        Called directly by the transport worker thread without event-loop overhead or contention.
+        Guarantees full-rate 48 kHz ingestion, continuous DSP filtering, and bit-preserving recording.
         """
+        if (
+            self.device_runtime.state != DeviceState.STREAMING
+            or self.source_type != "hardware"
+            or not self.is_streaming
+            or self.is_paused
+        ):
+            return
+
+        # Update integrity telemetry
+        self.device_runtime.stats.record_packet(packet)
+
+        # Drop CRC-failed packets without feeding DSP or recording
+        if not packet.crc_ok:
+            return
+
+        # Adapt to SampleBlock (checks legal integer range and normalizes to float32)
+        block = packet_to_sample_block(
+            packet,
+            sample_rate_hz=self.sample_rate_hz,
+            profile=self.device_runtime.profile,
+        )
+
+        # 1. Full-rate stateful DSP pipeline
+        frame = self.pipeline.process_block(block)
+
+        # 2. Immediate full-rate session recording
+        if self.recorder.is_recording:
+            try:
+                self.recorder.record_block(block)
+            except Exception as e:
+                self.device_runtime.event_log.log(
+                    "RECORDING_WRITE_ERROR",
+                    f"Error writing block to active session: {e}",
+                    severity="error",
+                )
+
+        # 3. Stream quality report
+        quality_rep = self.pipeline.quality_monitor.report
+        quality_summary = {
+            "total_blocks": quality_rep.total_blocks,
+            "dropped_blocks": quality_rep.dropped_blocks,
+            "repeated_sequences": quality_rep.repeated_sequences,
+            "sequence_discontinuities": quality_rep.sequence_discontinuities,
+            "is_healthy": quality_rep.is_healthy,
+        }
+
+        # 4. Decoupled display frame aggregation
+        display_frame = self.display_aggregator.add_block(
+            raw_block=block,
+            filtered_block=frame.filtered_block,
+            quality_summary=quality_summary,
+            recording_active=self.recorder.is_recording,
+        )
+
+        if display_frame is not None:
+            self.publish_display_frame(display_frame)
+
+    async def ingest_device_packet(self, packet: DeviceSamplePacket) -> None:
+        """Async entry point for push-driven physical hardware sample packets."""
         if (
             self.device_runtime.state != DeviceState.STREAMING
             or self.source_type != "hardware"
@@ -582,6 +636,8 @@ class StreamManager:
 
         # Dispatch to shared processing, recording, and WebSocket broadcast
         await self._dispatch_sample_block(block)
+
+
 
     async def _dispatch_sample_block(self, block: SampleBlock) -> None:
         """Shared pipeline processing, session recording, and decoupled display publishing.

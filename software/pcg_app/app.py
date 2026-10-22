@@ -4,6 +4,7 @@ Provides the local bridge between Python's pcg_core signal processing pipeline,
 device runtime foundation, and the React frontend desktop client.
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 import json
 from pathlib import Path
@@ -212,6 +213,20 @@ def create_app(
         fault_code: str
         resolution_message: Optional[str] = None
 
+    class UsbConnectRequest(BaseModel):
+        port: str
+        baudrate: Optional[int] = 115200
+        timeout_s: Optional[float] = 3.0
+
+    class UsbStartRequest(BaseModel):
+        source_mode: Optional[int] = 1
+        target_samples: Optional[int] = 480000
+        sample_rate_hz: Optional[int] = 48000
+        encoding: Optional[int] = 1
+        channels: Optional[int] = 1
+        timeout_s: Optional[float] = 3.0
+
+
 
     # REST Endpoints
     @app.get("/api/health")
@@ -264,6 +279,235 @@ def create_app(
             manager.handle_device_disconnect("User requested device disconnect via API")
             await manager.broadcast(make_device_state_message(manager.device_runtime.get_state_dict()))
         return manager.device_runtime.get_state_dict()
+
+    # Authoritative Production USB CDC-ACM Device Endpoints
+    @app.get("/api/device/usb/ports")
+    def api_get_usb_ports() -> list[dict[str, Any]]:
+        doctor = UsbDiscoveryDoctor()
+        ports = doctor.scan_ports()
+        result = [p.to_dict() for p in ports]
+        result.append({
+            "port_name": "SIMULATED_ESP32_S3",
+            "description": "Simulated ESP32-S3 Endpoint (Loopback CI)",
+            "hwid": "VIRTUAL_LOOPBACK_ENDPOINT",
+            "vid_hex": "0x303A",
+            "pid_hex": "0x0002",
+            "is_espressif_candidate": True,
+            "candidate_reason": "In-memory canonical hardware simulator (Deterministic G1 & Acoustic)",
+        })
+        return result
+
+    @app.post("/api/device/usb/connect")
+    async def api_connect_usb_device(req: UsbConnectRequest) -> dict[str, Any]:
+        from .canonical.engine import CanonicalSessionEngine
+        from .device_runtime import DeviceCapabilities, DeviceSamplePacket
+        from .diagnostics.flight_recorder import get_flight_recorder
+
+        # If an engine is currently running, disconnect it first
+        if manager.device_runtime.canonical_engine and manager.device_runtime.canonical_engine.is_running:
+            try:
+                manager.device_runtime.canonical_engine.disconnect(timeout_s=1.0).result(timeout=1.0)
+            except Exception:
+                pass
+
+        loop = asyncio.get_running_loop()
+
+        def _on_audio(pkt):
+            dsp = DeviceSamplePacket(
+                sequence=pkt.sequence_id,
+                timestamp_s=float(pkt.timestamp_us) / 1_000_000.0,
+                raw_samples=pkt.raw_samples,
+                flags=pkt.flags,
+                crc_ok=pkt.crc_ok,
+                meaningful_bits=24,
+                sample_rate_hz=pkt.sample_rate_hz or 48000,
+            )
+            manager.ingest_device_packet_sync(dsp)
+
+        def _on_disc(reason: str):
+            manager.handle_device_disconnect(reason)
+            st = manager.device_runtime.get_state_dict()
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    asyncio.run_coroutine_threadsafe(manager.broadcast(make_device_state_message(st)), loop)
+            except Exception:
+                pass
+
+        engine = CanonicalSessionEngine(
+            diagnostic_journal=get_flight_recorder(),
+            on_audio_packet=_on_audio,
+            on_disconnect=_on_disc,
+        )
+        manager.device_runtime.canonical_engine = engine
+
+        # Authoritative device lifecycle transition: ABSENT -> DETECTED -> OPENING
+        if manager.device_runtime.state == DeviceState.ABSENT:
+            manager.device_runtime.transition_to(DeviceState.DETECTED)
+        if manager.device_runtime.state in (DeviceState.DETECTED, DeviceState.INTERRUPTED, DeviceState.ERROR):
+            manager.device_runtime.transition_to(DeviceState.OPENING)
+
+        try:
+            fut = engine.connect(
+                port=req.port,
+                baudrate=req.baudrate or 115200,
+                timeout_s=req.timeout_s or 3.0,
+            )
+            caps_ack = await asyncio.wrap_future(fut)
+        except Exception as e:
+            if manager.device_runtime.state == DeviceState.OPENING:
+                manager.device_runtime.transition_to(DeviceState.ERROR, error_msg=str(e))
+            else:
+                manager.device_runtime._last_error = str(e)
+                manager.device_runtime._state = DeviceState.ERROR
+            st = manager.device_runtime.get_state_dict()
+            await manager.broadcast(make_device_state_message(st))
+            raise HTTPException(status_code=400, detail=f"Failed to connect to '{req.port}': {e}")
+
+        # Authoritative lifecycle transition: OPENING -> HANDSHAKING -> READY
+        manager.device_runtime.transition_to(DeviceState.HANDSHAKING)
+
+        # Update DeviceRuntime state & capabilities
+        fw_ver = f"{caps_ack.firmware_version_major}.{caps_ack.firmware_version_minor}.{caps_ack.firmware_version_patch}"
+        dev_id = f"ESP32-S3 (UID: 0x{caps_ack.device_uid_low:08x})" if not engine.is_simulated else "Simulated ESP32-S3"
+        dev_caps = DeviceCapabilities(
+            protocol_version="1.0",
+            firmware_version=fw_ver,
+            device_id=dev_id,
+            sample_rate_hz=caps_ack.hardware_sample_rate_hz,
+            sample_format="signed_pcm",
+            channels=1,
+            max_block_size=caps_ack.max_frame_samples,
+            sample_container_bits=32,
+            meaningful_data_bits=24,
+        )
+        manager.device_runtime._capabilities = dev_caps
+        manager.device_runtime.transition_to(DeviceState.READY)
+        manager.device_runtime.event_log.log(
+            "DEVICE_CONNECTED",
+            f"Connected to {dev_id} on {req.port} (FW {fw_ver})",
+            severity="info",
+            metadata={"port": req.port, "is_simulated": engine.is_simulated},
+        )
+        st = manager.device_runtime.get_state_dict()
+        await manager.broadcast(make_device_state_message(st))
+
+        return {
+            "status": "connected",
+            "port": req.port,
+            "capabilities": dev_caps.to_dict(),
+            "summary": engine.get_summary(),
+        }
+
+    @app.post("/api/device/usb/start")
+    async def api_start_usb_acquisition(req: Optional[UsbStartRequest] = None) -> dict[str, Any]:
+        engine = manager.device_runtime.canonical_engine
+        if not engine or not engine.is_running or engine.state.value != "READY":
+            raise HTTPException(status_code=400, detail="Device is not ready for acquisition. Connect and verify HELLO first.")
+
+        p = req or UsbStartRequest()
+        src_mode = p.source_mode if p.source_mode is not None else 1
+        tgt_samples = p.target_samples if p.target_samples is not None else 480000
+        rate = p.sample_rate_hz or 48000
+
+        try:
+            fut = engine.start_acquisition(
+                target_samples=tgt_samples,
+                source_mode=src_mode,
+                sample_rate_hz=rate,
+                encoding=p.encoding or 1,
+                channels=p.channels or 1,
+                timeout_s=p.timeout_s or 3.0,
+            )
+            ack = await asyncio.wrap_future(fut)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to start acquisition: {e}")
+
+        # Switch StreamManager to hardware source
+        manager.source_type = "hardware"
+        manager.active_source_name = f"Hardware: {engine.port_name}"
+        manager.is_streaming = True
+        manager.is_paused = False
+        manager.sample_rate_hz = rate
+        manager.device_runtime._state = DeviceState.STREAMING
+
+        st = manager.device_runtime.get_state_dict()
+        await manager.broadcast(make_device_state_message(st))
+        await manager.broadcast(make_stream_state_message(manager.get_state_dict()))
+
+        return {
+            "status": "streaming",
+            "session_id": f"0x{ack.session_id:08x}",
+            "source_mode": src_mode,
+            "target_samples": tgt_samples,
+            "summary": engine.get_summary(),
+        }
+
+    @app.post("/api/device/usb/stop")
+    async def api_stop_usb_acquisition() -> dict[str, Any]:
+        engine = manager.device_runtime.canonical_engine
+        if not engine or not engine.is_running:
+            raise HTTPException(status_code=400, detail="No active device engine running.")
+
+        try:
+            fut = engine.stop_acquisition(timeout_s=4.0)
+            telem = await asyncio.wrap_future(fut)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to stop acquisition: {e}")
+
+        manager.device_runtime._state = DeviceState.READY
+        manager.is_streaming = False
+        st = manager.device_runtime.get_state_dict()
+        await manager.broadcast(make_device_state_message(st))
+        await manager.broadcast(make_stream_state_message(manager.get_state_dict()))
+
+        return {
+            "status": "stopped",
+            "telemetry": {
+                "generated_samples": telem.generated_samples,
+                "dropped_samples": telem.dropped_samples,
+                "stop_reason": telem.stop_reason,
+            },
+            "g1_evidence": engine.last_g1_evidence,
+            "summary": engine.get_summary(),
+        }
+
+    @app.post("/api/device/usb/disconnect")
+    async def api_disconnect_usb_device() -> dict[str, Any]:
+        engine = manager.device_runtime.canonical_engine
+        if engine and engine.is_running:
+            try:
+                fut = engine.disconnect(timeout_s=2.0)
+                await asyncio.wrap_future(fut)
+            except Exception:
+                pass
+
+        manager.handle_device_disconnect("User requested disconnect via USB API")
+        st = manager.device_runtime.get_state_dict()
+        await manager.broadcast(make_device_state_message(st))
+        return {
+            "status": "disconnected",
+            "device": st,
+        }
+
+    @app.get("/api/device/usb/session")
+    def api_get_usb_session() -> dict[str, Any]:
+        engine = manager.device_runtime.canonical_engine
+        if not engine:
+            return {
+                "session_state": "DISCONNECTED",
+                "is_running": False,
+                "port": None,
+            }
+        return engine.get_summary()
+
+    @app.get("/api/device/usb/g1-evidence")
+    def api_get_g1_evidence() -> dict[str, Any]:
+        engine = manager.device_runtime.canonical_engine
+        if not engine or not engine.last_g1_evidence:
+            raise HTTPException(status_code=404, detail="No deterministic G1 evidence report found.")
+        return engine.last_g1_evidence
+
 
     # Virtual Integration Bench Endpoints (Software-Only Known-Answer Testing)
     @app.get("/api/bench/scenarios")
