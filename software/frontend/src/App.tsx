@@ -1012,6 +1012,10 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
         isHealthy={streamQuality.is_healthy}
         isRecording={isRecording}
         sourceName={activeSourceName}
+        sourceType={sourceType}
+        totalBlocks={streamQuality.total_blocks}
+        droppedBlocks={streamQuality.dropped_blocks}
+        uiDroppedFrames={droppedDisplayFrames}
       />
 
       {/* 5. Modals & Dialogs */}

@@ -86,7 +86,7 @@ const METROLOGY_EXPLANATIONS: Record<string, MetrologyCardData> = {
     whatIsIt: 'Averaged periodogram using windowed, overlapping segments. Displays power spectral density in normalized amplitude squared per Hertz (FS^2 / Hz) and relative dB.',
     whyUseful: 'Reveals frequency content (e.g., 20–150 Hz heart sound fundamental band) with reduced spectral variance compared to raw FFT.',
     largeSmallMeaning: 'Peaks indicate frequency concentrations of acoustic energy. Bin spacing Delta_f = fs / N_fft defines discrete grid resolution.',
-    whatItDoesNotProve: 'Coarse FFT does NOT destroy physical components; zero-padding interpolates the display but does NOT increase true physical resolving power. Does NOT prove absolute acoustic sound pressure (Pa^2/Hz).'
+    whatItDoesNotProve: 'Coarse FFT does NOT destroy physical components; zero-padding interpolates the display but does NOT increase true physical resolving power. Does NOT prove absolute acoustic sound pressure (Pa^2/Hz). Note: Discrete bin spacing Delta_f = fs / N_fft reflects discrete FFT evaluation grid resolution, distinct from window-broadened physical resolving power (Rayleigh resolution limit).'
   },
   hilbert_envelope: {
     title: 'Hilbert Instantaneous Envelope',
@@ -125,6 +125,21 @@ const METROLOGY_EXPLANATIONS: Record<string, MetrologyCardData> = {
   }
 };
 
+/**
+ * Formats Welch FFT bin-spacing label dynamically based on active session sample rate.
+ * Prevents false hardcoded @48k assumptions on 4 kHz or non-48 kHz recordings.
+ */
+export function formatWelchBinLabel(nperseg: number, sampleRateHz?: number | null): string {
+  if (!sampleRateHz || sampleRateHz <= 0) {
+    return `${nperseg} (Δf requires active session)`;
+  }
+  const deltaF = sampleRateHz / nperseg;
+  const rateLabel = sampleRateHz >= 1000
+    ? `${(sampleRateHz / 1000).toFixed(sampleRateHz % 1000 === 0 ? 0 : 1)} kHz`
+    : `${sampleRateHz} Hz`;
+  return `${nperseg} (Δf ≈ ${deltaF.toFixed(2)} Hz @ ${rateLabel})`;
+}
+
 export const ScientificLab: React.FC<ScientificLabProps> = ({
   isDark,
   sessions,
@@ -140,6 +155,10 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
   const [analyzing, setAnalyzing] = useState<boolean>(false);
   const [analysisResult, setAnalysisResult] = useState<ScientificSessionAnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+  // Derive active session sample rate for scientific parameters
+  const activeSession = sessions.find(s => s.session_id === selectedSessionId);
+  const activeSampleRateHz = analysisResult?.sample_rate_hz ?? activeSession?.sample_rate_hz ?? null;
 
   // Selected Envelope view
   const [selectedEnvelopeAlgo, setSelectedEnvelopeAlgo] = useState<'all' | 'hilbert' | 'moving_rms' | 'tkeo' | 'psd_band'>('all');
@@ -398,19 +417,21 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
 
           {/* Welch NPERSEG */}
           <div className="flex flex-col gap-0.5">
-            <label className="text-[10px] font-mono-code text-[var(--on-surface-variant)] uppercase">
+            <label className="text-[10px] font-mono-code text-[var(--on-surface-variant)] uppercase font-semibold">
               Welch NFFT / Seg
             </label>
             <select
+              id="welch-nperseg-select"
               value={welchNperseg}
               onChange={e => setWelchNperseg(Number(e.target.value))}
               className="px-2.5 py-1.5 rounded text-xs font-mono-code border bg-[var(--surface-muted)] text-[var(--on-surface)]"
               style={{ borderColor: 'var(--border-subtle)' }}
             >
-              <option value={512}>512 (Δf ≈ 93.75 Hz @ 48k)</option>
-              <option value={1024}>1024 (Δf ≈ 46.88 Hz @ 48k)</option>
-              <option value={2048}>2048 (Δf ≈ 23.44 Hz @ 48k)</option>
-              <option value={4096}>4096 (Δf ≈ 11.72 Hz @ 48k)</option>
+              {[512, 1024, 2048, 4096].map(n => (
+                <option key={n} value={n}>
+                  {formatWelchBinLabel(n, activeSampleRateHz)}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -705,8 +726,8 @@ export const ScientificLab: React.FC<ScientificLabProps> = ({
               <div className="text-xl font-mono-code font-bold text-[var(--accent-oxblood)]">
                 {analysisResult.display.psd.delta_f_hz.toFixed(2)} Hz
               </div>
-              <span className="text-[10px] font-mono-code text-[var(--on-surface-variant)]">
-                Δf = fs / N_fft ({analysisResult.sample_rate_hz} Hz / {welchNperseg})
+              <span className="text-[11px] font-mono-code text-[var(--on-surface-variant)] leading-normal">
+                Δf = fs / N_fft ({analysisResult.sample_rate_hz} Hz / {welchNperseg}) • Grid spacing, not physical resolving power
               </span>
             </div>
 

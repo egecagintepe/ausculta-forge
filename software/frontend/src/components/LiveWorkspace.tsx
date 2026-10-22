@@ -28,6 +28,7 @@ import {
   HeartSoundMetadata,
   SpectralFrameData,
 } from '../types';
+import { resolveStreamHealthState } from './FooterStatus';
 
 interface LiveWorkspaceProps {
   sourceType: AudioSourceType;
@@ -618,7 +619,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
                   <span className="font-sans-ui text-sm font-semibold text-[var(--on-surface)] tracking-tight">
-                    {activeMetadata?.filename || 'normal_sample_01.wav'}
+                    {sourceType === 'none' ? 'No Active Source' : (activeMetadata?.filename || 'Live Stream')}
                   </span>
                   <span className="bg-[var(--surface-muted)] text-[var(--on-surface-variant)] font-mono-code text-[10px] px-2 py-0.5 rounded font-semibold border border-[var(--border-subtle)]">
                     {sourceType === 'device'
@@ -634,8 +635,10 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                       : 'NO SOURCE'}
                   </span>
                 </div>
-                <span className="font-mono-code text-[10px] text-[var(--on-surface-variant)] uppercase tracking-wider">
-                  PCM STREAM · {(sampleRate / 1000).toFixed(1)} KHZ · FLOAT32 APP · LIVE BENCH
+                <span className="font-mono-code text-[10px] text-[var(--on-surface-variant)] uppercase tracking-wider font-medium">
+                  {sourceType === 'none'
+                    ? 'ACQUISITION IDLE · NO REAL-TIME SIGNAL MEASURED'
+                    : `PCM STREAM · ${(sampleRate / 1000).toFixed(1)} KHZ · FLOAT32 APP · LIVE BENCH`}
                 </span>
               </div>
             </div>
@@ -653,22 +656,40 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
             )}
 
             {/* Signal / Stream Quality Badge with Truthful MCU vs UI Separation */}
-            {backendConnected && (
-              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded ${
-                streamQuality?.is_healthy !== false && (droppedDisplayFrames || 0) === 0
-                  ? 'bg-[var(--status-success)]/10 text-[var(--status-success)] border border-[var(--status-success)]/25'
-                  : 'bg-[var(--status-warning)]/10 text-[var(--status-warning)] border border-[var(--status-warning)]/25'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  streamQuality?.is_healthy !== false && (droppedDisplayFrames || 0) === 0
-                    ? 'bg-[var(--status-success)]'
-                    : 'bg-[var(--status-warning)]'
-                }`} />
-                <span className="font-mono-code text-[11px] font-semibold tracking-wide">
-                  STREAM: {streamQuality?.is_healthy !== false ? 'OPTIMAL' : 'DEGRADED'} · MCU: {streamQuality?.dropped_blocks || 0} LOSS · UI: {droppedDisplayFrames || 0} DROPS
-                </span>
-              </div>
-            )}
+            {backendConnected && (() => {
+              const streamStatus = resolveStreamHealthState({
+                backendConnected,
+                sourceType,
+                totalBlocks: streamQuality?.total_blocks,
+                isHealthy: streamQuality?.is_healthy,
+                droppedBlocks: streamQuality?.dropped_blocks,
+                uiDroppedFrames: droppedDisplayFrames,
+              });
+              const isNeutral = streamStatus.state === 'NO_ACTIVE_ACQUISITION' || streamStatus.state === 'NOT_EVALUATED';
+              const isHealthyState = streamStatus.state === 'STREAM_HEALTHY' || streamStatus.state === 'SYNTHETIC_ACTIVE' || streamStatus.state === 'FILE_ACTIVE';
+
+              return (
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded ${
+                  isNeutral
+                    ? 'bg-[var(--surface-muted)] text-[var(--on-surface-variant)] border border-[var(--border-subtle)]'
+                    : isHealthyState
+                    ? 'bg-[var(--status-success)]/10 text-[var(--status-success)] border border-[var(--status-success)]/25'
+                    : 'bg-[var(--status-warning)]/10 text-[var(--status-warning)] border border-[var(--status-warning)]/25'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    isNeutral
+                      ? 'bg-[var(--border-strong)]'
+                      : isHealthyState
+                      ? 'bg-[var(--status-success)]'
+                      : 'bg-[var(--status-warning)]'
+                  }`} />
+                  <span className="font-mono-code text-[11px] font-semibold tracking-wide">
+                    STREAM: {streamStatus.label}
+                    {streamStatus.telemetrySummary ? ` · ${streamStatus.telemetrySummary}` : ''}
+                  </span>
+                </div>
+              );
+            })()}
 
             {!backendConnected && (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--surface-muted)] text-[var(--on-surface-variant)] border border-[var(--border-subtle)]">
@@ -1000,18 +1021,32 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                 </>
               )}
 
-              {/* Empty state overlay when no source is selected */}
+              {/* Honest empty state overlay when no source is selected */}
               {sourceType === 'none' && (
-                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[var(--bg-canvas)]/65 backdrop-blur-[2px] p-6 text-center select-none pointer-events-none">
-                  <div className="w-10 h-10 rounded-full bg-[var(--surface-card)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-metal)] mb-3 shadow-xs">
-                    <Activity size={20} className="opacity-70" />
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[var(--bg-canvas)]/80 backdrop-blur-[2px] p-6 text-center select-none">
+                  <div className="w-12 h-12 rounded-full bg-[var(--surface-card)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-oxblood)] mb-3 shadow-xs">
+                    <Activity size={24} className="opacity-80" />
                   </div>
-                  <h4 className="font-serif-display text-sm font-semibold text-[var(--on-surface)] tracking-tight mb-1">
-                    No live acquisition source
+                  <h4 className="font-serif-display text-base font-semibold text-[var(--on-surface)] tracking-tight mb-1">
+                    No Acquisition Source Active
                   </h4>
-                  <p className="font-mono-code text-[11px] text-[var(--on-surface-variant)] max-w-sm leading-relaxed">
-                    Connect an AuscultaForge device<br />or select an offline recorded session.
+                  <p className="font-mono-code text-xs text-[var(--on-surface-variant)] max-w-md leading-relaxed mb-4">
+                    No real-time signal has been measured. Select a test specimen or connect hardware to initiate streaming.
                   </p>
+                  <div className="flex flex-wrap items-center justify-center gap-2 max-w-lg">
+                    <div className="px-3 py-1.5 rounded text-[11px] font-mono-code border border-[var(--border-subtle)] bg-[var(--surface-card)] text-[var(--on-surface)] flex items-center gap-1.5 shadow-2xs">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-metal)]" />
+                      <span>Recorded Sessions Drawer (Left)</span>
+                    </div>
+                    <div className="px-3 py-1.5 rounded text-[11px] font-mono-code border border-[var(--border-subtle)] bg-[var(--surface-card)] text-[var(--on-surface)] flex items-center gap-1.5 shadow-2xs">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-oxblood)]" />
+                      <span>Hardware USB / CDC-ACM Device</span>
+                    </div>
+                    <div className="px-3 py-1.5 rounded text-[11px] font-mono-code border border-[var(--border-subtle)] bg-[var(--surface-card)] text-[var(--on-surface)] flex items-center gap-1.5 shadow-2xs">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)]" />
+                      <span>Virtual Bench Scenarios</span>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

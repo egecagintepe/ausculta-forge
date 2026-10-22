@@ -156,6 +156,27 @@ def test_api_analyze_session_scientific_success(scientific_test_app):
         assert len(disp["psd"]["frequencies_hz"]) <= 256
 
 
+def test_api_analyze_session_scientific_48khz(scientific_test_app):
+    """Verifies backend correctly uses active session 48 kHz sample rate for Welch PSD."""
+    app, sessions_dir, _, _ = scientific_test_app
+    session_id = "sess_scientific_48k_001"
+    _create_mock_session(sessions_dir, session_id, fs=48000, duration_s=1.0)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            f"/api/scientific/session/{session_id}/analyze",
+            json={"profile_id": "GENERAL_PCG_V1", "welch_nperseg": 2048},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["sample_rate_hz"] == 48000
+        spec = data["spectral"]
+        # 48000 / 2048 = 23.4375 Hz bin spacing
+        assert np.isclose(spec["frequency_bin_spacing_hz"], 48000 / 2048, atol=0.01)
+        assert np.isclose(data["display"]["psd"]["delta_f_hz"], 48000 / 2048, atol=0.01)
+
+
 def test_api_analyze_session_not_found(scientific_test_app):
     app, _, _, _ = scientific_test_app
     with TestClient(app) as client:
