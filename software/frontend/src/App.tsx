@@ -8,6 +8,7 @@ import { SamplesView } from './components/SamplesView';
 import { DeviceView } from './components/DeviceView';
 import { SettingsView } from './components/SettingsView';
 import { AnalysisWorkbench } from './components/AnalysisWorkbench';
+import { ResearchLabView } from './components/ResearchLabView';
 import { DiagnosticsDrawer } from './components/DiagnosticsDrawer';
 import { ConfirmDiscardDialog, SaveAsDialog, ToastNotification, ToastInfo } from './components/Dialogs';
 import { audioEngine } from './audio/audioEngine';
@@ -970,7 +971,16 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
             />
           )}
 
+          {currentDestination === 'research' && (
+            <ResearchLabView
+              isDark={isDark}
+              backendConnected={backendConnected}
+              addToast={addToast}
+            />
+          )}
+
           {currentDestination === 'settings' && (
+
             <SettingsView
               isDark={isDark}
               onToggleTheme={() => setIsDark(!isDark)}

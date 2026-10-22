@@ -7,7 +7,8 @@ import {
   Sun,
   Moon,
   Terminal,
-  Layers
+  Layers,
+  Brain,
 } from 'lucide-react';
 import { NavigationDestination } from '../types';
 
@@ -56,12 +57,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: <Layers size={18} strokeWidth={2} />
     },
     {
+      id: 'research',
+      label: 'AI Research Lab',
+      subLabel: 'Research',
+      icon: <Brain size={18} strokeWidth={2} />
+    },
+    {
       id: 'settings',
       label: 'DSP & Calibration',
       subLabel: 'Settings',
       icon: <Sliders size={18} strokeWidth={2} />
     }
   ];
+
 
   return (
     <aside

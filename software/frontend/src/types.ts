@@ -1,6 +1,7 @@
-export type NavigationDestination = 'home' | 'live' | 'samples' | 'device' | 'settings' | 'analysis';
+export type NavigationDestination = 'home' | 'live' | 'samples' | 'device' | 'settings' | 'analysis' | 'research';
 
 export type AudioSourceType = 'none' | 'file' | 'device' | 'sample' | 'session' | 'synthetic';
+
 
 export type DeviceLifecycleState =
   | 'absent'
@@ -873,5 +874,60 @@ export interface G1EvidenceData {
   verification_result: 'PASS' | 'FAIL';
   verified_at_utc: string;
   is_simulated: boolean;
+}
+
+export interface ResearchModelMetricsSummary {
+  test_auroc?: number;
+  test_average_precision?: number;
+  test_f1?: number;
+  test_balanced_accuracy?: number;
+  best_epoch?: number;
+  threshold?: number;
+  dataset?: string;
+  [key: string]: unknown;
+}
+
+export interface ResearchModelInfo {
+  model_id: string;
+  name: string;
+  version: string;
+  task: string;
+  status: 'AVAILABLE' | 'MISSING_ARTIFACT' | 'DEPENDENCY_MISSING' | 'PLANNED_FUTURE' | 'RULE_BASED_FOUNDATION';
+  is_research_only: boolean;
+  description: string;
+  author: string;
+  dataset_provenance: string;
+  supported_inputs: string;
+  threshold: number | null;
+  metrics_summary: ResearchModelMetricsSummary | null;
+  manifest: Record<string, unknown> | null;
+  artifact_path: string | null;
+  nonclinical_disclaimer: string;
+}
+
+export interface RecordingEvaluationItem {
+  file_path: string;
+  file_name: string;
+  channels: number;
+  sample_rate_hz: number;
+  duration_sec: number;
+  sample_width_bytes: number;
+}
+
+export interface ResearchPredictionResponse {
+  research_only: boolean;
+  strictly_nonclinical: boolean;
+  model_id: string;
+  model_version: string;
+  task: string;
+  patient_identifier: string;
+  positive_probability: number;
+  validation_selected_threshold: number;
+  predicted_label: string;
+  recordings_evaluated: RecordingEvaluationItem[];
+  recording_count: number;
+  dataset_provenance: string;
+  disclaimer: string;
+  warning: string;
 }
 

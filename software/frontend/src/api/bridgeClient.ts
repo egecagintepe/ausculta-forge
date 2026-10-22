@@ -36,7 +36,10 @@ import {
   UsbPortDescriptorItem,
   UsbSessionSummary,
   G1EvidenceData,
+  ResearchModelInfo,
+  ResearchPredictionResponse,
 } from '../types';
+
 
 export interface SignalFrameData {
   sequence: number;
@@ -1161,6 +1164,44 @@ class BridgeClient {
       return null;
     }
   }
+
+  public async getResearchModels(): Promise<ResearchModelInfo[]> {
+    const resp = await this.request('/research/ml/models');
+    if (!resp.ok) {
+      throw new Error(`Failed to load research models: ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
+  public async getResearchModel(modelId: string): Promise<ResearchModelInfo> {
+    const resp = await this.request(`/research/ml/models/${encodeURIComponent(modelId)}`);
+    if (!resp.ok) {
+      throw new Error(`Failed to load research model ${modelId}: ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
+  public async predictResearch(
+    filePaths: string[],
+    modelId: string = 'af_murmur_mil_1.0',
+    patientIdentifier?: string
+  ): Promise<ResearchPredictionResponse> {
+    const resp = await this.request('/research/ml/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file_paths: filePaths,
+        model_id: modelId,
+        patient_identifier: patientIdentifier,
+      }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }));
+      throw new Error(err.detail || `Research inference failed (${resp.status})`);
+    }
+    return await resp.json();
+  }
 }
+
 
 export const bridgeClient = new BridgeClient();
