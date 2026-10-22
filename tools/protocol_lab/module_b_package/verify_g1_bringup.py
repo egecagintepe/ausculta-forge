@@ -327,6 +327,27 @@ def execute_physical_g1_protocol(
             f"dups={session.decoder.total_duplicate_frames}, index_disconts={session.host_index_discontinuities}"
         )
 
+    # Explicit physical timing and transport truth demarcation
+    sample_integrity_ok = (g1_samples_ok and g3_values_ok and g4_crc_ok)
+    timestamp_consistency_ok = (session.decoder.total_timestamp_regressions == 0 and g5_continuity_ok)
+
+    # Physical timing verification: On real hardware, 480,000 samples @ 48 kHz takes 10.0s ± 2.0% (USB CDC-ACM framing jitter)
+    # In software simulation, data is delivered at CPU memory speed (<0.5s), which proves payload handling but NOT physical 48 kHz pacing
+    timing_tolerance_s = max(0.5, duration_s * 0.05)
+    physical_timing_ok = is_physical and abs(t_elapsed - duration_s) <= timing_tolerance_s
+
+    metrics["verification_evidence"] = {
+        "sample_integrity": "SAMPLE_INTEGRITY_VERIFIED" if sample_integrity_ok else "SAMPLE_INTEGRITY_FAILED",
+        "nominal_timestamp_consistency": "NOMINAL_TIMESTAMP_CONSISTENCY_VERIFIED" if timestamp_consistency_ok else "TIMESTAMP_REGRESSIONS_DETECTED",
+        "physical_sample_timing": "PHYSICAL_SAMPLE_TIMING_VERIFIED" if physical_timing_ok else "NOT VERIFIED (Requires physical hardware 48 kHz pacing measurement)",
+        "physical_usb_transfer": "PHYSICAL_USB_TRANSFER_VERIFIED" if is_physical else "NOT VERIFIED (Simulated Loopback Transport)",
+    }
+
+    if is_physical and not physical_timing_ok:
+        metrics["failure_reasons"].append(
+            f"Physical sample timing out of tolerance: elapsed={t_elapsed:.3f}s (expected {duration_s:.1f}s ± {timing_tolerance_s:.2f}s)"
+        )
+
     all_passed = (
         g1_samples_ok and
         g2_frames_ok and
@@ -334,7 +355,8 @@ def execute_physical_g1_protocol(
         g4_crc_ok and
         g5_continuity_ok and
         g6_session_ok and
-        g7_telemetry_ok
+        g7_telemetry_ok and
+        (not is_physical or physical_timing_ok)
     )
 
     if all_passed:
@@ -413,6 +435,13 @@ def print_verification_report(verdict: str, metrics: Dict[str, Any]) -> None:
     print(f"Duplicate Frames: {metrics.get('duplicate_frames')}")
     print(f"Timestamp Regressions: {metrics.get('timestamp_regressions')}")
     print(f"Active Session ID: {metrics.get('active_session_id')}")
+
+    ev = metrics.get("verification_evidence", {})
+    print("\n--- Physical Ground Truth & Evidence Demarcation ---")
+    print(f"  Sample Value Integrity:      {ev.get('sample_integrity', 'N/A')}")
+    print(f"  Nominal Timestamp Ordering:  {ev.get('nominal_timestamp_consistency', 'N/A')}")
+    print(f"  Physical Sample Timing:      {ev.get('physical_sample_timing', 'N/A')}")
+    print(f"  Physical USB Transfer:       {ev.get('physical_usb_transfer', 'N/A')}")
 
     telem = metrics.get("telemetry")
     if telem is not None:
