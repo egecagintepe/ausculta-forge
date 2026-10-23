@@ -1,12 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
-
-
+from pathlib import Path
+software_dir = Path(SPECPATH).resolve()
 a = Analysis(
-    ['C:/Dev/Antigravity/bitirme/ausculta-forge/software/pcg_app/desktop_server.py'],
-    pathex=['C:/Dev/Antigravity/bitirme/ausculta-forge/software'],
+    [str(software_dir / 'pcg_app' / 'desktop_server.py')],
+    pathex=[str(software_dir)],
     binaries=[],
     datas=[],
-    hiddenimports=['uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan', 'uvicorn.lifespan.on', 'fastapi', 'fastapi.middleware.cors', 'starlette', 'starlette.middleware', 'starlette.middleware.base', 'starlette.responses', 'starlette.websockets', 'pydantic', 'scipy.signal', 'scipy.io.wavfile', 'pywt', 'numpy'],
+    hiddenimports=['uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan', 'uvicorn.lifespan.on', 'fastapi', 'fastapi.middleware.cors', 'starlette', 'starlette.middleware', 'starlette.middleware.base', 'starlette.responses', 'starlette.websockets', 'pydantic', 'scipy.signal', 'scipy.io.wavfile', 'pywt', 'numpy', 'serial', 'serial.tools.list_ports', 'serial.tools.list_ports_windows'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

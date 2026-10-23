@@ -70,9 +70,12 @@ def preflight(root=ROOT):
     """Passive: port enumeration only; no serial open, DTR toggle or packet write."""
     tools = {name: shutil.which(name) for name in ("git","idf.py","xtensa-esp-elf-gcc","cmake","ninja")}
     idf = tools["idf.py"]
-    version = run(idf_command(idf,"--version")).stdout.strip() if idf else None
+    try:
+        version = run(idf_command(idf,"--version")).stdout.strip() if idf else None
+    except (OSError,subprocess.SubprocessError) as exc:
+        version = f"UNAVAILABLE: {exc}"
     modules = {name: importlib.util.find_spec(name) is not None
-               for name in ("serial","fastapi","uvicorn","numpy","scipy")}
+               for name in ("serial","fastapi","uvicorn","numpy","scipy","pywt")}
     backend_ready = False
     backend_detail = "Required packages missing"
     if all(modules.values()):
@@ -95,8 +98,22 @@ def preflight(root=ROOT):
         text = cache.read_text(encoding="utf-8",errors="replace")
         cache_status = "COMPATIBLE" if "IDF_TARGET:STRING=esp32s3" in text else "REVIEW_REQUIRED"
     ready = all(tools.values()) and version is not None and PINNED_IDF in version and all(files.values())
+    laptop_tools={name:shutil.which(name) for name in ("node","npm","cargo","rustc")}
+    checks={name:"READY" if present else "MISSING" for name,present in modules.items()}
+    checks.update({name:"READY" if path else "MISSING" for name,path in laptop_tools.items()})
+    checks.update({"python":"READY" if sys.version_info >= (3,11) else "MISSING",
+        "project_venv":"READY" if Path(sys.prefix).resolve()==(root/".venv").resolve() else "MANUAL_ACTION_REQUIRED",
+        "frontend_dependencies":"READY" if (root/"software/frontend/node_modules").is_dir() else "MISSING",
+        "MSVC_WebView2_drivers_cable":"MANUAL_ACTION_REQUIRED",
+        "optional_ML":"MANUAL_ACTION_REQUIRED (not required for USB/DSP)"})
+    try:
+        validate_release(root/"firmware/build/release/firmware_build_manifest.json")
+        checks["release_artifacts"]="READY"
+    except (OSError,ValueError,KeyError,TypeError):
+        checks["release_artifacts"]="MISSING"
     return {"created_utc":utc_now(), "git":git_info(root), "python":sys.executable,
             "python_version":sys.version,"tools":tools,"idf_version":version,"modules":modules,"source_files":files,
+            "checks":checks,"laptop_tools":laptop_tools,
             "build_cache":cache_status,"ports":ports,
             "BOARD_ATTACHED":"CANDIDATE_NOT_VERIFIED" if any(p["is_espressif_candidate"] for p in ports) else "NOT_DETECTED",
             "ESP_IDF":"READY" if idf and version and PINNED_IDF in version else "NOT_READY",
@@ -118,6 +135,9 @@ def build_release(root=ROOT):
     if result.returncode or PINNED_IDF not in result.stdout:
         raise RuntimeError(f"Expected ESP-IDF {PINNED_IDF}: {result.stdout}{result.stderr}")
     firmware = root/"firmware"
+    existing=firmware/"sdkconfig"
+    if existing.exists():
+        check_build_config(existing.read_text(encoding="utf-8"))
     build = firmware/"build/release"
     build.mkdir(parents=True,exist_ok=True)
     cache = build/"CMakeCache.txt"
@@ -129,10 +149,8 @@ def build_release(root=ROOT):
     if completed.returncode:
         raise RuntimeError(f"ESP-IDF build failed ({completed.returncode}); see {log_path}. STOP BEFORE FLASH.")
     config = (firmware/"sdkconfig").read_text(encoding="utf-8")
-    for expected in ('CONFIG_IDF_TARGET="esp32s3"',"CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y",
-                     "CONFIG_SPIRAM_MODE_OCT=y","CONFIG_SPIRAM_SPEED_80M=y"):
-        if expected not in config:
-            raise RuntimeError(f"Build configuration mismatch: {expected}")
+    check_build_config(config)
+    (build/"sdkconfig").write_bytes((firmware/"sdkconfig").read_bytes())
     flash = json.loads((build/"flasher_args.json").read_text())
     description = json.loads((build/"project_description.json").read_text())
     hashes = {path:sha256(build/path) for path in flash["flash_files"].values()}
@@ -145,6 +163,8 @@ def build_release(root=ROOT):
         "microphone_required_for_boot":False,"physical_boot":"NOT_EXECUTED",
         "compiler":run([compiler,"--version"]).stdout if compiler else None,
         "build_directory":str(build),"binary_sha256":hashes,
+        "application_bytes":(build/description["app_bin"]).stat().st_size,
+        "build_exit_code":completed.returncode,
         "sdkconfig_sha256":sha256(firmware/"sdkconfig"),
         "dependencies_lock_sha256":sha256(firmware/"dependencies.lock"),
         "partition_layout":(firmware/"partitions.csv").read_text(),"flash_files":flash["flash_files"]}
@@ -152,11 +172,61 @@ def build_release(root=ROOT):
     return manifest
 
 
+def check_build_config(config):
+    settings=set(config.splitlines())
+    for prohibited in ("CONFIG_SECURE_BOOT=y","CONFIG_SECURE_FLASH_ENC_ENABLED=y"):
+        if prohibited in settings:
+            raise ValueError(f"Forbidden first-contact security configuration: {prohibited}. No flash permitted.")
+    for expected in ('CONFIG_IDF_TARGET="esp32s3"',"CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y",
+                     "CONFIG_SPIRAM_MODE_OCT=y","CONFIG_SPIRAM_SPEED_80M=y",
+                     "CONFIG_ESP_CONSOLE_UART_DEFAULT=y","CONFIG_ESP_CONSOLE_SECONDARY_NONE=y"):
+        if expected not in settings:
+            raise ValueError(f"Build configuration mismatch: {expected}")
+
+
+def qualify_recording(session_dir):
+    """Inspect preserved raw data; signal activity is never physical/acoustic acceptance."""
+    import numpy as np
+    from scipy.io import wavfile
+    from scipy.signal import welch
+    from pcg_core.recording import verify_session_integrity
+    directory=Path(session_dir).resolve()
+    integrity=verify_session_integrity(directory.name,directory.parent)
+    if not integrity.get("is_valid"):
+        raise ValueError(f"Invalid/incomplete raw recording: {integrity}")
+    metadata=json.loads((directory/"session.json").read_text(encoding="utf-8"))
+    raw=(directory/metadata["raw_wav_relpath"]).resolve()
+    if not raw.is_relative_to(directory):
+        raise ValueError("Raw WAV must stay inside its session directory")
+    rate,samples=wavfile.read(raw)
+    if samples.ndim!=1 or samples.dtype!=np.float32 or not len(samples) or not np.all(np.isfinite(samples)):
+        raise ValueError("Expected nonempty finite mono normalized float32 raw WAV")
+    if np.max(np.abs(samples))>1:
+        raise ValueError("Raw WAV exceeds normalized full scale; inspect decoding")
+    signal=samples.astype(np.float64)
+    frequencies,power=welch(signal,fs=rate,nperseg=min(8192,len(signal)))
+    return {"created_utc":utc_now(),"kind":"RAW_RECORDING_SCREEN_ONLY",
+        "acquisition_mode":metadata.get("acquisition_mode"),"raw_sha256":sha256(raw),
+        "samples":len(signal),"nominal_sample_rate_hz":rate,"duration_from_count_s":len(signal)/rate,
+        "constant_zero":bool(np.all(signal==0)),"constant_signal":bool(np.ptp(signal)==0),
+        "dc_fs":float(np.mean(signal)),"rms_fs":float(np.sqrt(np.mean(signal**2))),
+        "peak_fs":float(np.max(np.abs(signal))),
+        "saturation_fraction":float(np.mean((signal<=-1)|(signal>=8388607/8388608))),
+        "welch":{"frequencies_hz":frequencies.tolist(),"power_fs2_per_hz":power.tolist()},
+        "physical_microphone":"NOT_VERIFIED_BY_THIS_ANALYSIS",
+        "clock_accuracy":"NOT_MEASURED","acoustic_frequency_response":"NOT_MEASURED",
+        "next_action":"Compare quiet/control captures and UART DMA/drop telemetry. Zero/constant data: inspect VDD, ground, slot, WS/BCLK/SD. No clinical or ML inference."}
+
+
 def validate_release(manifest_path):
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
     if manifest.get("status") != "COMPILED_BUT_NOT_FLASHED" or manifest.get("target") != "esp32s3" or manifest.get("idf_version") != PINNED_IDF:
         raise ValueError("No compatible successful build manifest. Build before flashing.")
     base = Path(manifest["build_directory"]).resolve()
+    config=base/"sdkconfig"
+    if not config.is_file() or sha256(config)!=manifest.get("sdkconfig_sha256"):
+        raise ValueError("Missing/changed release sdkconfig. Rebuild with the current bringup tool before flashing.")
+    check_build_config(config.read_text(encoding="utf-8"))
     for name, expected in manifest["binary_sha256"].items():
         path = (base/name).resolve()
         if not path.is_relative_to(base) or sha256(path) != expected:

@@ -53,6 +53,15 @@ interface DeviceViewProps {
   onNavigateToSamples?: () => void;
 }
 
+export function g1ResultLabel(session: Pick<UsbSessionSummary, 'session_state' | 'is_simulated'> | null,
+  evidence: Pick<G1EvidenceData, 'conclusion' | 'verification_result' | 'is_simulated'> | null): string | null {
+  if (!session || !evidence || session.session_state === 'STREAMING') return null;
+  if (evidence.verification_result === 'FAIL') return 'G1 FAILED — EXPORT EVIDENCE';
+  if (session.is_simulated || evidence.is_simulated) return 'SOFTWARE SIMULATION PASS — PHYSICAL G1 PENDING';
+  if (session.session_state === 'COMPLETE' && evidence.conclusion === 'PHYSICAL_G1_PASSED') return 'G1 PASSED — PHYSICAL USB';
+  return null;
+}
+
 export const DeviceView: React.FC<DeviceViewProps> = ({
   deviceState,
   deviceRuntimeState,
@@ -216,8 +225,8 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
   const isSessionConnected = isSessionReady || isSessionStreaming;
   const isHardwareConnected = isSessionConnected || (deviceRuntimeState?.connected ?? false);
   useEffect(() => {
-    if (isSessionStreaming && usbSession?.active_config?.source_mode === 1 &&
-        usbSession.counters.host_samples_accepted >= 480000 && !automaticStopRequested.current) {
+    if (isSessionStreaming && usbSession?.active_config &&
+        usbSession.counters.host_samples_accepted >= usbSession.active_config.target_samples && !automaticStopRequested.current) {
       automaticStopRequested.current = true;
       void handleStopAcquisition();
     }
@@ -226,8 +235,9 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
 
   // Helper for rendering truthful state badges
   const renderStateBadge = () => {
-    if (usbSession?.session_state === 'COMPLETE' && g1Evidence?.conclusion === 'PHYSICAL_G1_PASSED') {
-      return <span className="text-[var(--status-success)] font-bold">G1 PASSED — PHYSICAL USB</span>;
+    const resultLabel = g1ResultLabel(usbSession, g1Evidence);
+    if (resultLabel) {
+      return <span className={g1Evidence?.verification_result === 'FAIL' ? 'text-[var(--status-danger)] font-bold' : 'text-[var(--on-surface-variant)] font-bold'}>{resultLabel}</span>;
     }
     if (isSessionStreaming) {
       return (
@@ -269,7 +279,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
         </span>
       );
     }
-    if (detectedPorts.length > 0) {
+    if (detectedPorts.some(port => port.port_name !== 'SIMULATED_ESP32_S3')) {
       return (
         <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-warning)]/15 text-[var(--status-warning)] border border-[var(--status-warning)]/40">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)]" />

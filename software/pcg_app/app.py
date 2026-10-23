@@ -93,6 +93,10 @@ def create_app(
         await manager.start_streaming_task()
         yield
         # Shutdown
+        engine = manager.device_runtime.canonical_engine
+        if engine and engine.is_running:
+            await asyncio.wrap_future(engine.disconnect())
+        manager.handle_device_disconnect("Application shutdown")
         await manager.stop_streaming_task()
 
     app = FastAPI(
@@ -322,8 +326,10 @@ def create_app(
         if manager.device_runtime.canonical_engine and manager.device_runtime.canonical_engine.is_running:
             try:
                 manager.device_runtime.canonical_engine.disconnect(timeout_s=1.0).result(timeout=1.0)
-            except Exception:
-                pass
+            except Exception as exc:
+                raise HTTPException(status_code=409, detail=f"Previous USB owner has not closed: {exc}. Retry after disconnect.")
+        if manager.recorder.is_recording:
+            manager.handle_device_disconnect("Changing USB connection")
 
         loop = asyncio.get_running_loop()
 
@@ -342,6 +348,8 @@ def create_app(
         def _on_state(state):
             # ACK may be followed by AUDIO in the same read, before the REST coroutine resumes.
             if state.value == "STREAMING":
+                manager.set_filter()
+                manager.display_aggregator.reset()
                 manager.source_type = "hardware"
                 manager.active_source_name = ("SOFTWARE SIMULATION: " if engine.is_simulated else "Physical USB: ") + str(engine.port_name)
                 manager.is_streaming = True
@@ -353,7 +361,6 @@ def create_app(
             manager.handle_device_disconnect(reason)
             st = manager.device_runtime.get_state_dict()
             try:
-                loop = asyncio.get_running_loop()
                 if loop.is_running():
                     asyncio.run_coroutine_threadsafe(manager.broadcast(make_device_state_message(st)), loop)
             except Exception:
@@ -492,6 +499,14 @@ def create_app(
 
         manager.device_runtime._state = DeviceState.READY
         manager.is_streaming = False
+        if manager.recorder.is_recording:
+            try:
+                manager.stop_recording()
+            except Exception as exc:
+                manager.device_runtime.event_log.log("RECORDING_WRITE_ERROR", str(exc), severity="error")
+                engine.host_ingestion_errors += 1
+                engine._record_g1_evidence_if_applicable()
+                raise HTTPException(status_code=500, detail=f"USB stopped; recording finalization failed: {exc}. Preserve the session directory.")
         st = manager.device_runtime.get_state_dict()
         await manager.broadcast(make_device_state_message(st))
         await manager.broadcast(make_stream_state_message(manager.get_state_dict()))

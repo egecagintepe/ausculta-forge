@@ -117,6 +117,7 @@ class UsbCdcAcmAdapter(BaseTransportAdapter):
             self._serial.reset_output_buffer()
             self.state = TransportState.CONNECTED
         except Exception as e:
+            self.close()
             self.state = TransportState.ERROR
             self.last_error_message = str(e)
             raise ConnectionError(f"Failed to open USB CDC-ACM port '{port}': {e}") from e

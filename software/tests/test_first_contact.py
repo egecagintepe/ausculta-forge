@@ -125,6 +125,9 @@ def test_flash_manifest_rejects_tampered_binary(tmp_path):
     path.write_bytes(b"firmware")
     manifest={"status":"COMPILED_BUT_NOT_FLASHED","target":"esp32s3","idf_version":"5.5.1",
               "build_directory":str(tmp_path),"binary_sha256":{"app.bin":workflow.sha256(path)}}
+    config=tmp_path/"sdkconfig"
+    config.write_bytes((workflow.ROOT/"firmware/sdkconfig.defaults").read_bytes())
+    manifest["sdkconfig_sha256"]=workflow.sha256(config)
     target=tmp_path/"manifest.json"
     workflow.write_json(target,manifest)
     workflow.validate_release(target)

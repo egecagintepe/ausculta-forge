@@ -207,6 +207,7 @@ class CanonicalSessionEngine:
             self._cmd_queue = queue.Queue(maxsize=32)
             self.last_g1_evidence = None
             self.is_simulated = (port.upper() in ("SIMULATED", "SIMULATED_ESP32_S3", "LOOPBACK"))
+            self.session.is_simulated = self.is_simulated
 
             if self.is_simulated:
                 sim_dev = SimulatedEsp32Device()
@@ -310,126 +311,151 @@ class CanonicalSessionEngine:
         pending_cmd: Optional[EngineCommand] = None
         disconnect_future = None
 
-        while not self._stop_event.is_set():
-            # 1. Process outbound command if not waiting for a synchronous ACK
-            if pending_cmd is None and not self._cmd_queue.empty():
-                try:
-                    cmd = self._cmd_queue.get_nowait()
-                    self._execute_outbound_command(cmd)
-                    if cmd.cmd_type == EngineCommandType.DISCONNECT:
-                        disconnect_future = cmd.future
-                        break
-                    if cmd.future.done():
-                        continue
-                    pending_cmd = cmd
-                except queue.Empty:
-                    pass
+        try:
+            while not self._stop_event.is_set():
+                # 1. Process outbound command if not waiting for a synchronous ACK
+                if pending_cmd is None and not self._cmd_queue.empty():
+                    try:
+                        cmd = self._cmd_queue.get_nowait()
+                        self._execute_outbound_command(cmd)
+                        if cmd.cmd_type == EngineCommandType.DISCONNECT:
+                            disconnect_future = cmd.future
+                            break
+                        if cmd.future.done():
+                            continue
+                        pending_cmd = cmd
+                    except queue.Empty:
+                        pass
 
-            # 2. Check pending command deadline
-            if pending_cmd is not None and time.monotonic() > pending_cmd.deadline:
-                err_msg = f"Transport operation {pending_cmd.cmd_type} timed out without device response."
-                self.session.handle_timeout(pending_cmd.cmd_type)
-                if self.session.active_start_config and self.session.active_start_config.source_mode == 1:
-                    self.last_g1_evidence = assess_g1(self)
-                pending_cmd.future.set_exception(TimeoutError(err_msg))
-                self._notify_state_change()
-                if self.on_error:
-                    self.on_error(err_msg)
-                pending_cmd = None
-
-            # 3. Read incoming bytes from transport
-            chunk = b""
-            if self.transport is not None:
-                try:
-                    chunk = self.transport.read(max_bytes=4096)
-                except Exception as e:
-                    disc_msg = f"Transport read failure: {e}"
-                    self._handle_transport_interruption(disc_msg, pending_cmd)
-                    break
-
-            # 4. Dispatch bytes through canonical session FSM
-            if chunk:
-                packets = self.session.decoder.feed_bytes(chunk)
-                for pkt in packets:
-                    self.session._dispatch_packet(pkt)
+                # 2. Check pending command deadline
+                if pending_cmd is not None and time.monotonic() > pending_cmd.deadline:
+                    err_msg = f"Transport operation {pending_cmd.cmd_type} timed out without device response."
+                    self.session.handle_timeout(pending_cmd.cmd_type)
                     if self.session.active_start_config and self.session.active_start_config.source_mode == 1:
-                        self.g1_observation.observe(pkt)
-                    if not pkt.crc_ok:
-                        continue
+                        self.last_g1_evidence = assess_g1(self)
+                    pending_cmd.future.set_exception(TimeoutError(err_msg))
+                    self._notify_state_change()
+                    if self.on_error:
+                        self.on_error(err_msg)
+                    pending_cmd = None
+                    if self.session.state == SessionState.ERROR:
+                        raise TimeoutError(err_msg)
 
-                    # Match pending commands with received acknowledgments
-                    if pending_cmd is not None:
-                        if (
-                            pending_cmd.cmd_type == EngineCommandType.HELLO
-                            and pkt.msg_type == MSG_TYPE_HELLO_ACK
-                            and self.session.state == SessionState.READY
-                        ):
-                            pending_cmd.future.set_result(self.session.device_capabilities)
-                            pending_cmd = None
-                            self._notify_state_change()
+                # 3. Read incoming bytes from transport
+                chunk = b""
+                if self.transport is not None:
+                    try:
+                        chunk = self.transport.read(max_bytes=4096)
+                    except Exception as e:
+                        disc_msg = f"Transport read failure: {e}"
+                        self._handle_transport_interruption(disc_msg, pending_cmd)
+                        break
 
-                        elif (
-                            pending_cmd.cmd_type == EngineCommandType.START
-                            and pkt.msg_type == MSG_TYPE_STREAM_START_ACK
-                            and self.session.state == SessionState.STREAMING
-                        ):
-                            pending_cmd.future.set_result(pkt.control_payload)
-                            pending_cmd = None
-                            self._notify_state_change()
+                # 4. Dispatch bytes through canonical session FSM
+                if chunk:
+                    packets = self.session.decoder.feed_bytes(chunk)
+                    for pkt in packets:
+                        self.session._dispatch_packet(pkt)
+                        if self.session.active_start_config and self.session.active_start_config.source_mode == 1:
+                            self.g1_observation.observe(pkt)
+                        if not pkt.crc_ok:
+                            continue
 
-                        elif (
-                            pending_cmd.cmd_type == EngineCommandType.STOP
-                            and pkt.msg_type == MSG_TYPE_STREAM_STOP_ACK
-                            and self.session.state == SessionState.COMPLETE
-                        ):
-                            self._record_g1_evidence_if_applicable()
-                            pending_cmd.future.set_result(self.session.final_telemetry)
-                            pending_cmd = None
-                            self._notify_state_change()
+                        # Match pending commands with received acknowledgments
+                        if pending_cmd is not None:
+                            if (
+                                pending_cmd.cmd_type == EngineCommandType.HELLO
+                                and pkt.msg_type == MSG_TYPE_HELLO_ACK
+                                and self.session.state == SessionState.READY
+                            ):
+                                pending_cmd.future.set_result(self.session.device_capabilities)
+                                pending_cmd = None
+                                self._notify_state_change()
 
-                        elif pkt.msg_type == MSG_TYPE_ERROR_NOTIFICATION:
-                            err_notif = pkt.control_payload
-                            action = {
-                                1: "Invalid device state; disconnect, HELLO and retry.",
-                                2: "Unsupported source: live mode needs a reviewed I2S firmware profile.",
-                                3: "Session mismatch; reconnect and start a fresh session.",
-                                4: "Unsupported configuration; use 48 kHz mono, encoding 1, Profile B.",
-                                5: "Device transport fault; inspect cable, queue health and reconnect.",
-                                6: "I2S acquisition fault; inspect clocks, wiring and the reviewed board profile.",
-                            }.get(err_notif.error_code, "Save diagnostics and inspect firmware logs.")
-                            pending_cmd.future.set_exception(
-                                RuntimeError(f"{action} (firmware code 0x{err_notif.error_code:04x})")
-                            )
-                            pending_cmd = None
-                            self._notify_state_change()
+                            elif (
+                                pending_cmd.cmd_type == EngineCommandType.START
+                                and pkt.msg_type == MSG_TYPE_STREAM_START_ACK
+                                and self.session.state == SessionState.STREAMING
+                            ):
+                                pending_cmd.future.set_result(pkt.control_payload)
+                                pending_cmd = None
+                                self._notify_state_change()
 
-                    # Handle audio stream packets
-                    if pkt.msg_type == MSG_TYPE_AUDIO_DATA and self.on_audio_packet and self.session.state in (SessionState.STREAMING,SessionState.STOPPING):
-                        try:
-                            if self.on_audio_packet(pkt) is False:
-                                raise RuntimeError("StreamManager rejected acquisition samples")
-                        except Exception as e:
-                            self.host_ingestion_errors += 1
-                            self.session._emit_diagnostic("AF-STR-007", f"Host ingestion failed: {e}")
+                            elif (
+                                pending_cmd.cmd_type == EngineCommandType.STOP
+                                and pkt.msg_type == MSG_TYPE_STREAM_STOP_ACK
+                                and self.session.state == SessionState.COMPLETE
+                            ):
+                                self._record_g1_evidence_if_applicable()
+                                pending_cmd.future.set_result(self.session.final_telemetry)
+                                pending_cmd = None
+                                self._notify_state_change()
 
-                    # Handle periodic heartbeat telemetry
-                    elif pkt.msg_type == MSG_TYPE_HEARTBEAT_STATUS and self.on_telemetry:
-                        self.on_telemetry(pkt.control_payload)
+                            elif pkt.msg_type == MSG_TYPE_ERROR_NOTIFICATION:
+                                err_notif = pkt.control_payload
+                                action = {
+                                    1: "Invalid device state; disconnect, HELLO and retry.",
+                                    2: "Unsupported source: live mode needs a reviewed I2S firmware profile.",
+                                    3: "Session mismatch; reconnect and start a fresh session.",
+                                    4: "Unsupported configuration; use 48 kHz mono, encoding 1, Profile B.",
+                                    5: "Device transport fault; inspect cable, queue health and reconnect.",
+                                    6: "I2S acquisition fault; inspect clocks, wiring and the reviewed board profile.",
+                                }.get(err_notif.error_code, "Save diagnostics and inspect firmware logs.")
+                                pending_cmd.future.set_exception(
+                                    RuntimeError(f"{action} (firmware code 0x{err_notif.error_code:04x})")
+                                )
+                                pending_cmd = None
+                                self._notify_state_change()
 
-                if self.session.state == SessionState.ERROR and self.session.active_start_config and self.session.active_start_config.source_mode == 1:
-                    self.last_g1_evidence = assess_g1(self)
+                        # Handle audio stream packets
+                        if pkt.msg_type == MSG_TYPE_AUDIO_DATA and self.on_audio_packet and self.session.state in (SessionState.STREAMING,SessionState.STOPPING):
+                            try:
+                                if self.on_audio_packet(pkt) is False:
+                                    raise RuntimeError("StreamManager rejected acquisition samples")
+                            except Exception as e:
+                                self.host_ingestion_errors += 1
+                                self.session._emit_diagnostic(
+                                    "AF-FILE-001" if "recording" in str(e).lower() else "AF-DSP-003",
+                                    f"Host ingestion failed: {e}",
+                                    subsystem="STORAGE" if "recording" in str(e).lower() else "DSP")
 
-            else:
-                if self.transport is not None and self.transport.get_state() != TransportState.CONNECTED:
-                    self._handle_transport_interruption("USB transport disconnected or failed", pending_cmd)
-                    break
-                # No bytes read; yield thread briefly to prevent busy-spinning
-                time.sleep(0.005)
+                        # Handle periodic heartbeat telemetry
+                        elif pkt.msg_type == MSG_TYPE_HEARTBEAT_STATUS and self.on_telemetry:
+                            self.on_telemetry(pkt.control_payload)
 
-        # Teardown
-        self._teardown_transport()
-        if disconnect_future is not None and not disconnect_future.done():
-            disconnect_future.set_result(None)
+                    if self.session.state == SessionState.ERROR and self.session.active_start_config and self.session.active_start_config.source_mode == 1:
+                        self.last_g1_evidence = assess_g1(self)
+                    if self.session.state == SessionState.ERROR:
+                        raise RuntimeError("; ".join(self.session.error_log) or "Canonical protocol rejected the session")
+
+                else:
+                    if self.transport is not None and self.transport.get_state() != TransportState.CONNECTED:
+                        self._handle_transport_interruption("USB transport disconnected or failed", pending_cmd)
+                        break
+                    # No bytes read; yield thread briefly to prevent busy-spinning
+                    time.sleep(0.005)
+
+        except Exception as exc:
+            reason = f"USB worker failed: {exc}"
+            self.session.state = SessionState.ERROR
+            self.session.error_log.append(reason)
+            if self.session.active_start_config and self.session.active_start_config.source_mode == 1:
+                self.last_g1_evidence = assess_g1(self)
+            if self.on_disconnect:
+                try:
+                    self.on_disconnect(reason)
+                except Exception:
+                    pass
+        finally:
+            if pending_cmd is not None and not pending_cmd.future.done():
+                pending_cmd.future.set_exception(ConnectionError(self.session.error_log[-1] if self.session.error_log else "USB worker closed; save diagnostics and reconnect."))
+            while not self._cmd_queue.empty():
+                queued = self._cmd_queue.get_nowait()
+                if not queued.future.done():
+                    queued.future.set_exception(ConnectionError("USB worker closed before command completed."))
+            self._teardown_transport()
+            if disconnect_future is not None and not disconnect_future.done():
+                disconnect_future.set_result(None)
 
     def _execute_outbound_command(self, cmd: EngineCommand) -> None:
         """Serialize and transmit outbound control packets."""

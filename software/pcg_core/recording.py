@@ -17,6 +17,7 @@ import platform
 import re
 import shutil
 import sys
+import threading
 from typing import Any, Optional
 import uuid
 
@@ -193,6 +194,7 @@ class SessionRecorder:
         source: Optional[str] = None,
         wav_format: str = "float32",
     ):
+        self._lock = threading.RLock()
         self.output_root = Path(output_dir)
         self.wav_format = str(wav_format).lower()
         if self.wav_format not in ("float32", "int16"):
@@ -242,59 +244,60 @@ class SessionRecorder:
         processing_profile: Optional[dict[str, Any]] = None,
     ) -> str:
         """Start a new recording session and persist an in-progress placeholder to disk."""
-        if self._active:
-            raise RecordingStateError("A recording session is already active.")
+        with self._lock:
+            if self._active:
+                raise RecordingStateError("A recording session is already active.")
 
-        if session_id:
-            valid_id = validate_session_id(session_id, self.output_root)
-            self._session_id = valid_id
-        else:
-            ts_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            short_id = uuid.uuid4().hex[:8]
-            self._session_id = f"session_{ts_str}_{short_id}"
+            if session_id:
+                valid_id = validate_session_id(session_id, self.output_root)
+                self._session_id = valid_id
+            else:
+                ts_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+                short_id = uuid.uuid4().hex[:8]
+                self._session_id = f"session_{ts_str}_{short_id}"
 
-        if source:
-            self._source = str(source)
+            if source:
+                self._source = str(source)
 
-        self._acquisition_mode = str(acquisition_mode)
-        self._device_info = device_info
-        self._wire_format = wire_format
-        self._processing_profile = processing_profile
-        self._started_at = datetime.now(timezone.utc)
-        self._chunks = []
-        self._total_samples = 0
-        self._total_blocks = 0
-        self._sample_rate_hz = None
-        self._first_sequence = None
-        self._last_sequence = None
-        self._first_timestamp_s = None
-        self._last_timestamp_s = None
-        self._quality_monitor.reset()
-        self._active = True
+            self._acquisition_mode = str(acquisition_mode)
+            self._device_info = device_info
+            self._wire_format = wire_format
+            self._processing_profile = processing_profile
+            self._started_at = datetime.now(timezone.utc)
+            self._chunks = []
+            self._total_samples = 0
+            self._total_blocks = 0
+            self._sample_rate_hz = None
+            self._first_sequence = None
+            self._last_sequence = None
+            self._first_timestamp_s = None
+            self._last_timestamp_s = None
+            self._quality_monitor.reset()
 
-        # Pre-create session directory and persist in-progress marker
-        # Guarantees that mid-stream crashes/aborts leave a detectable incomplete session record
-        session_dir = self.output_root / self._session_id
-        session_dir.mkdir(parents=True, exist_ok=True)
-        in_progress_meta = {
-            "session_id": self._session_id,
-            "started_at_utc": self._started_at.isoformat(),
-            "ended_at_utc": None,
-            "source": self._source,
-            "acquisition_mode": self._acquisition_mode,
-            "status": "recording",
-            "termination_reason": "incomplete",
-            "schema_version": "2.0.0",
-            "storage_format": f"normalized_{self.wav_format}",
-            "wire_format": self._wire_format,
-            "device_info": self._device_info,
-            "processing_profile": self._processing_profile,
-        }
-        marker_path = session_dir / "session.json"
-        with open(marker_path, "w", encoding="utf-8") as f:
-            json.dump(in_progress_meta, f, indent=2)
+            # Pre-create session directory and persist in-progress marker
+            # Guarantees that mid-stream crashes/aborts leave a detectable incomplete session record
+            session_dir = self.output_root / self._session_id
+            session_dir.mkdir(parents=True, exist_ok=False)
+            in_progress_meta = {
+                "session_id": self._session_id,
+                "started_at_utc": self._started_at.isoformat(),
+                "ended_at_utc": None,
+                "source": self._source,
+                "acquisition_mode": self._acquisition_mode,
+                "status": "recording",
+                "termination_reason": "incomplete",
+                "schema_version": "2.0.0",
+                "storage_format": f"normalized_{self.wav_format}",
+                "wire_format": self._wire_format,
+                "device_info": self._device_info,
+                "processing_profile": self._processing_profile,
+            }
+            marker_path = session_dir / "session.json"
+            with open(marker_path, "w", encoding="utf-8") as f:
+                json.dump(in_progress_meta, f, indent=2)
 
-        return self._session_id
+            self._active = True
+            return self._session_id
 
     def record_block(self, block: SampleBlock) -> None:
         """Append a SampleBlock to the active recording.
@@ -303,151 +306,153 @@ class SessionRecorder:
             RecordingStateError: If no session is currently active.
             RecordingSampleRateError: If block sample rate differs from the session's initial rate.
         """
-        if not self._active:
-            raise RecordingStateError("Cannot record block: session is not active.")
+        with self._lock:
+            if not self._active:
+                raise RecordingStateError("Cannot record block: session is not active.")
 
-        # Check sample rate consistency
-        if self._sample_rate_hz is None:
-            self._sample_rate_hz = block.sample_rate_hz
-        elif block.sample_rate_hz != self._sample_rate_hz:
-            self._active = False  # Terminate recording on invalid rate change
-            raise RecordingSampleRateError(
-                f"Sample rate mismatch mid-session: initial session rate was {self._sample_rate_hz} Hz, "
-                f"received block with {block.sample_rate_hz} Hz. Recording aborted to prevent corrupt single-rate WAV."
-            )
+            # Check sample rate consistency
+            if self._sample_rate_hz is None:
+                self._sample_rate_hz = block.sample_rate_hz
+            elif block.sample_rate_hz != self._sample_rate_hz:
+                self._active = False  # Terminate recording on invalid rate change
+                raise RecordingSampleRateError(
+                    f"Sample rate mismatch mid-session: initial session rate was {self._sample_rate_hz} Hz, "
+                    f"received block with {block.sample_rate_hz} Hz. Recording aborted to prevent corrupt single-rate WAV."
+                )
 
-        if self._first_sequence is None:
-            self._first_sequence = block.sequence
-            self._first_timestamp_s = block.timestamp_s
+            if self._first_sequence is None:
+                self._first_sequence = block.sequence
+                self._first_timestamp_s = block.timestamp_s
 
-        self._last_sequence = block.sequence
-        self._last_timestamp_s = block.timestamp_s
+            self._last_sequence = block.sequence
+            self._last_timestamp_s = block.timestamp_s
 
-        # Feed to quality monitor
-        self._quality_monitor.inspect_block(block)
+            # Feed to quality monitor
+            self._quality_monitor.inspect_block(block)
 
-        # Store sample chunk
-        chunk = np.asarray(block.samples, dtype=np.float32)
-        self._chunks.append(chunk)
-        self._total_samples += len(chunk)
-        self._total_blocks += 1
+            # Store sample chunk
+            chunk = np.asarray(block.samples, dtype=np.float32)
+            self._chunks.append(chunk)
+            self._total_samples += len(chunk)
+            self._total_blocks += 1
 
     def stop(self, termination_reason: str = "completed") -> SessionMetadata:
         """Finalize the recording, write WAV, session.json, and manifest.json sidecar.
 
         Guarantees exact accepted-sample accounting between recorder memory, WAV file, and metadata.
         """
-        if not self._active:
-            raise RecordingStateError("Cannot stop session: no session is currently active.")
+        with self._lock:
+            if not self._active:
+                raise RecordingStateError("Cannot stop session: no session is currently active.")
 
-        self._active = False
-        ended_at = datetime.now(timezone.utc)
+            self._active = False
+            ended_at = datetime.now(timezone.utc)
 
-        if self._total_samples == 0 or len(self._chunks) == 0:
-            raise ValueError("No audio samples were recorded in session.")
+            if self._total_samples == 0 or len(self._chunks) == 0:
+                raise ValueError("No audio samples were recorded in session.")
 
-        assert self._sample_rate_hz is not None
-        assert self._session_id is not None
-        assert self._started_at is not None
+            assert self._sample_rate_hz is not None
+            assert self._session_id is not None
+            assert self._started_at is not None
 
-        # 1. Concatenate audio and verify exact sample count accounting
-        full_audio = np.concatenate(self._chunks)
-        if len(full_audio) != self._total_samples:
-            raise SessionCorruptedError(
-                f"Sample accounting discrepancy: recorder counted {self._total_samples} samples, "
-                f"but concatenated audio contains {len(full_audio)} samples."
+            # 1. Concatenate audio and verify exact sample count accounting
+            full_audio = np.concatenate(self._chunks)
+            if len(full_audio) != self._total_samples:
+                raise SessionCorruptedError(
+                    f"Sample accounting discrepancy: recorder counted {self._total_samples} samples, "
+                    f"but concatenated audio contains {len(full_audio)} samples."
+                )
+
+            duration_s = float(len(full_audio) / self._sample_rate_hz)
+
+            # 2. Ensure session directory exists
+            session_dir = self.output_root / self._session_id
+            session_dir.mkdir(parents=True, exist_ok=True)
+
+            # 3. Write raw unfiltered audio to disk
+            wav_path = session_dir / "raw.wav"
+            if self.wav_format == "float32":
+                wavfile.write(str(wav_path), self._sample_rate_hz, full_audio.astype(np.float32))
+            else:
+                # 16-bit integer PCM
+                scaled = np.clip(full_audio, -1.0, 1.0) * 32767.0
+                wavfile.write(str(wav_path), self._sample_rate_hz, scaled.astype(np.int16))
+
+            # 4. Read back serialized WAV to mathematically confirm exact sample accounting on disk
+            read_fs, read_samples = wavfile.read(str(wav_path))
+            if read_fs != self._sample_rate_hz or len(read_samples) != self._total_samples:
+                raise SessionCorruptedError(
+                    f"WAV serialization accounting failure: expected {self._total_samples} samples at {self._sample_rate_hz} Hz, "
+                    f"disk WAV contains {len(read_samples)} samples at {read_fs} Hz."
+                )
+
+            # 5. Compute SHA-256 of the written WAV file
+            wav_sha256 = compute_file_sha256(wav_path)
+
+            # 6. Stream quality report
+            qr = self._quality_monitor.report
+            quality_data = {
+                "total_blocks": qr.total_blocks,
+                "dropped_blocks": qr.dropped_blocks,
+                "repeated_sequences": qr.repeated_sequences,
+                "sequence_discontinuities": qr.sequence_discontinuities,
+                "timestamp_regressions": qr.timestamp_regressions,
+                "sample_rate_changes": qr.sample_rate_changes,
+                "is_healthy": qr.is_healthy,
+            }
+
+            # 7. Environment details
+            env_data = {
+                "python_version": sys.version.split()[0],
+                "numpy_version": np.__version__,
+                "scipy_version": scipy.__version__,
+                "platform": platform.platform(),
+            }
+
+            metadata = SessionMetadata(
+                session_id=self._session_id,
+                started_at_utc=self._started_at.isoformat(),
+                ended_at_utc=ended_at.isoformat(),
+                source=self._source,
+                sample_rate_hz=self._sample_rate_hz,
+                total_blocks=self._total_blocks,
+                total_samples=self._total_samples,
+                duration_s=round(duration_s, 4),
+                first_sequence=self._first_sequence,
+                last_sequence=self._last_sequence,
+                first_timestamp_s=round(self._first_timestamp_s, 4) if self._first_timestamp_s is not None else None,
+                last_timestamp_s=round(self._last_timestamp_s, 4) if self._last_timestamp_s is not None else None,
+                raw_wav_relpath="raw.wav",
+                raw_wav_sha256=wav_sha256,
+                stream_quality=quality_data,
+                git_commit_sha=get_git_commit_sha(),
+                environment=env_data,
+                acquisition_mode=self._acquisition_mode,
+                termination_reason=termination_reason,
+                device_info=self._device_info,
+                app_version="2.0.0",
+                schema_version="2.0.0",
+                storage_format=f"normalized_{self.wav_format}",
+                wire_format=self._wire_format,
+                processing_profile=self._processing_profile,
+                status="finalized",
+                manifest_version="2.0.0",
             )
 
-        duration_s = float(len(full_audio) / self._sample_rate_hz)
+            # 8. Atomic metadata write via temporary file
+            json_path = session_dir / "session.json"
+            tmp_json_path = session_dir / "session.json.tmp"
+            with open(tmp_json_path, "w", encoding="utf-8") as f:
+                f.write(metadata.to_json(indent=2))
+            tmp_json_path.replace(json_path)
 
-        # 2. Ensure session directory exists
-        session_dir = self.output_root / self._session_id
-        session_dir.mkdir(parents=True, exist_ok=True)
+            # 9. Write exportable laboratory manifest
+            manifest_data = export_session_manifest(self._session_id, self.output_root)
+            manifest_path = session_dir / "manifest.json"
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest_data, f, indent=2)
 
-        # 3. Write raw unfiltered audio to disk
-        wav_path = session_dir / "raw.wav"
-        if self.wav_format == "float32":
-            wavfile.write(str(wav_path), self._sample_rate_hz, full_audio.astype(np.float32))
-        else:
-            # 16-bit integer PCM
-            scaled = np.clip(full_audio, -1.0, 1.0) * 32767.0
-            wavfile.write(str(wav_path), self._sample_rate_hz, scaled.astype(np.int16))
-
-        # 4. Read back serialized WAV to mathematically confirm exact sample accounting on disk
-        read_fs, read_samples = wavfile.read(str(wav_path))
-        if read_fs != self._sample_rate_hz or len(read_samples) != self._total_samples:
-            raise SessionCorruptedError(
-                f"WAV serialization accounting failure: expected {self._total_samples} samples at {self._sample_rate_hz} Hz, "
-                f"disk WAV contains {len(read_samples)} samples at {read_fs} Hz."
-            )
-
-        # 5. Compute SHA-256 of the written WAV file
-        wav_sha256 = compute_file_sha256(wav_path)
-
-        # 6. Stream quality report
-        qr = self._quality_monitor.report
-        quality_data = {
-            "total_blocks": qr.total_blocks,
-            "dropped_blocks": qr.dropped_blocks,
-            "repeated_sequences": qr.repeated_sequences,
-            "sequence_discontinuities": qr.sequence_discontinuities,
-            "timestamp_regressions": qr.timestamp_regressions,
-            "sample_rate_changes": qr.sample_rate_changes,
-            "is_healthy": qr.is_healthy,
-        }
-
-        # 7. Environment details
-        env_data = {
-            "python_version": sys.version.split()[0],
-            "numpy_version": np.__version__,
-            "scipy_version": scipy.__version__,
-            "platform": platform.platform(),
-        }
-
-        metadata = SessionMetadata(
-            session_id=self._session_id,
-            started_at_utc=self._started_at.isoformat(),
-            ended_at_utc=ended_at.isoformat(),
-            source=self._source,
-            sample_rate_hz=self._sample_rate_hz,
-            total_blocks=self._total_blocks,
-            total_samples=self._total_samples,
-            duration_s=round(duration_s, 4),
-            first_sequence=self._first_sequence,
-            last_sequence=self._last_sequence,
-            first_timestamp_s=round(self._first_timestamp_s, 4) if self._first_timestamp_s is not None else None,
-            last_timestamp_s=round(self._last_timestamp_s, 4) if self._last_timestamp_s is not None else None,
-            raw_wav_relpath="raw.wav",
-            raw_wav_sha256=wav_sha256,
-            stream_quality=quality_data,
-            git_commit_sha=get_git_commit_sha(),
-            environment=env_data,
-            acquisition_mode=self._acquisition_mode,
-            termination_reason=termination_reason,
-            device_info=self._device_info,
-            app_version="2.0.0",
-            schema_version="2.0.0",
-            storage_format=f"normalized_{self.wav_format}",
-            wire_format=self._wire_format,
-            processing_profile=self._processing_profile,
-            status="finalized",
-            manifest_version="2.0.0",
-        )
-
-        # 8. Atomic metadata write via temporary file
-        json_path = session_dir / "session.json"
-        tmp_json_path = session_dir / "session.json.tmp"
-        with open(tmp_json_path, "w", encoding="utf-8") as f:
-            f.write(metadata.to_json(indent=2))
-        tmp_json_path.replace(json_path)
-
-        # 9. Write exportable laboratory manifest
-        manifest_data = export_session_manifest(self._session_id, self.output_root)
-        manifest_path = session_dir / "manifest.json"
-        with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(manifest_data, f, indent=2)
-
-        return metadata
+            return metadata
 
     def cancel(self) -> None:
         """Cancel and discard the active recording, cleaning up partial files on disk."""

@@ -34,6 +34,9 @@ HIDDEN_IMPORTS = [
     "scipy.io.wavfile",
     "pywt",
     "numpy",
+    "serial",
+    "serial.tools.list_ports",
+    "serial.tools.list_ports_windows" if sys.platform == "win32" else "serial.tools.list_ports_posix",
 ]
 
 
@@ -60,6 +63,8 @@ def build_backend(output_dir: Path | str = None) -> Path:
         "--distpath",
         str(target_dir),
         "--workpath",
+        str(work_dir),
+        "--specpath",
         str(work_dir),
         "--paths",
         str(software_dir),

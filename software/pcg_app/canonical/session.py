@@ -82,6 +82,9 @@ class SessionState(str, Enum):
     ERROR         = "ERROR"
 
 
+SUPPORTED_FIRMWARE_VERSIONS = ((1, 0, 0), (1, 1, 0))
+
+
 class HostProtocolSession:
     """Deterministic, testable host-side session manager for B/C protocol."""
 
@@ -99,6 +102,7 @@ class HostProtocolSession:
         self.latest_telemetry: Optional[StatusTelemetry] = None
         self.final_telemetry: Optional[StatusTelemetry] = None
         self.diagnostic_journal = diagnostic_journal
+        self.is_simulated = False
 
         self.decoder = StreamingProtocolDecoder()
         self.sample_validator = sample_validator
@@ -124,6 +128,7 @@ class HostProtocolSession:
         severity: str = "ERROR",
         subsystem: str = "PROTOCOL",
         counter_snapshot: Optional[dict[str, Any]] = None,
+        evidence_origin: str = "OBSERVED_HOST",
     ) -> None:
         """Forward fault event to diagnostic journal if configured."""
         if self.diagnostic_journal is not None:
@@ -138,7 +143,7 @@ class HostProtocolSession:
                     severity=sev,
                     session_id=f"0x{self.active_session_id:08x}" if self.active_session_id else None,
                     counter_snapshot=counter_snapshot,
-                    evidence_origin=EvidenceOrigin.REPORTED_BY_FIRMWARE if "Firmware" in message or "Device reported" in message else EvidenceOrigin.OBSERVED_HOST,
+                    evidence_origin=EvidenceOrigin.INJECTED_SIMULATION if self.is_simulated else EvidenceOrigin(evidence_origin),
                 )
             except Exception:
                 pass
@@ -274,6 +279,12 @@ class HostProtocolSession:
             self._emit_diagnostic("AF-PRT-005", self.error_log[-1])
             self.state = SessionState.ERROR
             return
+        version = (ack.firmware_version_major, ack.firmware_version_minor, ack.firmware_version_patch)
+        if version not in SUPPORTED_FIRMWARE_VERSIONS:
+            self.error_log.append(f"Unsupported firmware version {version}; install the reviewed release.")
+            self._emit_diagnostic("AF-PRT-005", self.error_log[-1])
+            self.state = SessionState.ERROR
+            return
         self.device_capabilities = ack
         self.state = SessionState.READY
 
@@ -398,6 +409,7 @@ class HostProtocolSession:
                     severity="WARNING",
                     subsystem="STREAMING",
                     counter_snapshot={"dropped_samples": pkt.telemetry.dropped_samples},
+                    evidence_origin="REPORTED_BY_FIRMWARE",
                 )
             if pkt.telemetry.dma_overflow_events > 0:
                 self._emit_diagnostic(
@@ -406,6 +418,7 @@ class HostProtocolSession:
                     severity="ERROR",
                     subsystem="STREAMING",
                     counter_snapshot={"dma_overflow_events": pkt.telemetry.dma_overflow_events},
+                    evidence_origin="REPORTED_BY_FIRMWARE",
                 )
             if pkt.telemetry.ring_overflow_events > 0:
                 self._emit_diagnostic(
@@ -414,6 +427,7 @@ class HostProtocolSession:
                     severity="ERROR",
                     subsystem="STREAMING",
                     counter_snapshot={"ring_overflow_events": pkt.telemetry.ring_overflow_events},
+                    evidence_origin="REPORTED_BY_FIRMWARE",
                 )
             if pkt.telemetry.usb_partial_write_events > 0:
                 self._emit_diagnostic(
@@ -422,6 +436,7 @@ class HostProtocolSession:
                     severity="WARNING",
                     subsystem="STREAMING",
                     counter_snapshot={"usb_partial_write_events": pkt.telemetry.usb_partial_write_events},
+                    evidence_origin="REPORTED_BY_FIRMWARE",
                 )
 
     def _handle_stop_ack(self, pkt: DecodedPacket) -> None:
@@ -458,6 +473,7 @@ class HostProtocolSession:
             severity="ERROR",
             subsystem="PROTOCOL",
             counter_snapshot={"firmware_error_code": err.error_code, "context": err.error_context},
+            evidence_origin="REPORTED_BY_FIRMWARE",
         )
         self.state = SessionState.ERROR
 

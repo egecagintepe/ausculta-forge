@@ -151,7 +151,8 @@ def test_usb_recording_integration(client: TestClient, integration_app):
     meta = rec_stop.json()
     assert meta["session_id"] == session_id
     assert meta["total_samples"] > 0
-    assert meta["acquisition_mode"] == "hardware"
+    assert meta["acquisition_mode"] == "software_simulated"
+    assert meta["device_info"] is None
     assert "signed_pcm_24bit_in_32bit_slot" in meta["wire_format"]
 
     # 5. Stop Acquisition & Disconnect

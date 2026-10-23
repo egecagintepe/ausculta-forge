@@ -5,10 +5,14 @@ import re
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"software"))
-from pcg_app.hardware_workflow import (ROOT, preflight, build_release, validate_release,
-    physical_g1, run, write_json, sdk_python)
+try:
+    from pcg_app.hardware_workflow import (ROOT, preflight, build_release, validate_release,
+        physical_g1, run, write_json, sdk_python, qualify_recording)
+except ModuleNotFoundError as exc:
+    raise SystemExit(f"MISSING: {exc.name}. Run the project .venv Python: tools/hardware/preflight.py; see WINDOWS_LAPTOP_SETUP.md.") from None
 
 
 def confirm_port(port, prompt=input):
@@ -40,6 +44,45 @@ def identify(port):
     return {"status":"ROM_IDENTIFIED_ESP32S3_16MB", "port":port,"rom_evidence":text,
             "chip_mac":macs.pop(),
             "psram":"MODULE_MARKING_AND_BOOT_CHECK_REQUIRED"}
+
+
+def watch_ports(seconds=30):
+    """Passive snapshots only. New ports are candidates, never automatically selected."""
+    from pcg_app.diagnostics.usb_doctor import UsbDiscoveryDoctor
+    deadline=time.monotonic()+seconds
+    previous=None
+    while True:
+        ports=[p.to_dict() for p in UsbDiscoveryDoctor().scan_ports()]
+        snapshot=json.dumps(ports,sort_keys=True)
+        if snapshot!=previous:
+            print(json.dumps({"ports":ports,"firmware":"UNVERIFIED; select explicitly then HELLO"},indent=2))
+            previous=snapshot
+        if time.monotonic()>=deadline:
+            break
+        time.sleep(0.5)
+
+
+def capture_boot(port, output, seconds=15, prompt=input):
+    """Only the explicitly reviewed UART debug route, never the binary CDC port."""
+    confirm_port(port,prompt)
+    if prompt(f"Confirm this is the UART debug connector, not binary CDC. Type UART {port}: ").strip()!=f"UART {port}":
+        raise RuntimeError("UART capture cancelled; no port opened.")
+    import serial
+    output.parent.mkdir(parents=True,exist_ok=True)
+    print("Opening UART 115200. Press the inspected RESET button now; capture ends automatically.")
+    with output.open("xb") as log:
+        with serial.Serial(port=None,baudrate=115200,timeout=0.2) as monitor:
+            monitor.dtr=False
+            monitor.rts=False
+            monitor.port=port
+            monitor.open()
+            deadline=time.monotonic()+seconds
+            while time.monotonic()<deadline:
+                data=monitor.read(min(max(monitor.in_waiting,1),4096))
+                if data:
+                    log.write(data)
+                    print(data.decode("utf-8",errors="replace"),end="",flush=True)
+    print(f"\nUART capture saved: {output}; boot outcome requires review. Port released.")
 
 
 def flash(port, manifest_path, prompt=input):
@@ -74,7 +117,17 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     sub=parser.add_subparsers(dest="action")
     sub.add_parser("preflight")
+    sub.add_parser("doctor")
     sub.add_parser("build")
+    watch=sub.add_parser("watch")
+    watch.add_argument("--seconds",type=int,choices=range(1,61),default=30,metavar="1..60")
+    boot=sub.add_parser("boot-log")
+    boot.add_argument("--port",required=True)
+    boot.add_argument("--output",type=Path,required=True)
+    boot.add_argument("--seconds",type=int,choices=range(1,61),default=15,metavar="1..60")
+    qualify=sub.add_parser("qualify")
+    qualify.add_argument("--session",type=Path,required=True)
+    qualify.add_argument("--output",type=Path,required=True)
     for action in ("identify","flash","hello","g1"):
         p=sub.add_parser(action)
         p.add_argument("--port",required=True)
@@ -89,8 +142,18 @@ def main():
             print("DISCOVER → IDENTIFY → CONFIRM → FLASH → BOOT → USB DETECT → HELLO → G1 → EXPORT")
             print(json.dumps(preflight(),indent=2))
             print("Run build; then flash --port <verified ROM COM>. Flash always asks a second explicit confirmation.\nAfter reboot: hello --port <new CDC COM>, then g1 --port <CDC COM>.")
-        elif args.action=="preflight":
+        elif args.action in ("preflight","doctor"):
             print(json.dumps(preflight(),indent=2))
+        elif args.action=="watch":
+            watch_ports(args.seconds)
+        elif args.action=="boot-log":
+            capture_boot(args.port,args.output,args.seconds)
+        elif args.action=="qualify":
+            report=qualify_recording(args.session)
+            args.output.parent.mkdir(parents=True,exist_ok=True)
+            with args.output.open("x",encoding="utf-8") as handle:
+                json.dump(report,handle,indent=2)
+            print(json.dumps(report,indent=2))
         elif args.action=="build":
             print(json.dumps(build_release(),indent=2))
         elif args.action=="flash":
@@ -115,9 +178,12 @@ def main():
                 evidence,directory=physical_g1(args.port,args.output,board,manifest)
                 print(evidence["conclusion"],directory)
                 return 0 if evidence["conclusion"]=="PHYSICAL_G1_PASSED" else 1
-    except (ValueError,RuntimeError,TimeoutError,ConnectionError,OSError,subprocess.SubprocessError) as exc:
+    except (ValueError,RuntimeError,TimeoutError,ConnectionError,OSError,subprocess.SubprocessError,EOFError) as exc:
         print(f"INCOMPLETE: {exc}",file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        print("Cancelled by operator; port context released. Review any interrupted flash log before retry.",file=sys.stderr)
+        return 130
     return 0
 
 

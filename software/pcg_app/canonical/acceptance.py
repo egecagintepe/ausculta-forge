@@ -8,6 +8,7 @@ import numpy as np
 
 from .codec import MSG_TYPE_AUDIO_DATA, MSG_TYPE_STREAM_START_ACK
 from .transport import UsbCdcAcmAdapter, TransportState
+from .session import SUPPORTED_FIRMWARE_VERSIONS
 
 
 class G1Observation:
@@ -70,7 +71,7 @@ def assess_g1(engine):
         "configuration": cfg is not None and (cfg.target_samples,cfg.source_mode,cfg.sample_rate_hz,
             cfg.encoding,cfg.channels,cfg.profile_id) == (480000,1,48000,1,1,2),
         "firmware_version": caps is not None and (caps.firmware_version_major,
-            caps.firmware_version_minor,caps.firmware_version_patch) in ((1,0,0),(1,1,0)),
+            caps.firmware_version_minor,caps.firmware_version_patch) in SUPPORTED_FIRMWARE_VERSIONS,
         "session": bool(s.active_session_id) and t is not None and t.session_id == s.active_session_id,
         "stop_ack": s.state.value == "COMPLETE" and t is not None,
         "exact_samples": s.host_samples_accepted == o.samples == 480000,

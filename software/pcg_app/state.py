@@ -12,6 +12,7 @@ import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 import time
+import threading
 from typing import Any, Callable, Optional, Set
 
 import numpy as np
@@ -63,11 +64,15 @@ class ClientSession:
         self.total_frames_sent: int = 0
         self.is_alive: bool = True
         self._sender_task: Optional[asyncio.Task] = None
+        self._owner_loop = None
+        self._delivery_lock = threading.Lock()
+        self._pending_frame = None
 
     def start(self) -> None:
         if self.is_alive and (self._sender_task is None or self._sender_task.done()):
             try:
                 loop = asyncio.get_running_loop()
+                self._owner_loop = loop
                 self._sender_task = loop.create_task(self._sender_loop())
             except RuntimeError:
                 pass
@@ -81,6 +86,25 @@ class ClientSession:
         """Bounded drop-oldest enqueue. Never blocks ingestion or recording."""
         if not self.is_alive:
             return False
+
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+        if self._owner_loop and current_loop is not self._owner_loop:
+            # Coalesce before scheduling: a stalled UI has at most one callback pending.
+            with self._delivery_lock:
+                already_pending = self._pending_frame is not None
+                self._pending_frame = frame_dict
+                if already_pending:
+                    self.dropped_display_frames += 1
+                else:
+                    try:
+                        self._owner_loop.call_soon_threadsafe(self._deliver_pending_frame)
+                    except RuntimeError:
+                        self._pending_frame = None
+                        self.is_alive = False
+            return already_pending
 
         self.start()
         dropped = False
@@ -100,6 +124,12 @@ class ClientSession:
             dropped = True
 
         return dropped
+
+    def _deliver_pending_frame(self) -> None:
+        with self._delivery_lock:
+            frame, self._pending_frame = self._pending_frame, None
+        if frame is not None:
+            self.push_display_frame(frame)
 
     async def _sender_loop(self) -> None:
         try:
@@ -443,7 +473,8 @@ class StreamManager:
 
         source = source_label or self.active_source_name
         is_hardware = (self.source_type == "hardware")
-        dev_info = self.device_runtime.get_state_dict() if is_hardware else None
+        simulated = is_hardware and bool(getattr(self.device_runtime.canonical_engine, "is_simulated", False))
+        dev_info = self.device_runtime.get_state_dict() if is_hardware and not simulated else None
 
         if is_hardware:
             if self.device_runtime.capabilities:
@@ -468,7 +499,7 @@ class StreamManager:
 
         sid = self.recorder.start(
             source=source,
-            acquisition_mode=self.source_type,
+            acquisition_mode="software_simulated" if simulated else self.source_type,
             device_info=dev_info,
             wire_format=wire_fmt,
             processing_profile=processing_profile,
@@ -575,10 +606,7 @@ class StreamManager:
             profile=self.device_runtime.profile,
         )
 
-        # 1. Full-rate stateful DSP pipeline
-        frame = self.pipeline.process_block(block)
-
-        # 2. Immediate full-rate session recording
+        # Preserve acquisition evidence even if downstream DSP fails.
         if self.recorder.is_recording:
             try:
                 self.recorder.record_block(block)
@@ -589,6 +617,8 @@ class StreamManager:
                     severity="error",
                 )
                 raise RuntimeError("Raw recording write failed") from e
+
+        frame = self.pipeline.process_block(block)
 
         # 3. Stream quality report
         quality_rep = self.pipeline.quality_monitor.report
@@ -646,15 +676,15 @@ class StreamManager:
 
         Invoked by both pull-driven offline sources and push-driven hardware packets.
         """
-        # 1. Process through full-rate DSP pipeline
-        frame = self.pipeline.process_block(block)
-
-        # 2. Record if session active (FULL-RATE: every valid sample recorded immediately)
+        # Preserve acquisition evidence before downstream DSP.
         if self.recorder.is_recording:
             try:
                 self.recorder.record_block(block)
             except Exception as e:
                 await self.broadcast(make_error_message(f"Recording error: {e}", "RECORDING_ERROR"))
+                raise RuntimeError("Raw recording write failed") from e
+
+        frame = self.pipeline.process_block(block)
 
         # 3. Stream quality report
         quality_rep = self.pipeline.quality_monitor.report

@@ -30,5 +30,9 @@ if __name__ == "__main__":
         "stop_req": frame(5, struct.pack("<Q", sid)),
         "stop_ack": frame(6, telemetry, sequence=1),
         "error": frame(0x0f, struct.pack("<II",2,0)),
+        "signed_boundaries": frame(1, struct.pack("<5i", -8388608,-1,0,1,8388607),count=5),
+        "sequence_wrap_before": frame(1, struct.pack("<i",7),sequence=0xffffffff,count=1),
+        "sequence_wrap_after": frame(1, struct.pack("<i",7),sequence=0,count=1),
+        "partial_final": frame(1, struct.pack("<3i",7,16814,33621),count=3),
     }
     (Path(__file__).parent / "golden_vectors.json").write_text(json.dumps(vectors,indent=2)+"\n")

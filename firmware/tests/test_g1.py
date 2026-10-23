@@ -282,6 +282,23 @@ def test_frozen_golden_vectors_and_corrupt_output(lib):
         assert lib.g1_sample(index) == value
 
 
+def test_boundary_vectors_match_c_serializer_and_reject_truncation(lib):
+    vectors=json.loads((Path(__file__).parent/"golden_vectors.json").read_text())
+    build=lib.packet_build_profile_b
+    build.argtypes=[ctypes.c_uint32,ctypes.c_uint64,ctypes.c_uint64,ctypes.POINTER(ctypes.c_int32),
+        ctypes.c_uint16,ctypes.c_uint32,ctypes.c_uint8,ctypes.c_uint16,ctypes.c_uint8,
+        ctypes.c_uint16,ctypes.c_void_p,ctypes.c_size_t,ctypes.POINTER(ctypes.c_size_t)]
+    for name in ("signed_boundaries","sequence_wrap_before","sequence_wrap_after","partial_final"):
+        expected=bytes.fromhex(vectors[name])
+        decoded=c.StreamingProtocolDecoder().feed_bytes(expected)[0]
+        samples=(ctypes.c_int32*decoded.sample_count)(*decoded.raw_samples)
+        output=ctypes.create_string_buffer(1068); size=ctypes.c_size_t()
+        assert build(decoded.sequence_id,0,0,samples,decoded.sample_count,48000,24,1,1,0,output,1068,ctypes.byref(size))==0
+        assert output.raw[:size.value]==expected
+        for cut in (1,39,40,len(expected)-1):
+            assert c.StreamingProtocolDecoder().feed_bytes(expected[:cut])==[]
+
+
 def test_corrupted_start_stop_do_not_change_session(lib):
     device = Device(lib)
     device.rx(c.build_hello_req_packet(9))
