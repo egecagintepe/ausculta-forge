@@ -1,0 +1,15 @@
+{
+  ".gitattributes": "8b9c3028d6467ff3be7c793141927841d70f47f52d0590677438f488ca154992",
+  "c-protocol-tests.txt": "bf1b45a5be7815644127c686f6db43cd6c51ee07bb36f6a248c9c8e5cead35e1",
+  "firmware_build_manifest.json": "67a8f8ee139626dcd2ffbae70e885bcf7ddf23f48d834c69c3bb0669fa8f6504",
+  "frontend-build.txt": "c97d303bc7a3fef157d0dffacc142988f54338df2d99b52d2578350f65339613",
+  "frontend-typescript.txt": "438e38f12c7d3b9dbb4b61a096322d8b74908a1ea4d68c35f6b561fbdcb5b63d",
+  "frontend-unit.txt": "c1383414c5e77b50289596e226667b7de9492881344f2244b3543cec9e54db3c",
+  "g1-idf-build.txt": "72736bcbd3564470293496adb84f0c42eabfc19dad1f502b5842aac1d3ac529f",
+  "i2s-idf-build.txt": "fc7bd2ddd8b427488d1368371c7d7a9dd6c296f42c28f20b2b591e1f093aa17b",
+  "i2s_compile_manifest.json": "991d9c4c1a68417f29607f38d9249f142ed87cd660f0206e02300b33758d525d",
+  "preflight-board-absent.json": "7adcbac37f69602b239c3167b24a7a235e00c82b3df9250119a72e050b9b103d",
+  "python-tests.txt": "aaba23a4eec27fc4489cf33fcd869655f9736f83c326170e761b15a5d3d1d52a",
+  "python-tests.xml": "97f97717e1b805c44a0e897f2ccd9ad8b3c5d48f5d1f939e7bf7d5103bf11577",
+  "rust-tests.txt": "825a7b61131751a80b232bf661daa0d12fa81d3f1fe03124f8ca4e06d66b42c2"
+}

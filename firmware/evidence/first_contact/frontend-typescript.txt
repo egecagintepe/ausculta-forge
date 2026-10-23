@@ -1,0 +1,4 @@
+
+> auscultaforge-desktop@0.1.0-alpha.1 lint
+> tsc --noEmit
+

@@ -1,0 +1,24 @@
+
+> auscultaforge-desktop@0.1.0-alpha.1 test
+> tsx src/tests/live_workspace_math.test.ts && tsx src/tests/scientific_ui_truth.test.ts
+
+[TEST] Starting LiveWorkspace mathematical & telemetry unit tests...
+✓ Test 1: Effective rate mapping verified
+✓ Test 2: Circular buffer sliding window indexing verified (15x scale bug prevented)
+✓ Test 3: Timecode ruler formatting verified
+✓ Test 4: Strict MCU vs UI backpressure telemetry separation verified
+[TEST] All LiveWorkspace math and telemetry tests PASSED successfully!
+
+[TEST] Starting Scientific UI Truthfulness & Stream Health Demarcation unit tests...
+✓ Test 1.1: 48 kHz session Welch labels correctly formatted (e.g. 2048 -> 23.44 Hz @ 48 kHz)
+✓ Test 1.2: 4 kHz session Welch labels correctly formatted (e.g. 2048 -> 1.95 Hz @ 4 kHz)
+✓ Test 1.3: Unselected/null session honest fallback verified
+✓ Test 2.1: Backend offline state verified
+✓ Test 2.2: Idle workspace truthfully reports NO ACTIVE ACQUISITION (never OPTIMAL)
+✓ Test 2.3: Zero-block uninitialized stream reports NOT EVALUATED
+✓ Test 2.4: Synthetic stream demarcation verified (no physical USB implication)
+✓ Test 2.5: Synthetic degraded stream verified
+✓ Test 2.6: File playback status verified
+✓ Test 2.7: Physical hardware healthy stream verified
+✓ Test 2.8: Physical hardware degraded stream telemetry verified
+[TEST] All Scientific UI Truthfulness & Stream Health Demarcation tests PASSED successfully!

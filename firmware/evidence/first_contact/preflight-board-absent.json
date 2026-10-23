@@ -1,0 +1,74 @@
+{
+  "created_utc": "2026-10-23T06:31:02.279271+00:00",
+  "git": {
+    "commit": "93b95c764f606c2d679e69b158e2e3ce4f3441b4",
+    "state": "## main...origin/main [ahead 5]"
+  },
+  "python": "C:\\Dev\\Antigravity\\bitirme\\ausculta-forge\\.venv\\Scripts\\python.exe",
+  "python_version": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+  "tools": {
+    "git": "C:\\Program Files\\Git\\cmd\\git.EXE",
+    "idf.py": "C:\\Dev\\Antigravity\\bitirme\\ausculta-forge\\firmware\\build\\idf-tools\\tools\\idf-exe\\1.0.3\\idf.py.EXE",
+    "xtensa-esp-elf-gcc": "C:\\Dev\\Antigravity\\bitirme\\ausculta-forge\\firmware\\build\\idf-tools\\tools\\xtensa-esp-elf\\esp-14.2.0_20241119\\xtensa-esp-elf\\bin\\xtensa-esp-elf-gcc.EXE",
+    "cmake": "C:\\Dev\\Antigravity\\bitirme\\ausculta-forge\\firmware\\build\\idf-tools\\tools\\cmake\\3.30.2\\bin\\cmake.EXE",
+    "ninja": "C:\\Dev\\Antigravity\\bitirme\\ausculta-forge\\firmware\\build\\idf-tools\\tools\\ninja\\1.12.1\\ninja.EXE"
+  },
+  "idf_version": "ESP-IDF v5.5.1",
+  "modules": {
+    "serial": true,
+    "fastapi": true,
+    "uvicorn": true,
+    "numpy": true,
+    "scipy": true
+  },
+  "source_files": {
+    "firmware/CMakeLists.txt": true,
+    "firmware/main/idf_component.yml": true,
+    "firmware/dependencies.lock": true,
+    "firmware/sdkconfig.defaults": true,
+    "software/pcg_app/canonical/engine.py": true,
+    "software/pcg_app/app.py": true
+  },
+  "build_cache": "COMPATIBLE",
+  "ports": [
+    {
+      "port_name": "COM4",
+      "description": "Prolific PL2303GC USB Serial COM Port (COM4)",
+      "hwid": "REDACTED_UNRELATED_DEVICE",
+      "vid": 1659,
+      "pid": 9123,
+      "serial_number": null,
+      "manufacturer": "Prolific",
+      "product": null,
+      "interface": null,
+      "is_espressif_candidate": false,
+      "candidate_reason": "External USB-UART bridge candidate; attached silicon unknown, inspect PCB",
+      "vid_hex": "0x067B",
+      "pid_hex": "0x23A3"
+    },
+    {
+      "port_name": "COM3",
+      "description": "Intel(R) Active Management Technology - SOL (COM3)",
+      "hwid": "REDACTED_UNRELATED_DEVICE",
+      "vid": null,
+      "pid": null,
+      "serial_number": null,
+      "manufacturer": "Intel",
+      "product": null,
+      "interface": null,
+      "is_espressif_candidate": false,
+      "candidate_reason": "Generic peripheral"
+    }
+  ],
+  "BOARD_ATTACHED": "NOT_DETECTED",
+  "ESP_IDF": "READY",
+  "FIRMWARE_BUILD": "READY",
+  "USB_CDC_HOST": "READY",
+  "DESKTOP_BACKEND": "READY",
+  "backend_check": "Backend import verified; HTTP listener not started",
+  "HARDWARE_TEST": "NOT_EXECUTED",
+  "cable_data_capability": "USER_CHECK_REQUIRED",
+  "port_access": "NOT_PROBED (opening a port may reset hardware)",
+  "next_action": "Use pinned ESP-IDF exported shell; inspect connector/cable and select a known board. Close only the monitor owning its COM port.",
+  "release_evidence_redaction": "Unrelated device unique identifiers omitted; raw local preflight retained in firmware/build/delivery-preflight.json"
+}

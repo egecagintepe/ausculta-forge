@@ -1,0 +1,20 @@
+{
+  "status": "COMPILE_CHECK_ONLY_NOT_FOR_FLASHING",
+  "firmware_source_commit": "d53c498",
+  "idf_version": "5.5.1",
+  "target": "esp32s3",
+  "source_modes": [
+    1,
+    0
+  ],
+  "provisional_pins": {
+    "bclk": 4,
+    "ws": 5,
+    "din": 6
+  },
+  "physical_wiring": "NOT_CONFIRMED",
+  "physical_g2": "NOT_EXECUTED",
+  "application_sha256": "19ac3cf5fa0a381f22d7c7be75e881bb668ef29b0de027f7c788c851d90b0347",
+  "sdkconfig_sha256": "4595a31e29be514319fdbc5c65c3906fee8a964ad3594e617740ae959f7ef245",
+  "config_path": "C:\\Dev\\Antigravity\\bitirme\\ausculta-forge\\firmware\\build\\i2s-compile-sdkconfig"
+}
