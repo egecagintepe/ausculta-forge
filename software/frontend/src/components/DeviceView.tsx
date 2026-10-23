@@ -177,7 +177,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
     try {
       const summary = await bridgeClient.startUsbAcquisition({ sourceMode, targetSamples: 480000 });
       setUsbSession(summary.summary ?? summary);
-      onUseDevice();
+      if (sourceMode !== 1) onUseDevice(); // Keep G1 auto-stop mounted.
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setUsbActionError(`Start acquisition failed: ${msg}`);

@@ -591,6 +591,11 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
     extended: { title: 'Extended Unfiltered Feed', range: '10 Hz – 2000 Hz · Direct Transducer' }
   };
 
+  const resolvedPreset = presetLabels[filterPreset] ?? {
+    title: `Unknown backend preset (${String(filterPreset)})`,
+    range: 'Filter range not verified',
+  };
+
   return (
     <div
       id="live-workspace-view"
@@ -705,7 +710,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--surface-muted)] text-[var(--on-surface)] border border-[var(--border-subtle)]">
               <Sliders size={13} className="text-[var(--accent-metal)]" />
               <span className="font-mono-code text-[11px] tracking-wide">
-                FILTER: {filterPreset === 'recommended' ? 'NARROW 20–200 Hz (DEV PRESET)' : presetLabels[filterPreset].title.toUpperCase()}
+                FILTER: {filterPreset === 'recommended' ? 'NARROW 20–200 Hz (DEV PRESET)' : resolvedPreset.title.toUpperCase()}
               </span>
             </div>
           </div>
@@ -793,7 +798,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                 {viewMode === 'oscilloscope' ? (
                   <>
                     <span className="px-2 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--accent-oxblood)] font-bold border border-[var(--border-subtle)]">
-                      {presetLabels[filterPreset].title} ({presetLabels[filterPreset].range})
+                      {resolvedPreset.title} ({resolvedPreset.range})
                     </span>
                     {liveMetrics && (
                       <span className="text-[var(--on-surface-variant)] hidden md:inline">
@@ -1362,7 +1367,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
               >
                 <Sliders size={16} className="text-[var(--accent-metal)]" />
                 <span>
-                  Filter: <strong className="text-[var(--accent-oxblood)]">{presetLabels[filterPreset].title}</strong>
+                  Filter: <strong className="text-[var(--accent-oxblood)]">{resolvedPreset.title}</strong>
                 </span>
                 <ChevronDown size={14} className="text-[var(--on-surface-variant)]" />
               </button>
