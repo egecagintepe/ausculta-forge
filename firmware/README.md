@@ -4,8 +4,9 @@ Ownership: Ege and the AuscultaForge team. This is an ESP-IDF application for th
 purchased ESP32-S3-WROOM-1-N16R8, not an Arduino/UART demonstration. Read the
 [wire audit](PROTOCOL_AUDIT.md) before changing protocol code.
 
-**Current delivery: SOFTWARE VERIFIED; BUILD_NOT_EXECUTED; HARDWARE NOT TESTED.**
-**PHYSICAL G1 PASSED: PENDING.** See [evidence](EVIDENCE.md).
+**Current delivery: SOFTWARE VERIFIED; COMPILED BUT NOT FLASHED; HARDWARE NOT TESTED.**
+**PHYSICAL G1 PASSED: PENDING.** See [First Contact release](../docs/engineering/hardware/FIRST_CONTACT_RELEASE.md).
+The earlier [G1 evidence](EVIDENCE.md) is the historical 2026-10-22 host-only baseline.
 
 ## Pinned build inputs
 
@@ -149,25 +150,28 @@ so the wire layout is preserved. Command flooding beyond eight pending responses
 aborts rather than overwriting queued packets.
 
 Local ERROR codes: 1 invalid state, 2 unsupported source, 3 session mismatch,
-4 unsupported configuration, 5 transport fault (retained in final diagnostics).
-Canonical v0.1 defines no shared enum for these numbers. Source 0/2 are rejected,
+4 unsupported configuration, 5 transport fault, 6 I2S acquisition fault (retained in final diagnostics).
+Canonical v0.1 defines no shared enum for these numbers. Source 0 is rejected without the reviewed board profile; source 2 is always rejected,
 HELLO advertises only Profile B + LSB encoding, capability_flags=0 (undefined
 feature bits are not guessed). HELLO echoes a 32-bit nonce; the host validates it.
 START has no nonce field. Binary CDC is never used for printf or ESP logs.
 
-## Future I2S acquisition
+## Reviewed-profile I2S acquisition
 
-`acquisition_supported/read` is the narrow source boundary. Only source 1 is
-implemented. For source 0, add task-context standard I2S RX with DMA buffers in
-internal DMA-capable RAM, 48 kHz mono selected from 32-bit stereo slots, correct
-24-bit alignment/sign extension, and a bounded SPSC block queue. ISR callbacks
-must only notify the acquisition task. Sample indexing, DMA completion timestamps,
-loss/overflow accounting and STOP must be preserved through the existing session
-and packet interface. The live path must propagate source failures and clear the
-SIMULATED_SOURCE flag before it can be advertised. It is not enabled by changing
-one mode constant.
+Firmware 1.1.0 implements source 0 using the IDF 5.5.1 standard I2S RX driver,
+a separate DMA reader task and bounded eight-block queue. It is disabled by
+`AF_I2S_CONFIRMED_PROFILE` unless the actual PCB pins and electrical connections
+have been reviewed. Default firmware still supports G1 source 1 only, and boots
+without a microphone. HELLO does not invent source capability bits.
 
-Provisional historical proposal: BCLK GPIO4, WS GPIO5, DIN GPIO6; **not wiring
-instructions**. Actual pins remain -1 in board_config.h until photographs,
-PCB markings and continuity/schematic checks confirm them. GPIO19/20 are USB;
-GPIO35..37 are reserved by N16R8 octal PSRAM. Do not assume official DevKitC routing.
+`acquisition_register_live/start/block/stop` is the independently testable source
+boundary. `pcm24_from_i2s` explicitly converts the 24 meaningful MSB slot bits to
+signed LSB S32LE. Source 0 never falls back to synthetic data. Completed source
+blocks discarded at STOP are reported as drops; unknown DMA sample losses are
+reported as overflow/error events, not an invented sample count. First-sample
+live timestamps are estimates from observed block completion and nominal duration.
+
+See [INMP441 electrical/qualification plan](../docs/engineering/hardware/INMP441_FIRST_ACQUISITION.md)
+and [day-one runbook](../docs/engineering/hardware/DAY_ONE_LAB_RUNBOOK.md).
+The I2S-enabled compile-check image uses provisional pins and is NOT FOR FLASHING.
+Physical G2/G3 remain NOT_EXECUTED.

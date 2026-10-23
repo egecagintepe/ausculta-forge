@@ -1,5 +1,7 @@
 # G1 firmware delivery evidence — 2026-10-22
 
+Historical host-only baseline. The 2026-10-23 [First Contact release](../docs/engineering/hardware/FIRST_CONTACT_RELEASE.md) supersedes the build/toolchain status below with actual cross-compilation evidence; physical gates remain pending.
+
 Tested firmware/core commit: `543d90c` on `main`. No branch or worktree created.
 Authorship: Ege and the AuscultaForge team; historical lab author/reviewer credits
 are preserved. No hardware contribution or physical measurement is invented.
