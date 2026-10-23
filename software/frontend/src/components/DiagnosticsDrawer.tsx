@@ -42,6 +42,7 @@ interface DiagnosticsDrawerProps {
   onClose: () => void;
   diagnosticState: DiagnosticState;
   audioMetrics: AudioMetrics;
+  isPlaybackActive: boolean;
   deviceState: StethoscopeDevice;
   deviceRuntimeState?: DeviceRuntimeState | null;
   deviceStats?: DeviceIntegrityStats | null;
@@ -56,6 +57,7 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
   onClose,
   diagnosticState,
   audioMetrics,
+  isPlaybackActive,
   deviceState,
   deviceRuntimeState,
   deviceStats,
@@ -395,19 +397,19 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
                   <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
                     <span className="text-[var(--on-surface-variant)]">Digital RMS:</span>
                     <span className="text-[var(--on-surface)] font-semibold">
-                      {audioMetrics.rmsDb !== null ? `${audioMetrics.rmsDb.toFixed(1)} dBFS` : 'NOT EVALUATED'}
+                      {isPlaybackActive && Number.isFinite(audioMetrics.currentRmsDb) ? `${audioMetrics.currentRmsDb.toFixed(1)} dBFS (playback)` : 'NOT EVALUATED'}
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
                     <span className="text-[var(--on-surface-variant)]">Peak Amplitude:</span>
                     <span className="text-[var(--on-surface)] font-semibold">
-                      {audioMetrics.peakDb !== null ? `${audioMetrics.peakDb.toFixed(1)} dBFS` : 'NOT EVALUATED'}
+                      {isPlaybackActive && Number.isFinite(audioMetrics.currentPeakDb) ? `${audioMetrics.currentPeakDb.toFixed(1)} dBFS (playback)` : 'NOT EVALUATED'}
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]/40">
                     <span className="text-[var(--on-surface-variant)]">Crest Factor:</span>
                     <span className="text-[var(--on-surface)]">
-                      {audioMetrics.crestFactor !== null ? audioMetrics.crestFactor.toFixed(2) : 'NOT EVALUATED'}
+                      {isPlaybackActive && Number.isFinite(audioMetrics.currentPeakDb) && Number.isFinite(audioMetrics.currentRmsDb) ? `${(audioMetrics.currentPeakDb - audioMetrics.currentRmsDb).toFixed(2)} dB (playback)` : 'NOT EVALUATED'}
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-1">

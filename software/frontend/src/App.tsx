@@ -1002,6 +1002,7 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
           onClose={() => setDiagnosticsOpen(false)}
           diagnosticState={diagnosticState}
           audioMetrics={audioMetrics}
+          isPlaybackActive={audioEngine.getIsPlaying()}
           deviceState={deviceState}
           deviceRuntimeState={deviceRuntimeState}
           deviceStats={deviceStats}
