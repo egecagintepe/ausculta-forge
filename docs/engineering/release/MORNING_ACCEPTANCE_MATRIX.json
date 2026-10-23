@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "source_commit": "3df4ba8ccbdf2e4d3695399a1c315df4c0d0e475",
+  "allowed_statuses": [
+    "PASS",
+    "FAIL",
+    "BLOCKED",
+    "NOT_EXECUTED"
+  ],
+  "gates": [
+    {
+      "gate": "S0",
+      "target": "Repository and environment",
+      "status": "PASS",
+      "evidence": [
+        "MORNING_BASELINE_AUDIT.md"
+      ]
+    },
+    {
+      "gate": "S1",
+      "target": "Canonical contract",
+      "status": "PASS",
+      "evidence": [
+        "MORNING_INTEGRATION_AUDIT.md"
+      ]
+    },
+    {
+      "gate": "S2",
+      "target": "Real firmware builds",
+      "status": "PASS",
+      "evidence": [
+        "../../../firmware/build/morning-rc-build.txt"
+      ]
+    },
+    {
+      "gate": "S3",
+      "target": "Firmware software tests",
+      "status": "PASS",
+      "evidence": [
+        "../../../firmware/build/morning-rc-tests.xml"
+      ]
+    },
+    {
+      "gate": "S4",
+      "target": "Board-absent preflight",
+      "status": "PASS",
+      "evidence": [
+        "../../../firmware/build/morning-rc-preflight.json"
+      ]
+    },
+    {
+      "gate": "S5",
+      "target": "Host simulation integrity",
+      "status": "PASS",
+      "evidence": [
+        "../../../firmware/build/morning-rc-tests.xml"
+      ]
+    },
+    {
+      "gate": "S6",
+      "target": "Desktop API and UI integration",
+      "status": "PASS",
+      "evidence": [
+        "../../../firmware/build/morning-frontend-tests.txt"
+      ]
+    },
+    {
+      "gate": "S7",
+      "target": "DSP and recording",
+      "status": "PASS",
+      "evidence": [
+        "../../../firmware/build/morning-performance.txt"
+      ]
+    },
+    {
+      "gate": "S8",
+      "target": "ML isolation",
+      "status": "PASS",
+      "evidence": [
+        "../../../firmware/build/morning-final-no-torch.txt"
+      ]
+    },
+    {
+      "gate": "H0",
+      "target": "Physical board identity",
+      "status": "NOT_EXECUTED",
+      "evidence": [],
+      "required_evidence": "Actual board/operator measurement; software gates cannot satisfy this gate."
+    },
+    {
+      "gate": "H1",
+      "target": "Flash and boot",
+      "status": "NOT_EXECUTED",
+      "evidence": [],
+      "required_evidence": "Actual board/operator measurement; software gates cannot satisfy this gate."
+    },
+    {
+      "gate": "H2",
+      "target": "Physical HELLO",
+      "status": "NOT_EXECUTED",
+      "evidence": [],
+      "required_evidence": "Actual board/operator measurement; software gates cannot satisfy this gate."
+    },
+    {
+      "gate": "H3",
+      "target": "Physical deterministic G1",
+      "status": "NOT_EXECUTED",
+      "evidence": [],
+      "required_evidence": "Actual board/operator measurement; software gates cannot satisfy this gate."
+    },
+    {
+      "gate": "H4",
+      "target": "INMP441 acquisition",
+      "status": "NOT_EXECUTED",
+      "evidence": [],
+      "required_evidence": "Actual board/operator measurement; software gates cannot satisfy this gate."
+    },
+    {
+      "gate": "H5",
+      "target": "Acoustic characterization",
+      "status": "NOT_EXECUTED",
+      "evidence": [],
+      "required_evidence": "Actual board/operator measurement; software gates cannot satisfy this gate."
+    }
+  ],
+  "rerun": "Run the documented commands and replace statuses only from their real evidence. Never derive H gates from S gates.",
+  "desktop_limits": [
+    "Installer installation NOT_EXECUTED",
+    "Interactive WebView/device operation NOT_EXECUTED"
+  ],
+  "ml_clean_environment_caveat": "Full positive ML file assumes torch; exploratory no-torch run25 passed/3 failed; selected isolation/USB suite32 passed. See release report."
+}

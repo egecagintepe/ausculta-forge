@@ -1,0 +1,122 @@
+{
+  "source_commit": "3df4ba8ccbdf2e4d3695399a1c315df4c0d0e475",
+  "starting_commit": "6aadccfcc5f4c401bdf18638ea343d705a41c0d1",
+  "physical_hardware_bringup": "NOT_EXECUTED",
+  "python_tests": {
+    "tests": "603",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "69.037"
+  },
+  "clean_no_torch_tests": {
+    "passed": 32,
+    "failed": 0
+  },
+  "c_suites_passed": 7,
+  "rust_tests_passed": 6,
+  "frontend": [
+    "unit tests PASS",
+    "TypeScript PASS",
+    "Vite build PASS"
+  ],
+  "firmware": {
+    "build_exit_code": 0,
+    "idf": "5.5.1",
+    "firmware_version": "1.1.0",
+    "compiler": "xtensa-esp-elf-gcc.EXE (crosstool-NG esp-14.2.0_20241119) 14.2.0",
+    "application_bytes": 268112,
+    "binary_sha256": {
+      "bootloader/bootloader.bin": "2796dbba8a3e3dca0bc6588985caaadb234b3c12a721e15a6500d4798ea9807d",
+      "auscultaforge_g1.bin": "9ebe95852d92959bf581fbe7fe6da7df8dc3bc745075428e8f57a3726a5ce0b1",
+      "partition_table/partition-table.bin": "73c0b5c3e5fcba3a151cc70c453c93dd5f4798899e7f2f8cca76da1f32ffc501"
+    },
+    "sdkconfig_sha256": "5c137ae2416c5e356a5c6e0488c5b41ae9a194b77a9f4f0bd233054bd364332b",
+    "lock_sha256": "618443a9d9b1ffd85d4920b41211b6712d1c16887c7c93ed807e9127acbfb330",
+    "i2s_compile_check": {
+      "status": "COMPILED_NOT_FOR_FLASHING",
+      "application_bytes": 294880,
+      "sha256": "d18e03d1ce39b347ae167fd506a27527b2f7f7721e3b28829f43b34fe30cc3f2"
+    }
+  },
+  "preflight": {
+    "ESP_IDF": "READY",
+    "FIRMWARE_BUILD": "READY",
+    "USB_CDC_HOST": "READY",
+    "DESKTOP_BACKEND": "READY",
+    "BOARD_ATTACHED": "NOT_DETECTED",
+    "HARDWARE_TEST": "NOT_EXECUTED"
+  },
+  "local_evidence_hashes": {
+    "firmware/build/morning-final-tests.txt": "0766fcab8328239941453844bbc1c303d94f184bc59c055f8793bf778eba89d2",
+    "firmware/build/morning-final-tests.xml": "eff8241ec3f716d2c1a3100fd493080bc56af44c89f92fa0957ce4a88138dc72",
+    "firmware/build/morning-final-no-torch.txt": "4da04ae1c7fb608cf3432d74418b83712b5b712b7fcfdc46cc98d55a788471e9",
+    "firmware/build/morning-c-tests.txt": "bf1b45a5be7815644127c686f6db43cd6c51ee07bb36f6a248c9c8e5cead35e1",
+    "firmware/build/morning-rust.txt": "53d4810d5b49b616fcea3820c0c2271ae5b8c2d4c1ef11429b821a6382489ebd",
+    "firmware/build/morning-frontend-tests.txt": "7a9e1f8b278a55005ec60068968ceb24fb1493fb4f4d2b8059eb9bfd2105f771",
+    "firmware/build/morning-frontend-types.txt": "438e38f12c7d3b9dbb4b61a096322d8b74908a1ea4d68c35f6b561fbdcb5b63d",
+    "firmware/build/morning-frontend-build.txt": "90691ddc8e90bcec681153d7a013fbe9ffada026f5f1310073f9da91fc43ab2f",
+    "firmware/build/morning-performance.txt": "5abbb753aeb36d6331089f614c37846aa6d9d734370d08664bcd4659c89815e4",
+    "firmware/build/morning-final-build.txt": "f551e577de367a06f6559612b18f0023a545d1074f128ab2430c7fc08706a29e",
+    "firmware/build/morning-final-i2s-build.txt": "a1242fdb62d61e8dcdeaec9e25236276de051913d8d89fbc85f87d798f11e169",
+    "firmware/build/morning-rc-tests.txt": "a39ac9d99eef9b5cf757bbcf0dee795b6eafb30725c2937e7cbfd0ed2142fb45",
+    "firmware/build/morning-rc-tests.xml": "892d35456339c2efc94747be0ab0259c7369edaca125ff3ca3bbf9423769b3ce",
+    "firmware/build/morning-rc-build.txt": "34ebfc0f3f3eba476e9d6888698dd858c75259037911646681de3c5e658e4e70",
+    "firmware/build/morning-rc-i2s-build.txt": "fc7bd2ddd8b427488d1368371c7d7a9dd6c296f42c28f20b2b591e1f093aa17b",
+    "firmware/build/morning-final-package-build.txt": "edd4ce24193906e1033343d07cf03c719e4b547b0b04f5a2a6a1be2b465ee15f",
+    "firmware/build/morning-final-packaged-smoke/result.json": "e0d49668892ffa2b6ab58e469323a00b0ad5701b38acdf786e8f6429673ad5f8",
+    "firmware/build/morning-tauri-startup-result.json": "5d3cf47688a050bb1127687add59efe954e8d43c1a570656451d6e0bd379a818",
+    "firmware/build/morning-final-tauri-build.txt": "b2fbdc70befd1d093dc6bc8b1b74abbec3dd355686a4ddf8fd38af7350e5672f"
+  },
+  "host_packaging_source_commit": "9788d7405f18a0597cc3071a2044141c0bb43c34",
+  "packaged_backend_smoke": {
+    "status": "PASS",
+    "kind": "PACKAGED_BACKEND_HTTP_AND_SIMULATED_SESSION",
+    "health": {
+      "status": "ok",
+      "app": "AuscultaForge",
+      "version": "0.1.0-alpha.1"
+    },
+    "serial_enumeration_ok": true,
+    "initial_session_state": "DISCONNECTED",
+    "models_count": 7,
+    "simulated_recording_samples": 47360,
+    "simulated_g1_conclusion": "G1_FAILED",
+    "evidence_zip_bytes": 34096,
+    "physical_ports_opened": 0,
+    "tauri_interactive_ui": "NOT_EXECUTED"
+  },
+  "packaged_tauri_startup_smoke": {
+    "status": "PASS",
+    "kind": "PACKAGED_TAURI_STARTUP_AND_CHILD_CLEANUP",
+    "backend_resource_resolved": true,
+    "http_health_verified_by_rust_manager": true,
+    "backend_listener_closed_after_app_exit": true,
+    "interactive_webview_visual_check": "NOT_EXECUTED",
+    "physical_ports_opened": 0,
+    "installer_installation": "NOT_EXECUTED"
+  },
+  "packaged_artifacts": {
+    "software/dist_backend/auscultaforge-backend/auscultaforge-backend.exe": {
+      "bytes": 58487135,
+      "sha256": "10c2f4ea431b747eca30a20755d3685ccfed3d578d516bf6b4d6a2912c6b4f4e"
+    },
+    "software/frontend/src-tauri/target/release/auscultaforge-desktop.exe": {
+      "bytes": 9136128,
+      "sha256": "ff7cd61791e7c7335b0071048bfd7acfbe57715f74afe702ff9ddf7dd3ad6039"
+    },
+    "software/frontend/src-tauri/target/release/bundle/nsis/AuscultaForge_0.1.0-alpha.1_x64-setup.exe": {
+      "bytes": 165122020,
+      "sha256": "6c75e7a728b0a47d6cbbb3f21046a4ab439b5a83066ba1f3636de8a5c5d2c65f"
+    }
+  },
+  "desktop_levels": {
+    "developer_backend_api": "PASS",
+    "frontend_build_and_status_tests": "PASS",
+    "packaged_backend_http_simulated_recording_export": "PASS",
+    "packaged_tauri_startup_and_child_cleanup": "PASS",
+    "nsis_build": "PASS",
+    "installer_installation": "NOT_EXECUTED",
+    "interactive_visual_qa": "NOT_EXECUTED"
+  }
+}
