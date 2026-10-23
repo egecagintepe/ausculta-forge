@@ -194,3 +194,28 @@ def test_selected_build_version_mismatch_prevents_start(monkeypatch,tmp_path,com
     assert evidence["verification_result"]=="FAIL"
     assert any("differs from selected build" in reason for reason in evidence["failure_reasons"])
     assert (directory/"acceptance_report.md").exists()
+
+
+@pytest.mark.parametrize("missing_stop",[False,True])
+def test_production_engine_saves_failed_evidence_for_stop_timeout_and_ingestion(monkeypatch,missing_stop):
+    import time
+    from pcg_app.canonical import engine as module
+    device=SimulatedEsp32Device()
+    device.missing_stop_ack=missing_stop
+    monkeypatch.setattr(module,"SimulatedEsp32Device",lambda:device)
+    engine=CanonicalSessionEngine(on_audio_packet=lambda packet:False)
+    try:
+        engine.connect("SIMULATED_ESP32_S3").result(timeout=3)
+        engine.start_acquisition(target_samples=256).result(timeout=3)
+        deadline=time.monotonic()+2
+        while engine.session.host_samples_accepted<256 and time.monotonic()<deadline: time.sleep(0.01)
+        if missing_stop:
+            with pytest.raises(TimeoutError): engine.stop_acquisition(timeout_s=0.05).result(timeout=2)
+        else:
+            engine.stop_acquisition().result(timeout=3)
+        assert engine.last_g1_evidence["verification_result"]=="FAIL"
+        assert engine.host_ingestion_errors>0
+        if missing_stop:
+            assert engine.last_g1_evidence["gates"]["stop_ack"]=="FAIL"
+    finally:
+        engine.disconnect().result(timeout=3)

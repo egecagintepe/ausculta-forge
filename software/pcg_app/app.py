@@ -381,6 +381,10 @@ def create_app(
             )
             caps_ack = await asyncio.wrap_future(fut)
         except Exception as e:
+            try:
+                await asyncio.wrap_future(engine.disconnect(timeout_s=1.0))
+            except Exception:
+                pass
             if manager.device_runtime.state == DeviceState.OPENING:
                 manager.device_runtime.transition_to(DeviceState.ERROR, error_msg=str(e))
             else:
@@ -479,6 +483,11 @@ def create_app(
             fut = engine.stop_acquisition(timeout_s=4.0)
             telem = await asyncio.wrap_future(fut)
         except Exception as e:
+            manager.handle_device_disconnect(f"STOP failed: {e}")
+            try:
+                await asyncio.wrap_future(engine.disconnect(timeout_s=1.0))
+            except Exception:
+                pass
             raise HTTPException(status_code=400, detail=f"Failed to stop acquisition: {e}")
 
         manager.device_runtime._state = DeviceState.READY

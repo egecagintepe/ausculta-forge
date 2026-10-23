@@ -328,8 +328,10 @@ class CanonicalSessionEngine:
             # 2. Check pending command deadline
             if pending_cmd is not None and time.monotonic() > pending_cmd.deadline:
                 err_msg = f"Transport operation {pending_cmd.cmd_type} timed out without device response."
+                self.session.handle_timeout(pending_cmd.cmd_type)
+                if self.session.active_start_config and self.session.active_start_config.source_mode == 1:
+                    self.last_g1_evidence = assess_g1(self)
                 pending_cmd.future.set_exception(TimeoutError(err_msg))
-                self.session.state = SessionState.ERROR
                 self._notify_state_change()
                 if self.on_error:
                     self.on_error(err_msg)
