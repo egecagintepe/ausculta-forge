@@ -42,11 +42,11 @@ firmware/
     CMakeLists.txt
     app_main.c                  entry point, one owner task, UART state logs
     usb_transport.[ch]          real TinyUSB CDC, line events, partial TX retry
-    board_config.h              SoC USB mapping; I2S pins deliberately unassigned
+    board_config.h              SoC USB mapping; live pins require reviewed Kconfig
   components/g1/
     CMakeLists.txt              compiles existing lab packet_framing.c in place
     g1.c / include/g1.h         command parser, queue, session, pacing, telemetry
-    acquisition.c              normative source 1; live source explicitly rejected
+    acquisition.c              normative source 1; optional registered live adapter
     include/acquisition.h      bounded task-context acquisition seam
   tests/
     bridge.c                   host test ABI around actual firmware core
@@ -59,6 +59,8 @@ firmware/
 
 ## Build, flash and recovery
 
+Use [BUILD_AND_FLASH](BUILD_AND_FLASH.md) and the
+[Turkish morning quickstart](../docs/engineering/hardware/START_HERE_TOMORROW.md).
 Follow the [Windows physical bring-up guide](../docs/engineering/hardware/FIRST_PHYSICAL_USB_BRINGUP_GUIDE.md).
 From an exported **ESP-IDF v5.5.1** PowerShell, in this directory:
 

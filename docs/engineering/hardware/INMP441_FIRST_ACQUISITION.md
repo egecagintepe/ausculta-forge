@@ -4,6 +4,10 @@ G2 is separate from deterministic G1. Ege handles firmware/software integration;
 Kaan confirms physical assembly. Ozan can peer-review acquisition/alignment.
 Physical microphone acquisition and acoustic qualification remain NOT_EXECUTED.
 
+For morning operation use [START_HERE_TOMORROW](START_HERE_TOMORROW.md), the
+[preliminary pin plan](PRELIMINARY_PIN_PLAN.md) and the separate
+[physical confirmation form](PHYSICAL_INSPECTION_CHECKLIST.md).
+
 ## Electrical boundary
 
 Use the [TDK INMP441 datasheet](https://product.tdk.com/system/files/dam/doc/product/sw_piezo/mic/mems-mic/data_sheet/inmp441.pdf)
@@ -99,3 +103,31 @@ The separate I2S-enabled compile-check binary is **NOT FOR FLASHING**: provision
 No clinical interpretation and no automatic MurmurMIL prediction on this sensor
 domain. Export a support bundle and a fault hypothesis for noise, not a medical
 finding. Never filter or overwrite the original raw recording as evidence.
+
+## Executable raw-recording screen
+
+After source0 START in Device Center, immediately start recording in Live Workspace.
+Record quiet background and then a separate documented sound stimulus. STOP
+acquisition finalizes an active recording; alternatively stop recording explicitly
+first. Record accepted versus recorded counts: a recording started after START
+does not contain the earlier frames. Supply/clock/UART and signal evidence are
+separate. A bounded target is ten seconds; repeat a fresh session for each condition.
+
+From the repo root replace SESSION_ID with the actual saved session directory:
+
+```powershell
+.\.venv\Scripts\python.exe tools/hardware/bringup.py qualify --session experiments/sessions/SESSION_ID --output experiments/hardware/g2-quiet.json
+```
+
+This validates session integrity/hash and reopens **raw** mono float32 WAV. It
+reports exact sample count, nominal rate, duration from count, zero/constant input,
+DC/RMS/peak in full-scale units, saturation fraction and linear Welch PSD in
+FS²/Hz. Output must be a new file. Compare the controlled-sound report without
+replacing originals. The report explicitly does not certify physical origin,
+clock accuracy or acoustic response. UI errors/UART DMA and drop counters must
+be inspected independently; zero input cannot diagnose absent versus quiet mic.
+
+Recording buffers accepted normalized samples in RAM and writes WAV on STOP;
+use short bounded sessions and orderly STOP. Process/power loss before STOP can
+leave an incomplete marker without durable audio. This is a known limit, not a
+claim of continuous crash-proof disk acquisition.

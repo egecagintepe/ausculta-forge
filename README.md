@@ -223,11 +223,17 @@ ausculta-forge/
 
 ---
 
+## First physical laboratory session
+
+Start with [Yarın buradan başla — Turkish quickstart](docs/engineering/hardware/START_HERE_TOMORROW.md).
+See [Morning release evidence](docs/engineering/release/MORNING_RELEASE_REPORT.md).
+Physical hardware acceptance is pending; compilation/simulation do not establish it.
+
 ## Software Setup & Verification
 
 ### Prerequisites
 - Python 3.11+ (Python 3.11–3.13 tested)
-- Node.js 18+ (for frontend desktop UI)
+- Node.js ^20.19.0 or >=22.12.0 (frontend plugin requirement)
 - Git
 
 ### 1. Environment Setup
