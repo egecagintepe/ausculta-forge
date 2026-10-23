@@ -399,3 +399,18 @@ def test_acquisition_failure_is_not_a_usb_timeout(lib):
     device.rx(c.build_stop_req_packet(host.active_session_id)); device.tick(1007000)
     t=device.packets()[0].telemetry
     assert t.error_code==6 and t.usb_timeout_events==0
+
+
+def test_supported_i2s_start_failure_is_acquisition_fault_and_g1_still_works(lib):
+    device=Device(lib)
+    lib.test_enable_live()
+    host=HostProtocolSession()
+    device.rx(host.initiate_handshake(6)); host.handle_incoming_bytes(device.read())
+    lib.test_fail_live_start()
+    device.rx(host.request_start(target_samples=256,source_mode=0))
+    packet=device.packets()[0]
+    assert packet.control_payload.error_code==6 and lib.test_state()==3
+    host=start(device,target=256)
+    device.tick(1006000)
+    host.handle_incoming_bytes(device.read())
+    assert host.host_samples_accepted==256 and host.host_sample_value_errors==0

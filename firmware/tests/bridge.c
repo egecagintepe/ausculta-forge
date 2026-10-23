@@ -3,13 +3,19 @@
 #include <string.h>
 
 static G1Session session;
+static bool live_start_fail;
 void test_init(uint64_t seed) {
+    live_start_fail=false;
     acquisition_register_live(NULL);
     g1_init(&session, seed, 0x53433332); g1_link(&session, true);
 }
 static uint64_t live_index;
 static bool live_fail;
-static ProtocolStatus live_start(void) { live_index=0; live_fail=false; return PROTOCOL_OK; }
+static ProtocolStatus live_start(void) {
+    if (live_start_fail) return PROTOCOL_ERR_INVALID_PARAM;
+    live_index=0; live_fail=false; return PROTOCOL_OK;
+}
+void test_fail_live_start(void) { live_start_fail=true; }
 void test_fail_live(void) { live_fail=true; }
 static ProtocolStatus live_read(int32_t *out, uint16_t n, AcquisitionMeta *meta) {
     if (live_fail) return PROTOCOL_ERR_INVALID_PARAM;

@@ -93,7 +93,7 @@ static void dispatch(G1Session *s, uint8_t opcode, const uint8_t *payload, uint6
         G1Packet *p = reserve(s);
         if (!p) return;
         if (acquisition_start(req.source_mode) != PROTOCOL_OK) {
-            packet_build_error(G1_ERR_MODE, req.source_mode, p->bytes, sizeof(p->bytes), &p->length);
+            packet_build_error(G1_ERR_ACQUISITION, req.source_mode, p->bytes, sizeof(p->bytes), &p->length);
             return;
         }
         memset(&s->telemetry, 0, sizeof(s->telemetry));
