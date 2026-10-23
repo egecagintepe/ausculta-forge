@@ -146,7 +146,7 @@ class UsbCdcAcmAdapter(BaseTransportAdapter):
             self.read_errors += 1
             self.last_error_message = f"Read error: {e}"
             self.state = TransportState.ERROR
-            return b""
+            raise ConnectionError(self.last_error_message) from e
 
     def write(self, data: bytes) -> int:
         if self._serial is None or self.state != TransportState.CONNECTED:
@@ -159,7 +159,7 @@ class UsbCdcAcmAdapter(BaseTransportAdapter):
             self.write_errors += 1
             self.last_error_message = f"Write error: {e}"
             self.state = TransportState.ERROR
-            return 0
+            raise ConnectionError(self.last_error_message) from e
 
     def flush(self) -> None:
         if self._serial is not None and self.state == TransportState.CONNECTED:

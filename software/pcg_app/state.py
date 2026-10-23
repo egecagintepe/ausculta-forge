@@ -547,7 +547,7 @@ class StreamManager:
                 pass
             self._loop_task = None
 
-    def ingest_device_packet_sync(self, packet: DeviceSamplePacket) -> None:
+    def ingest_device_packet_sync(self, packet: DeviceSamplePacket) -> bool:
         """Synchronous entry point for push-driven physical hardware sample packets.
 
         Called directly by the transport worker thread without event-loop overhead or contention.
@@ -559,14 +559,14 @@ class StreamManager:
             or not self.is_streaming
             or self.is_paused
         ):
-            return
+            return False
 
         # Update integrity telemetry
         self.device_runtime.stats.record_packet(packet)
 
         # Drop CRC-failed packets without feeding DSP or recording
         if not packet.crc_ok:
-            return
+            return False
 
         # Adapt to SampleBlock (checks legal integer range and normalizes to float32)
         block = packet_to_sample_block(
@@ -588,6 +588,7 @@ class StreamManager:
                     f"Error writing block to active session: {e}",
                     severity="error",
                 )
+                raise RuntimeError("Raw recording write failed") from e
 
         # 3. Stream quality report
         quality_rep = self.pipeline.quality_monitor.report
@@ -609,6 +610,7 @@ class StreamManager:
 
         if display_frame is not None:
             self.publish_display_frame(display_frame)
+        return True
 
     async def ingest_device_packet(self, packet: DeviceSamplePacket) -> None:
         """Async entry point for push-driven physical hardware sample packets."""

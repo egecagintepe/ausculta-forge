@@ -337,7 +337,17 @@ def create_app(
                 meaningful_bits=24,
                 sample_rate_hz=pkt.sample_rate_hz or 48000,
             )
-            manager.ingest_device_packet_sync(dsp)
+            return manager.ingest_device_packet_sync(dsp)
+
+        def _on_state(state):
+            # ACK may be followed by AUDIO in the same read, before the REST coroutine resumes.
+            if state.value == "STREAMING":
+                manager.source_type = "hardware"
+                manager.active_source_name = ("SOFTWARE SIMULATION: " if engine.is_simulated else "Physical USB: ") + str(engine.port_name)
+                manager.is_streaming = True
+                manager.is_paused = False
+                manager.sample_rate_hz = engine.session.active_start_config.sample_rate_hz
+                manager.device_runtime._state = DeviceState.STREAMING
 
         def _on_disc(reason: str):
             manager.handle_device_disconnect(reason)
@@ -353,6 +363,7 @@ def create_app(
             diagnostic_journal=get_flight_recorder(),
             on_audio_packet=_on_audio,
             on_disconnect=_on_disc,
+            on_state_change=_on_state,
         )
         manager.device_runtime.canonical_engine = engine
 
@@ -417,7 +428,7 @@ def create_app(
     @app.post("/api/device/usb/start")
     async def api_start_usb_acquisition(req: Optional[UsbStartRequest] = None) -> dict[str, Any]:
         engine = manager.device_runtime.canonical_engine
-        if not engine or not engine.is_running or engine.state.value != "READY":
+        if not engine or not engine.is_running or engine.state.value not in ("READY","COMPLETE"):
             raise HTTPException(status_code=400, detail="Device is not ready for acquisition. Connect and verify HELLO first.")
 
         p = req or UsbStartRequest()
@@ -440,7 +451,7 @@ def create_app(
 
         # Switch StreamManager to hardware source
         manager.source_type = "hardware"
-        manager.active_source_name = f"Hardware: {engine.port_name}"
+        manager.active_source_name = ("SOFTWARE SIMULATION: " if engine.is_simulated else "Physical USB: ") + str(engine.port_name)
         manager.is_streaming = True
         manager.is_paused = False
         manager.sample_rate_hz = rate
@@ -503,17 +514,15 @@ def create_app(
         return {
             "status": "disconnected",
             "device": st,
+            "summary": engine.get_summary() if engine else api_get_usb_session(),
         }
 
     @app.get("/api/device/usb/session")
     def api_get_usb_session() -> dict[str, Any]:
         engine = manager.device_runtime.canonical_engine
         if not engine:
-            return {
-                "session_state": "DISCONNECTED",
-                "is_running": False,
-                "port": None,
-            }
+            from .canonical.engine import CanonicalSessionEngine
+            return CanonicalSessionEngine().get_summary()
         return engine.get_summary()
 
     @app.get("/api/device/usb/g1-evidence")
@@ -522,6 +531,24 @@ def create_app(
         if not engine or not engine.last_g1_evidence:
             raise HTTPException(status_code=404, detail="No deterministic G1 evidence report found.")
         return engine.last_g1_evidence
+
+    @app.post("/api/device/usb/g1-export")
+    def api_export_g1_evidence() -> Response:
+        import io
+        import tempfile
+        import zipfile
+        from .hardware_workflow import export_evidence
+        engine = manager.device_runtime.canonical_engine
+        if not engine or not engine.last_g1_evidence:
+            raise HTTPException(status_code=400, detail="Stop the G1 session before exporting evidence.")
+        with tempfile.TemporaryDirectory(prefix="ausculta-g1-") as temporary:
+            directory = export_evidence(engine, temporary)
+            output = io.BytesIO()
+            with zipfile.ZipFile(output,"w",zipfile.ZIP_DEFLATED) as archive:
+                for path in directory.iterdir():
+                    archive.write(path, path.name)
+        return Response(output.getvalue(),media_type="application/zip",
+            headers={"Content-Disposition":'attachment; filename="auscultaforge-g1-evidence.zip"'})
 
     # ML Research Lab Endpoints
     ml_registry = ResearchModelRegistry()

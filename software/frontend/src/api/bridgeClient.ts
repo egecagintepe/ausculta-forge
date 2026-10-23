@@ -1165,6 +1165,17 @@ class BridgeClient {
     }
   }
 
+  public async exportG1Evidence(): Promise<void> {
+    const response = await this.request('/device/usb/g1-export', { method: 'POST' });
+    if (!response.ok) throw new Error('No completed G1 evidence to export');
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'auscultaforge-g1-evidence.zip';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   public async getResearchModels(): Promise<ResearchModelInfo[]> {
     const resp = await this.request('/research/ml/models');
     if (!resp.ok) {

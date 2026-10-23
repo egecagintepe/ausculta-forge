@@ -43,6 +43,7 @@ from .transport import (
     DuplexLoopbackAdapter,
 )
 from .simulator import SimulatedEsp32Device
+from .acceptance import G1Observation, assess_g1
 
 
 class EngineCommandType:
@@ -98,6 +99,9 @@ class CanonicalSessionEngine:
         self.port_name: Optional[str] = None
         self.is_simulated: bool = False
         self.last_g1_evidence: Optional[Dict[str, Any]] = None
+        self.g1_observation = G1Observation()
+        self.host_ingestion_errors = 0
+        self.physical_transport_opened = False
 
     @property
     def state(self) -> SessionState:
@@ -167,6 +171,8 @@ class CanonicalSessionEngine:
             "device_capabilities": caps,
             "active_config": active_cfg,
             "counters": {
+                "crc_errors": self.session.decoder.total_frames_corrupted,
+                "sequence_gaps": self.session.decoder.total_sequence_gaps,
                 "host_samples_accepted": self.session.host_samples_accepted,
                 "host_frames_accepted": self.session.host_audio_frames_accepted,
                 "host_sample_value_errors": self.session.host_sample_value_errors,
@@ -195,6 +201,11 @@ class CanonicalSessionEngine:
                 raise RuntimeError("Session engine is already running. Disconnect first.")
 
             self.port_name = port
+            self.physical_transport_opened = False
+            self.session = HostProtocolSession(sample_validator=_validate_g1_sample,
+                                               diagnostic_journal=self.diagnostic_journal)
+            self._cmd_queue = queue.Queue(maxsize=32)
+            self.last_g1_evidence = None
             self.is_simulated = (port.upper() in ("SIMULATED", "SIMULATED_ESP32_S3", "LOOPBACK"))
 
             if self.is_simulated:
@@ -205,6 +216,7 @@ class CanonicalSessionEngine:
 
             try:
                 self.transport.open(port=port, baudrate=baudrate, timeout_s=0.5)
+                self.physical_transport_opened = type(self.transport) is UsbCdcAcmAdapter
             except Exception as e:
                 self.transport = None
                 raise ConnectionError(f"Failed to open port '{port}': {e}") from e
@@ -221,7 +233,7 @@ class CanonicalSessionEngine:
             cmd = EngineCommand(
                 cmd_type=EngineCommandType.HELLO,
                 future=fut,
-                deadline=time.time() + timeout_s,
+                deadline=time.monotonic() + timeout_s,
             )
             self._cmd_queue.put(cmd)
             return fut
@@ -237,14 +249,14 @@ class CanonicalSessionEngine:
     ) -> concurrent.futures.Future[StartAck]:
         """Request start of acquisition session (Mode 1: G1 deterministic, Mode 0: Acoustic)."""
         fut: concurrent.futures.Future[StartAck] = concurrent.futures.Future()
-        if not self.is_running or self.session.state != SessionState.READY:
+        if not self.is_running or self.session.state not in (SessionState.READY, SessionState.COMPLETE):
             fut.set_exception(RuntimeError(f"Cannot start acquisition in state {self.session.state.value}; must be READY."))
             return fut
 
         cmd = EngineCommand(
             cmd_type=EngineCommandType.START,
             future=fut,
-            deadline=time.time() + timeout_s,
+            deadline=time.monotonic() + timeout_s,
             payload={
                 "target_samples": target_samples,
                 "source_mode": source_mode,
@@ -269,7 +281,7 @@ class CanonicalSessionEngine:
         cmd = EngineCommand(
             cmd_type=EngineCommandType.STOP,
             future=fut,
-            deadline=time.time() + timeout_s,
+            deadline=time.monotonic() + timeout_s,
         )
         self._cmd_queue.put(cmd)
         return fut
@@ -284,7 +296,7 @@ class CanonicalSessionEngine:
         cmd = EngineCommand(
             cmd_type=EngineCommandType.DISCONNECT,
             future=fut,
-            deadline=time.time() + timeout_s,
+            deadline=time.monotonic() + timeout_s,
         )
         self._cmd_queue.put(cmd)
         return fut
@@ -296,6 +308,7 @@ class CanonicalSessionEngine:
     def _worker_loop(self) -> None:
         """Dedicated thread executing all transport reads, writes, and protocol dispatch."""
         pending_cmd: Optional[EngineCommand] = None
+        disconnect_future = None
 
         while not self._stop_event.is_set():
             # 1. Process outbound command if not waiting for a synchronous ACK
@@ -304,13 +317,16 @@ class CanonicalSessionEngine:
                     cmd = self._cmd_queue.get_nowait()
                     self._execute_outbound_command(cmd)
                     if cmd.cmd_type == EngineCommandType.DISCONNECT:
+                        disconnect_future = cmd.future
                         break
+                    if cmd.future.done():
+                        continue
                     pending_cmd = cmd
                 except queue.Empty:
                     pass
 
             # 2. Check pending command deadline
-            if pending_cmd is not None and time.time() > pending_cmd.deadline:
+            if pending_cmd is not None and time.monotonic() > pending_cmd.deadline:
                 err_msg = f"Transport operation {pending_cmd.cmd_type} timed out without device response."
                 pending_cmd.future.set_exception(TimeoutError(err_msg))
                 self.session.state = SessionState.ERROR
@@ -331,8 +347,11 @@ class CanonicalSessionEngine:
 
             # 4. Dispatch bytes through canonical session FSM
             if chunk:
-                packets = self.session.handle_incoming_bytes(chunk)
+                packets = self.session.decoder.feed_bytes(chunk)
                 for pkt in packets:
+                    self.session._dispatch_packet(pkt)
+                    if self.session.active_start_config and self.session.active_start_config.source_mode == 1:
+                        self.g1_observation.observe(pkt)
                     if not pkt.crc_ok:
                         continue
 
@@ -368,26 +387,47 @@ class CanonicalSessionEngine:
 
                         elif pkt.msg_type == MSG_TYPE_ERROR_NOTIFICATION:
                             err_notif = pkt.control_payload
+                            action = {
+                                1: "Invalid device state; disconnect, HELLO and retry.",
+                                2: "Unsupported source: live mode needs a reviewed I2S firmware profile.",
+                                3: "Session mismatch; reconnect and start a fresh session.",
+                                4: "Unsupported configuration; use 48 kHz mono, encoding 1, Profile B.",
+                                5: "Device transport fault; inspect cable, queue health and reconnect.",
+                                6: "I2S acquisition fault; inspect clocks, wiring and the reviewed board profile.",
+                            }.get(err_notif.error_code, "Save diagnostics and inspect firmware logs.")
                             pending_cmd.future.set_exception(
-                                RuntimeError(f"Device error notification code: 0x{err_notif.error_code:04x}")
+                                RuntimeError(f"{action} (firmware code 0x{err_notif.error_code:04x})")
                             )
                             pending_cmd = None
                             self._notify_state_change()
 
                     # Handle audio stream packets
-                    if pkt.msg_type == MSG_TYPE_AUDIO_DATA and self.on_audio_packet:
-                        self.on_audio_packet(pkt)
+                    if pkt.msg_type == MSG_TYPE_AUDIO_DATA and self.on_audio_packet and self.session.state in (SessionState.STREAMING,SessionState.STOPPING):
+                        try:
+                            if self.on_audio_packet(pkt) is False:
+                                raise RuntimeError("StreamManager rejected acquisition samples")
+                        except Exception as e:
+                            self.host_ingestion_errors += 1
+                            self.session._emit_diagnostic("AF-STR-007", f"Host ingestion failed: {e}")
 
                     # Handle periodic heartbeat telemetry
                     elif pkt.msg_type == MSG_TYPE_HEARTBEAT_STATUS and self.on_telemetry:
                         self.on_telemetry(pkt.control_payload)
 
+                if self.session.state == SessionState.ERROR and self.session.active_start_config and self.session.active_start_config.source_mode == 1:
+                    self.last_g1_evidence = assess_g1(self)
+
             else:
+                if self.transport is not None and self.transport.get_state() != TransportState.CONNECTED:
+                    self._handle_transport_interruption("USB transport disconnected or failed", pending_cmd)
+                    break
                 # No bytes read; yield thread briefly to prevent busy-spinning
                 time.sleep(0.005)
 
         # Teardown
         self._teardown_transport()
+        if disconnect_future is not None and not disconnect_future.done():
+            disconnect_future.set_result(None)
 
     def _execute_outbound_command(self, cmd: EngineCommand) -> None:
         """Serialize and transmit outbound control packets."""
@@ -398,11 +438,21 @@ class CanonicalSessionEngine:
         try:
             if cmd.cmd_type == EngineCommandType.HELLO:
                 wire_bytes = self.session.initiate_handshake()
-                self.transport.write(wire_bytes)
+                written = self.transport.write(wire_bytes)
+                if written != len(wire_bytes):
+                    raise ConnectionError(f"Incomplete command write: {written}/{len(wire_bytes)}")
                 self._notify_state_change()
 
             elif cmd.cmd_type == EngineCommandType.START:
                 p = cmd.payload or {}
+                if self.session.state == SessionState.COMPLETE:
+                    self.session.state = SessionState.READY
+                self.session.reset_session()
+                self.session.error_log.clear()
+                self.session.sample_validator = _validate_g1_sample if p.get("source_mode",1) == 1 else None
+                self.g1_observation = G1Observation()
+                self.host_ingestion_errors = 0
+                self.last_g1_evidence = None
                 wire_bytes = self.session.request_start(
                     target_samples=p.get("target_samples", 480000),
                     source_mode=p.get("source_mode", 1),
@@ -410,16 +460,20 @@ class CanonicalSessionEngine:
                     encoding=p.get("encoding", 1),
                     channels=p.get("channels", 1),
                 )
-                self.transport.write(wire_bytes)
+                written = self.transport.write(wire_bytes)
+                if written != len(wire_bytes):
+                    raise ConnectionError(f"Incomplete command write: {written}/{len(wire_bytes)}")
                 self._notify_state_change()
 
             elif cmd.cmd_type == EngineCommandType.STOP:
                 wire_bytes = self.session.request_stop()
-                self.transport.write(wire_bytes)
+                written = self.transport.write(wire_bytes)
+                if written != len(wire_bytes):
+                    raise ConnectionError(f"Incomplete command write: {written}/{len(wire_bytes)}")
                 self._notify_state_change()
 
             elif cmd.cmd_type == EngineCommandType.DISCONNECT:
-                cmd.future.set_result(None)
+                self._stop_event.set()
 
         except Exception as e:
             cmd.future.set_exception(e)
@@ -427,35 +481,15 @@ class CanonicalSessionEngine:
             self._notify_state_change()
 
     def _record_g1_evidence_if_applicable(self) -> None:
-        """Capture deterministic G1 evidence report on successful STOP_ACK."""
+        """Use the same strict acceptance policy as physical CLI and Desktop export."""
         if self.session.active_start_config and self.session.active_start_config.source_mode == 1:
-            target = self.session.active_start_config.target_samples
-            gen_fw = self.session.final_telemetry.generated_samples if self.session.final_telemetry else 0
-            drop_fw = self.session.final_telemetry.dropped_samples if self.session.final_telemetry else 0
-            pass_cond = (
-                self.session.host_sample_value_errors == 0
-                and self.session.host_samples_accepted >= target
-                and self.session.host_index_discontinuities == 0
-            )
-
-            self.last_g1_evidence = {
-                "session_id": f"0x{self.session.active_session_id:08x}" if self.session.active_session_id else "UNKNOWN",
-                "mode": "DETERMINISTIC_G1",
-                "target_samples": target,
-                "host_samples_accepted": self.session.host_samples_accepted,
-                "host_frames_accepted": self.session.host_audio_frames_accepted,
-                "host_sample_value_errors": self.session.host_sample_value_errors,
-                "host_index_discontinuities": self.session.host_index_discontinuities,
-                "firmware_samples_generated": gen_fw,
-                "firmware_samples_dropped": drop_fw,
-                "verification_result": "PASS" if pass_cond else "FAIL",
-                "verified_at_utc": datetime.now(timezone.utc).isoformat(),
-                "is_simulated": self.is_simulated,
-            }
+            self.last_g1_evidence = assess_g1(self)
 
     def _handle_transport_interruption(self, reason: str, pending_cmd: Optional[EngineCommand]) -> None:
         """Handle physical USB unplug or transport failure."""
         self.session.state = SessionState.ERROR
+        if self.session.active_start_config and self.session.active_start_config.source_mode == 1:
+            self.last_g1_evidence = assess_g1(self)
         self._notify_state_change()
         if pending_cmd is not None:
             pending_cmd.future.set_exception(ConnectionError(reason))
@@ -473,6 +507,7 @@ class CanonicalSessionEngine:
                 self.transport = None
             self.session.state = SessionState.DISCONNECTED
             self._notify_state_change()
+            self._thread = None
 
     def _notify_state_change(self) -> None:
         if self.on_state_change:

@@ -12,10 +12,11 @@ Diagnoses host USB serial enumeration, CDC-ACM hardware readiness, and connectio
 9. Device reappears after reconnection.
 
 Hardware Physical Context:
-- ESP32-S3 N16R8 has two physical USB interfaces:
-  a) Native USB-OTG (GPIO19 D- / GPIO20 D+): VID 0x303A, PID 0x1001 (Recommended for Phase-1 CDC-ACM).
-  b) Built-in USB Serial/JTAG (shared PHY): VID 0x303A, PID 0x1002.
-  c) External UART Bridge (CH340 / CP2102 on devkits): VID 0x1A86 / 0x10C4 (Flash & debug only).
+- Native OTG uses GPIO19 D- / GPIO20 D+ and shares the internal PHY with USB
+  Serial/JTAG. Connector count and PCB routing require physical inspection.
+- Espressif 0x303A:0x1001 is a Serial/JTAG candidate, not proof of TinyUSB firmware.
+- TinyUSB application descriptors vary; external UART bridges are distinct.
+- Enumeration/access alone never establishes canonical HELLO identity.
 """
 
 from __future__ import annotations
@@ -166,6 +167,7 @@ class UsbDiscoveryDoctor:
         target_port: Optional[str] = None,
         is_active_session: bool = False,
         last_disconnect: bool = False,
+        probe_access: bool = False,
     ) -> Tuple[DiscoveryDiagnosticState, dict[str, Any]]:
         """Diagnose overall USB hardware connectivity and produce actionable status."""
         ports = self.scan_ports()
@@ -194,7 +196,13 @@ class UsbDiscoveryDoctor:
                 "available_ports": [p.to_dict() for p in ports],
             }
 
-        # Test accessibility of selected port
+        if not probe_access:
+            return DiscoveryDiagnosticState.PORTS_ENUMERATED_NO_VERIFIED_DEVICE, {
+                "port": selected_port, "message": "Port enumerated; firmware NOT VERIFIED.",
+                "action": "Inspect the board and explicitly perform canonical HELLO. Port access is not probed automatically.",
+                "descriptors": [p.to_dict() for p in ports if p.port_name == selected_port],
+            }
+        # Explicit access probe may toggle DTR/reset; it still cannot verify firmware.
         accessible, code, err_msg = self.check_port_accessibility(selected_port)
         if not accessible:
             if code == "AF-USB-002":
@@ -211,7 +219,7 @@ class UsbDiscoveryDoctor:
                 "action": "Unplug and reconnect the device or check cable integrity.",
             }
 
-        return DiscoveryDiagnosticState.DEVICE_VERIFIED_READY, {
+        return DiscoveryDiagnosticState.PORTS_ENUMERATED_NO_VERIFIED_DEVICE, {
             "port": selected_port,
             "message": f"Port '{selected_port}' is available and ready for canonical B/C HELLO handshake.",
             "descriptors": [p.to_dict() for p in ports if p.port_name == selected_port],
@@ -249,19 +257,18 @@ class UsbDiscoveryDoctor:
         if vid == ESPRESSIF_VID:
             if pid == ESP32_S3_CDC_ACM_PID:
                 is_cand = True
-                reason = "Matched Espressif ESP32-S3 Native USB-OTG CDC-ACM (0x303A:0x1001)"
+                reason = "Espressif USB Serial/JTAG candidate (0x303A:0x1001); canonical HELLO required"
             elif pid == ESP32_S3_JTAG_SERIAL_PID:
                 is_cand = True
-                reason = "Matched Espressif ESP32-S3 USB Serial/JTAG (0x303A:0x1002)"
+                reason = "Espressif candidate (0x303A:0x1002); application/controller unverified"
             else:
                 is_cand = True
-                reason = f"Matched Espressif VID 0x303A (PID 0x{pid:04X} under review)"
+                reason = f"Espressif VID 0x303A (PID {pid}); canonical HELLO required"
         elif any(kw in description.upper() or kw in (hwid or "").upper() for kw in ("ESP32", "ESPRESSIF", "AUSCULTAFORGE", "CDC-ACM")):
             is_cand = True
             reason = "Keyword match in USB device description"
-        elif "USB SERIAL" in description.upper() or "USB JTAG" in description.upper() or "CDC" in description.upper():
-            is_cand = True
-            reason = "Standard USB CDC / Serial descriptor"
+        elif vid in (0x10C4,0x1A86,0x0403,0x067B):
+            reason = "External USB-UART bridge candidate; attached silicon unknown, inspect PCB"
 
         return UsbPortDescriptor(
             port_name=device,

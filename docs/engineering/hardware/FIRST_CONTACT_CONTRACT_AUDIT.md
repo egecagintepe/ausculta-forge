@@ -8,6 +8,7 @@ Ozan: embedded/acquisition peer review where appropriate. No physical gate passe
 | C/Python magic, header, CRC and all nine opcodes | PASS | Reuse existing serializers |
 | HELLO uint32 nonce, profile 2, encoding 1 | PASS | Add capability checks at host trust boundary |
 | 48000/mono/24-in-S32, 256 samples/1068 bytes | PASS | Check all frames in acceptance observer |
+| Production Python maximum AUDIO count | FAIL | Baseline allowed 2048; normative spec and C allow at most 1024; correct production guard, physical G1 still requires 256 |
 | Normative source 1 formula / 480000 / 1875 | PASS | Retain independent host verification |
 | ESP-IDF project, TinyUSB API and genuine component lock | PASS (source) | Actual cross compilation still required |
 | Physical boot / USB / G1 | NOT_EXECUTED | No positively identified attached board |

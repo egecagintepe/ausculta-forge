@@ -91,6 +91,7 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Session recording outputs
+experiments/hardware/
 experiments/sessions/*
 !experiments/sessions/.gitkeep
 experiments/virtual-bench/

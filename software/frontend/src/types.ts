@@ -826,6 +826,8 @@ export interface UsbPortDescriptorItem {
 }
 
 export interface UsbSessionCounters {
+  crc_errors: number;
+  sequence_gaps: number;
   host_samples_accepted: number;
   host_frames_accepted: number;
   host_sample_value_errors: number;
@@ -862,6 +864,10 @@ export interface UsbSessionSummary {
 }
 
 export interface G1EvidenceData {
+  conclusion: string;
+  failure_reasons: string[];
+  sha256_hash: string;
+  timing: { elapsed_since_start_command_s: number };
   session_id: string;
   mode: string;
   target_samples: number;

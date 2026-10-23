@@ -68,8 +68,8 @@ def test_usb_connect_invalid_port(client: TestClient):
     assert st_resp.json()["state"] == "error"
 
 
-def test_usb_full_loopback_g1_lifecycle(client: TestClient):
-    """Verify complete G1 deterministic acquisition lifecycle through simulated CDC-ACM endpoint."""
+def test_usb_short_loopback_cannot_pass_full_g1(client: TestClient):
+    """A clean 2048-sample lifecycle is still insufficient for 480000-sample G1."""
     # 1. Connect
     conn_resp = client.post("/api/device/usb/connect", json={"port": "SIMULATED_ESP32_S3", "timeout_s": 2.0})
     assert conn_resp.status_code == 200
@@ -110,15 +110,18 @@ def test_usb_full_loopback_g1_lifecycle(client: TestClient):
     stop_data = stop_resp.json()
     assert stop_data["status"] == "stopped"
     assert stop_data["g1_evidence"] is not None
-    assert stop_data["g1_evidence"]["verification_result"] == "PASS"
+    assert stop_data["g1_evidence"]["verification_result"] == "FAIL"
+    assert "exact_samples" in stop_data["g1_evidence"]["failure_reasons"]
 
     # 4. Read G1 Evidence Endpoint
     g1_resp = client.get("/api/device/usb/g1-evidence")
     assert g1_resp.status_code == 200
     g1_data = g1_resp.json()
     assert g1_data["mode"] == "DETERMINISTIC_G1"
-    assert g1_data["verification_result"] == "PASS"
+    assert g1_data["verification_result"] == "FAIL"
     assert g1_data["is_simulated"] is True
+    exported = client.post("/api/device/usb/g1-export")
+    assert exported.status_code == 200 and exported.headers["content-type"] == "application/zip"
 
     # 5. Disconnect
     disc_resp = client.post("/api/device/usb/disconnect")

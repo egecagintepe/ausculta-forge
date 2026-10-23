@@ -110,9 +110,10 @@ class HostProtocolSession:
         self.host_index_discontinuities: int = 0
         self.expected_next_sample_index: int = 0
         self.last_audio_sequence: Optional[int] = None
+        self.last_assigned_session_id: Optional[int] = None
 
         # Diagnostic records & bounded memory ring for audio frames
-        self.error_log: List[str] = []
+        self.error_log: deque[str] = deque(maxlen=128)
         self.max_stored_audio_frames = max_stored_audio_frames
         self.received_audio_frames: deque = deque(maxlen=max_stored_audio_frames)
 
@@ -267,6 +268,12 @@ class HostProtocolSession:
             )
             return
 
+        if not (ack.supported_profiles_mask & 2 and ack.supported_encodings_mask & 1
+                and ack.hardware_sample_rate_hz == 48000 and ack.max_frame_samples == 256):
+            self.error_log.append("HELLO capabilities incompatible with canonical Profile B")
+            self._emit_diagnostic("AF-PRT-005", self.error_log[-1])
+            self.state = SessionState.ERROR
+            return
         self.device_capabilities = ack
         self.state = SessionState.READY
 
@@ -278,10 +285,10 @@ class HostProtocolSession:
             return
 
         ack: StartAck = pkt.control_payload
-        if ack.session_id == 0:
+        if ack.session_id == 0 or ack.session_id == self.last_assigned_session_id:
             self.state = SessionState.ERROR
-            self.error_log.append("Device returned invalid zero session_id in START_ACK")
-            self._emit_diagnostic("AF-PRT-006", "Device returned invalid zero session_id in START_ACK")
+            self.error_log.append("Device returned zero or stale session_id in START_ACK")
+            self._emit_diagnostic("AF-PRT-006", self.error_log[-1])
             return
 
         # Strict Configuration Verification
@@ -308,6 +315,7 @@ class HostProtocolSession:
                 return
 
         self.active_session_id = ack.session_id
+        self.last_assigned_session_id = ack.session_id
 
         # Deterministic sample counter reset
         self.host_samples_accepted = 0
@@ -335,7 +343,7 @@ class HostProtocolSession:
 
         # Check sequence continuity
         if self.last_audio_sequence is not None:
-            expected_seq = (self.last_audio_sequence + 1) & 0xFFFF
+            expected_seq = (self.last_audio_sequence + 1) & 0xFFFFFFFF
             if pkt.sequence_id == self.last_audio_sequence:
                 self._emit_diagnostic(
                     "AF-STR-002",

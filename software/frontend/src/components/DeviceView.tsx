@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowRight,
   Cpu,
@@ -75,7 +75,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
 
   // USB Discovery Doctor & Port Selection state
   const [detectedPorts, setDetectedPorts] = useState<UsbPortDescriptorItem[]>([]);
-  const [selectedPort, setSelectedPort] = useState<string>('SIMULATED_ESP32_S3');
+  const [selectedPort, setSelectedPort] = useState<string>('');
   const [sourceMode, setSourceMode] = useState<number>(1); // 1 = G1, 0 = Real Acoustic
   const [isScanningPorts, setIsScanningPorts] = useState(false);
 
@@ -84,6 +84,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
   const [g1Evidence, setG1Evidence] = useState<G1EvidenceData | null>(null);
   const [usbActionLoading, setUsbActionLoading] = useState(false);
   const [usbActionError, setUsbActionError] = useState<string | null>(null);
+  const automaticStopRequested = useRef(false);
 
   // Polling USB Session
   useEffect(() => {
@@ -93,7 +94,10 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
     const pollSession = async () => {
       try {
         const session = await bridgeClient.getUsbSession();
-        if (isMounted) setUsbSession(session);
+        if (isMounted) {
+          setUsbSession(session);
+          if (session?.has_g1_evidence) setG1Evidence(await bridgeClient.getG1Evidence());
+        }
       } catch (_) {}
     };
 
@@ -117,12 +121,6 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
     try {
       const ports = await bridgeClient.getUsbPorts();
       setDetectedPorts(ports);
-      if (ports.length > 0 && selectedPort === 'SIMULATED_ESP32_S3') {
-        const esp = ports.find((p) => p.is_espressif_candidate);
-        if (esp) {
-          setSelectedPort(esp.port_name);
-        }
-      }
       onDetectDevice();
     } catch (err) {
       console.error('Scan ports failed', err);
@@ -137,7 +135,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
     setUsbActionError(null);
     try {
       const summary = await bridgeClient.connectUsbDevice(selectedPort);
-      setUsbSession(summary);
+      setUsbSession(summary.summary ?? summary);
       onDetectDevice();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -152,7 +150,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
     setUsbActionError(null);
     try {
       const summary = await bridgeClient.disconnectUsbDevice();
-      setUsbSession(summary);
+      setUsbSession(summary.summary ?? summary);
       onDisconnectDevice();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -163,11 +161,13 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
   };
 
   const handleStartAcquisition = async () => {
+    automaticStopRequested.current = false;
+    setG1Evidence(null);
     setUsbActionLoading(true);
     setUsbActionError(null);
     try {
-      const summary = await bridgeClient.startUsbAcquisition(sourceMode);
-      setUsbSession(summary);
+      const summary = await bridgeClient.startUsbAcquisition({ sourceMode, targetSamples: 480000 });
+      setUsbSession(summary.summary ?? summary);
       onUseDevice();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -182,7 +182,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
     setUsbActionError(null);
     try {
       const summary = await bridgeClient.stopUsbAcquisition();
-      setUsbSession(summary);
+      setUsbSession(summary.summary ?? summary);
       if (sourceMode === 1) {
         try {
           const ev = await bridgeClient.getG1Evidence();
@@ -211,19 +211,29 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
     }
   };
 
-  const isSessionStreaming = usbSession?.state === 'STREAMING';
-  const isSessionReady = usbSession?.state === 'READY';
+  const isSessionStreaming = usbSession?.session_state === 'STREAMING';
+  const isSessionReady = ['READY', 'COMPLETE'].includes(usbSession?.session_state ?? '');
   const isSessionConnected = isSessionReady || isSessionStreaming;
   const isHardwareConnected = isSessionConnected || (deviceRuntimeState?.connected ?? false);
-  const effectiveLifecycle = usbSession ? usbSession.state.toLowerCase() : (deviceRuntimeState?.state ?? 'absent').toLowerCase();
+  useEffect(() => {
+    if (isSessionStreaming && usbSession?.active_config?.source_mode === 1 &&
+        usbSession.counters.host_samples_accepted >= 480000 && !automaticStopRequested.current) {
+      automaticStopRequested.current = true;
+      void handleStopAcquisition();
+    }
+  }, [isSessionStreaming, usbSession?.counters.host_samples_accepted]);
+  const effectiveLifecycle = usbSession ? usbSession.session_state.toLowerCase() : (deviceRuntimeState?.state ?? 'absent').toLowerCase();
 
   // Helper for rendering truthful state badges
   const renderStateBadge = () => {
+    if (usbSession?.session_state === 'COMPLETE' && g1Evidence?.conclusion === 'PHYSICAL_G1_PASSED') {
+      return <span className="text-[var(--status-success)] font-bold">G1 PASSED — PHYSICAL USB</span>;
+    }
     if (isSessionStreaming) {
       return (
         <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-success)]/15 text-[var(--status-success)] border border-[var(--status-success)]/40 shadow-xs">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] animate-pulse" />
-          <span>ACQUIRING · {usbSession?.source_mode === 1 ? 'G1 DETERMINISTIC' : 'REAL ACOUSTIC'}</span>
+          <span>{usbSession?.is_simulated ? 'SOFTWARE SIMULATION · ' : ''}ACQUIRING · {usbSession?.active_config?.source_mode === 1 ? 'G1 DETERMINISTIC' : 'REAL ACOUSTIC'}</span>
         </span>
       );
     }
@@ -231,7 +241,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
       return (
         <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-[var(--status-success)]/15 text-[var(--status-success)] border border-[var(--status-success)]/40 shadow-xs">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)]" />
-          <span>HARDWARE VERIFIED / READY</span>
+          <span>{usbSession?.is_simulated ? 'SOFTWARE SIMULATION / ' : ''}FIRMWARE HANDSHAKE VERIFIED / READY FOR G1</span>
         </span>
       );
     }
@@ -280,7 +290,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
     if (isSessionStreaming) {
       return {
         title: usbSession?.is_simulated ? 'Simulated ESP32-S3 Canonical Stream' : 'ESP32-S3 Physical Transducer Stream',
-        desc: usbSession?.source_mode === 1
+        desc: usbSession?.active_config?.source_mode === 1
           ? 'Streaming 48 kHz mono signed PCM via deterministic G1 known-answer generator. Host is verifying frame integrity and sample exactness in real-time.'
           : 'Streaming live acoustic transducer samples via Profile B canonical frames. Stateful DSP filtering active.'
       };
@@ -288,7 +298,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
     if (isSessionReady) {
       return {
         title: 'Hardware Link Verified & Ready',
-        desc: `Canonical HELLO handshake succeeded on ${usbSession?.port_name || 'port'}. Protocol semantic v0.1 accepted. Ready to configure acquisition mode and initiate session.`
+        desc: `Canonical HELLO handshake succeeded on ${usbSession?.port || 'port'}. Protocol semantic v0.1 accepted. Ready to configure acquisition mode and initiate session.`
       };
     }
     if (effectiveLifecycle === 'opening' || effectiveLifecycle === 'hello_pending' || effectiveLifecycle === 'start_pending') {
@@ -403,6 +413,12 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                 </p>
               </div>
 
+              <p className="text-xs text-[var(--on-surface-variant)]">
+                {usbSession?.is_simulated ? 'SOFTWARE SIMULATION — no physical acceptance' : 'First contact: inspect board → select native CDC → HELLO → deterministic G1 → STOP → export evidence.'}
+                {' '}Firmware: {usbSession?.device_capabilities?.firmware_version ?? 'NOT VERIFIED'}.
+                {' '}A detected COM port alone does not verify firmware. If it disappears, check cable/connector and rescan after BOOT/RESET.
+                {' '}Live I²S requires a reviewed board profile and separate electrical qualification.
+              </p>
               {/* Canonical Port Selection & Session Control Card */}
               <div className="p-3.5 rounded-lg bg-[var(--surface-muted)]/70 border border-[var(--border-subtle)] flex flex-col gap-3 font-mono-code text-xs">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -417,10 +433,11 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                       disabled={isSessionConnected || usbActionLoading}
                       className="px-2.5 py-1 rounded bg-[var(--surface-card)] border border-[var(--border-strong)] text-[var(--on-surface)] text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[var(--accent-oxblood)] disabled:opacity-50"
                     >
+                      <option value="">Select the inspected data port</option>
                       <option value="SIMULATED_ESP32_S3">
                         SIMULATED_ESP32_S3 (In-Memory CDC Loopback)
                       </option>
-                      {detectedPorts.map((p) => (
+                      {detectedPorts.filter((p) => p.port_name !== 'SIMULATED_ESP32_S3').map((p) => (
                         <option key={p.port_name} value={p.port_name}>
                           {p.port_name} {p.is_espressif_candidate ? '★ [ESP32 Candidate]' : ''} - {p.description}
                         </option>
@@ -498,7 +515,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                         className="accent-[var(--accent-oxblood)]"
                       />
                       <span className="text-[11px] text-[var(--on-surface)] font-medium">
-                        Real Acoustic (Mode 0)
+                        Live microphone (reviewed profile only)
                       </span>
                     </label>
                   </div>
@@ -546,7 +563,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-[var(--on-surface-variant)]">ACTIVE INTERFACE:</span>
                   <span className="text-[var(--on-surface)] font-semibold text-right max-w-md">
-                    {usbSession?.is_simulated ? 'SIMULATED_ESP32_S3 (In-Memory Loopback)' : (usbSession?.port_name || deviceRuntimeState?.port || 'Not connected')}
+                    {usbSession?.is_simulated ? 'SIMULATED_ESP32_S3 (In-Memory Loopback)' : (usbSession?.port || deviceRuntimeState?.port || 'Not connected')}
                   </span>
                 </div>
 
@@ -560,7 +577,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                   <div>
                     <span className="text-[var(--on-surface-variant)] block">SESSION ID</span>
                     <strong className="text-[var(--on-surface)] truncate block">
-                      {usbSession?.active_session_id ? `0x${usbSession.active_session_id.toString(16).toUpperCase()}` : 'None (Idle)'}
+                      {usbSession?.active_session_id ? usbSession.active_session_id : 'None (Idle)'}
                     </strong>
                   </div>
                   <div>
@@ -583,23 +600,23 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                       <span>Live Transport &amp; Frame Counters</span>
                     </span>
                     <span className="text-[10px] text-[var(--on-surface-variant)]">
-                      State: <strong>{usbSession.state}</strong>
+                      State: <strong>{usbSession.session_state}</strong>
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 text-[11px]">
                     <div>
                       <span className="text-[10px] text-[var(--on-surface-variant)] block">SAMPLES ACCEPTED</span>
-                      <strong className="text-[var(--on-surface)]">{usbSession.counters.sample_count.toLocaleString()}</strong>
+                      <strong className="text-[var(--on-surface)]">{usbSession.counters.host_samples_accepted.toLocaleString()}</strong>
                     </div>
                     <div>
                       <span className="text-[10px] text-[var(--on-surface-variant)] block">VALIDATED FRAMES</span>
-                      <strong className="text-[var(--on-surface)]">{usbSession.counters.frame_count.toLocaleString()}</strong>
+                      <strong className="text-[var(--on-surface)]">{usbSession.counters.host_frames_accepted.toLocaleString()}</strong>
                     </div>
                     <div>
                       <span className="text-[10px] text-[var(--on-surface-variant)] block">SEQUENCE GAPS</span>
-                      <strong className={usbSession.counters.seq_discontinuities > 0 ? 'text-[var(--status-warning)]' : 'text-[var(--on-surface)]'}>
-                        {usbSession.counters.seq_discontinuities}
+                      <strong className={usbSession.counters.sequence_gaps > 0 ? 'text-[var(--status-warning)]' : 'text-[var(--on-surface)]'}>
+                        {usbSession.counters.sequence_gaps}
                       </strong>
                     </div>
                     <div>
@@ -610,8 +627,8 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                     </div>
                     <div>
                       <span className="text-[10px] text-[var(--on-surface-variant)] block">DEVICE DROPS</span>
-                      <strong className={usbSession.counters.device_buffer_overflows > 0 ? 'text-[var(--status-danger)]' : 'text-[var(--on-surface)]'}>
-                        {usbSession.counters.device_buffer_overflows}
+                      <strong className={(usbSession.latest_telemetry?.dropped_samples ?? 0) > 0 ? 'text-[var(--status-danger)]' : 'text-[var(--on-surface)]'}>
+                        {(usbSession.latest_telemetry?.dropped_samples ?? 0)}
                       </strong>
                     </div>
                   </div>
@@ -620,17 +637,23 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
 
               {/* G1 Evidence Report Card */}
               {g1Evidence && (
+                <button className="text-sm underline text-[var(--on-surface)]" onClick={async () => {
+                  try { await bridgeClient.exportG1Evidence(); }
+                  catch (error) { setUsbActionError(String(error)); }
+                }}>Export auditable G1 evidence</button>
+              )}
+              {g1Evidence && (
                 <div className="p-3.5 rounded-lg bg-[var(--surface-muted)] border border-[var(--border-subtle)] flex flex-col gap-2.5 font-mono-code text-xs">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <ShieldCheck size={14} className={g1Evidence.all_samples_matched ? 'text-[var(--status-success)]' : 'text-[var(--status-danger)]'} />
+                      <ShieldCheck size={14} className={(g1Evidence.verification_result === 'PASS') ? 'text-[var(--status-success)]' : 'text-[var(--status-danger)]'} />
                       <span className="font-bold uppercase tracking-wider text-[var(--on-surface)]">
-                        Hardware G1 Verification Evidence
+                        G1 Acceptance Evidence
                       </span>
                     </div>
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                        g1Evidence.all_samples_matched
+                        (g1Evidence.verification_result === 'PASS')
                           ? 'bg-[var(--status-success)]/15 text-[var(--status-success)] border-[var(--status-success)]/40'
                           : 'bg-[var(--status-danger)]/15 text-[var(--status-danger)] border-[var(--status-danger)]/40'
                       }`}
@@ -642,19 +665,19 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] pt-1 border-t border-[var(--border-subtle)]/50">
                     <div>
                       <span className="text-[var(--on-surface-variant)] block">EVIDENCE ID</span>
-                      <strong className="text-[var(--on-surface)] truncate block" title={g1Evidence.evidence_id}>
-                        {g1Evidence.evidence_id}
+                      <strong className="text-[var(--on-surface)] truncate block" title={g1Evidence.session_id}>
+                        {g1Evidence.session_id}
                       </strong>
                     </div>
                     <div>
                       <span className="text-[var(--on-surface-variant)] block">EXACT SAMPLES</span>
                       <strong className="text-[var(--on-surface)]">
-                        {g1Evidence.accepted_samples} / {g1Evidence.expected_samples}
+                        {g1Evidence.host_samples_accepted} / {g1Evidence.target_samples}
                       </strong>
                     </div>
                     <div>
                       <span className="text-[var(--on-surface-variant)] block">SESSION TIME</span>
-                      <strong className="text-[var(--on-surface)]">{g1Evidence.duration_seconds.toFixed(2)}s</strong>
+                      <strong className="text-[var(--on-surface)]">{g1Evidence.timing.elapsed_since_start_command_s.toFixed(2)}s</strong>
                     </div>
                     <div>
                       <span className="text-[var(--on-surface-variant)] block">PROVENANCE</span>
@@ -666,7 +689,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
 
                   <div className="text-[10px] text-[var(--on-surface-variant)] flex items-center justify-between pt-1">
                     <span>SHA-256 Digest: <code className="text-[var(--on-surface)] select-all">{g1Evidence.sha256_hash.substring(0, 32)}...</code></span>
-                    <span>Bit-exact match: <strong className={g1Evidence.all_samples_matched ? 'text-[var(--status-success)]' : 'text-[var(--status-danger)]'}>{g1Evidence.all_samples_matched ? '100.00%' : 'MISMATCH'}</strong></span>
+                    <span>Bit-exact match: <strong className={(g1Evidence.verification_result === 'PASS') ? 'text-[var(--status-success)]' : 'text-[var(--status-danger)]'}>{(g1Evidence.verification_result === 'PASS') ? '100.00%' : 'MISMATCH'}</strong></span>
                   </div>
                 </div>
               )}
@@ -676,7 +699,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[var(--border-subtle)]">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-mono-code text-[var(--on-surface-variant)]">
-                  Session State: <strong>{usbSession?.state || 'DISCONNECTED'}</strong>
+                  Session State: <strong>{usbSession?.session_state || 'DISCONNECTED'}</strong>
                 </span>
               </div>
 

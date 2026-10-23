@@ -587,7 +587,11 @@ class StreamingProtocolDecoder:
                     continue
 
                 if mtype == MSG_TYPE_AUDIO_DATA:
-                    if count == 0 or count > 2048:
+                    if cont != 32 or chan != 1 or bits != 24 or rate != 48000 or enc not in (1,2):
+                        self.malformed_headers += 1
+                        del self._buffer[:4]
+                        continue
+                    if count == 0 or count > 1024:
                         self.malformed_headers += 1
                         del self._buffer[:4]
                         continue
