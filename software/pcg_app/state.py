@@ -9,6 +9,7 @@ Synthetic sources never activate automatically and never masquerade as physical 
 """
 
 import asyncio
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 import time
@@ -330,25 +331,48 @@ class StreamManager:
         low_hz: Optional[float] = None,
         high_hz: Optional[float] = None,
     ) -> dict[str, Any]:
-        """Update active streaming bandpass filter cutoffs."""
-        if preset and preset in FILTER_PRESETS:
-            self.filter_preset = preset
-            self.filter_low_hz, self.filter_high_hz = FILTER_PRESETS[preset]
+        """Update the active bandpass; omitted arguments preserve current settings."""
+        if preset is not None:
+            if preset in FILTER_PRESETS:
+                next_preset = preset
+                next_low_hz, next_high_hz = FILTER_PRESETS[preset]
+            elif preset == "custom":
+                next_preset = "custom"
+                next_low_hz, next_high_hz = self.filter_low_hz, self.filter_high_hz
+            else:
+                raise ValueError(f"Unknown filter preset: {preset}")
         else:
-            if low_hz is not None:
-                self.filter_low_hz = float(low_hz)
-            if high_hz is not None:
-                self.filter_high_hz = float(high_hz)
-            self.filter_preset = "custom"
+            next_preset = self.filter_preset
+            next_low_hz, next_high_hz = self.filter_low_hz, self.filter_high_hz
+
+        if low_hz is not None:
+            next_low_hz = float(low_hz)
+            next_preset = "custom"
+        if high_hz is not None:
+            next_high_hz = float(high_hz)
+            next_preset = "custom"
+        if not (math.isfinite(next_low_hz) and math.isfinite(next_high_hz)
+                and 0 < next_low_hz < next_high_hz):
+            raise ValueError("Filter cutoffs must be finite and satisfy 0 < low_hz < high_hz")
+
+        changed = (
+            next_preset != self.filter_preset
+            or next_low_hz != self.filter_low_hz
+            or next_high_hz != self.filter_high_hz
+        )
+        self.filter_preset = next_preset
+        self.filter_low_hz = next_low_hz
+        self.filter_high_hz = next_high_hz
 
         # Re-initialize pipeline with new cutoffs
-        self.pipeline = LiveStreamingPipeline(
-            buffer_duration_s=5.0,
-            filter_low_hz=self.filter_low_hz,
-            filter_high_hz=self.filter_high_hz,
-            filter_order=4,
-            enable_spectral_frame=False,
-        )
+        if changed:
+            self.pipeline = LiveStreamingPipeline(
+                buffer_duration_s=5.0,
+                filter_low_hz=self.filter_low_hz,
+                filter_high_hz=self.filter_high_hz,
+                filter_order=4,
+                enable_spectral_frame=False,
+            )
         return self.get_state_dict()
 
     def select_source(

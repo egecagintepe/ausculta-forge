@@ -36,6 +36,7 @@ import {
   G1EvidenceData,
 } from '../types';
 import { bridgeClient } from '../api/bridgeClient';
+import { AcquisitionStopGate } from '../api/acquisitionStopGate';
 
 interface DeviceViewProps {
   deviceState: StethoscopeDevice;
@@ -94,6 +95,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
   const [usbActionLoading, setUsbActionLoading] = useState(false);
   const [usbActionError, setUsbActionError] = useState<string | null>(null);
   const automaticStopRequested = useRef(false);
+  const stopRequestGate = useRef(new AcquisitionStopGate());
 
   // Polling USB Session
   useEffect(() => {
@@ -118,10 +120,22 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
     };
   }, [backendConnected]);
 
-  // Initial port scan
+  // Passive enumeration keeps hot-unplug/replug state current without opening the USB port.
   useEffect(() => {
     if (!backendConnected) return;
-    handleScanPorts();
+    let isMounted = true;
+    const refreshPorts = async () => {
+      const ports = await bridgeClient.getUsbPorts();
+      if (!isMounted) return;
+      setDetectedPorts(ports);
+      setSelectedPort(current => current && ports.some(port => port.port_name === current) ? current : '');
+    };
+    void refreshPorts();
+    const interval = setInterval(() => void refreshPorts(), 2500);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [backendConnected]);
 
   const handleScanPorts = async () => {
@@ -187,21 +201,22 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
   };
 
   const handleStopAcquisition = async () => {
+    if (!stopRequestGate.current.tryBegin()) return;
+    automaticStopRequested.current = true;
     setUsbActionLoading(true);
     setUsbActionError(null);
     try {
       const summary = await bridgeClient.stopUsbAcquisition();
       setUsbSession(summary.summary ?? summary);
       if (sourceMode === 1) {
-        try {
-          const ev = await bridgeClient.getG1Evidence();
-          setG1Evidence(ev);
-        } catch (_) {}
+        const evidence = summary.g1_evidence ?? await bridgeClient.getG1Evidence();
+        if (evidence) setG1Evidence(evidence);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setUsbActionError(`Stop acquisition failed: ${msg}`);
     } finally {
+      stopRequestGate.current.finish();
       setUsbActionLoading(false);
     }
   };

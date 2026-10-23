@@ -31,7 +31,7 @@ export class ResearchErrorBoundary extends (Component as new (props: Props) => {
   }
 
   public componentDidCatch(error: Error, errorInfo: any): void {
-    console.error('ResearchErrorBoundary caught an unhandled rendering error:', error, errorInfo);
+    console.error('Application render boundary caught an unhandled error:', error, errorInfo);
     this.setState({ errorInfo });
   }
 
@@ -44,7 +44,7 @@ export class ResearchErrorBoundary extends (Component as new (props: Props) => {
 
   public render(): ReactNode {
     if (this.state.hasError) {
-      const title = this.props.fallbackTitle || 'Research Component Render Error';
+      const title = this.props.fallbackTitle || 'Application Render Error';
       return (
         <div
           className="rounded-xl border p-5 flex flex-col gap-4 shadow-sm font-mono-code text-xs m-4"
@@ -60,8 +60,8 @@ export class ResearchErrorBoundary extends (Component as new (props: Props) => {
           </div>
 
           <p className="text-[var(--on-surface-variant, #64748b)] leading-relaxed">
-            An unhandled rendering exception occurred inside this research module. The error was caught
-            to protect the main application workspace from crashing.
+            An unhandled rendering exception occurred in this view. The error was caught so the failure
+            and component stack remain visible instead of leaving a blank screen.
           </p>
 
           <div
@@ -77,7 +77,7 @@ export class ResearchErrorBoundary extends (Component as new (props: Props) => {
               className="px-3.5 py-1.5 rounded-lg font-bold flex items-center gap-2 transition-colors cursor-pointer bg-[var(--accent-oxblood, #881337)] text-white hover:opacity-90"
             >
               <RefreshCw size={14} />
-              <span>Reset Research View</span>
+              <span>Reset View</span>
             </button>
 
             <button

@@ -71,7 +71,7 @@ export interface DeviceIntegrityStats {
   reconnect_count: number;
 }
 
-export type FilterPreset = 'recommended' | 'bell' | 'diaphragm' | 'extended';
+export type FilterPreset = 'recommended' | 'bell' | 'diaphragm' | 'extended' | 'custom';
 
 export type FilterStrength = 'Off' | 'Normal' | 'Strong';
 

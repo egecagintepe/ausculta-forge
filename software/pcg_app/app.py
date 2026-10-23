@@ -348,7 +348,6 @@ def create_app(
         def _on_state(state):
             # ACK may be followed by AUDIO in the same read, before the REST coroutine resumes.
             if state.value == "STREAMING":
-                manager.set_filter()
                 manager.display_aggregator.reset()
                 manager.source_type = "hardware"
                 manager.active_source_name = ("SOFTWARE SIMULATION: " if engine.is_simulated else "Physical USB: ") + str(engine.port_name)
@@ -1022,7 +1021,10 @@ def create_app(
 
     @app.post("/api/stream/filter")
     async def api_set_filter(req: FilterRequest) -> dict[str, Any]:
-        st = manager.set_filter(preset=req.preset, low_hz=req.low_hz, high_hz=req.high_hz)
+        try:
+            st = manager.set_filter(preset=req.preset, low_hz=req.low_hz, high_hz=req.high_hz)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         await manager.broadcast(make_stream_state_message(st))
         return st
 

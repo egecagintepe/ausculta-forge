@@ -588,7 +588,8 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
     recommended: { title: 'Narrow [20–200 Hz]', range: '20 Hz – 200 Hz · 4th Order Chebyshev (Dev Preset)' },
     bell: { title: 'Bell Acoustic Mode', range: '20 Hz – 100 Hz · Low Rumble Emphasized' },
     diaphragm: { title: 'Diaphragm Modality', range: '100 Hz – 500 Hz · Murmur / Regurgitation' },
-    extended: { title: 'Extended Unfiltered Feed', range: '10 Hz – 2000 Hz · Direct Transducer' }
+    extended: { title: 'Extended Unfiltered Feed', range: '10 Hz – 2000 Hz · Direct Transducer' },
+    custom: { title: 'Custom Filter', range: 'User-defined backend cutoff frequencies' },
   };
 
   const resolvedPreset = presetLabels[filterPreset] ?? {

@@ -129,6 +129,31 @@ def test_usb_short_loopback_cannot_pass_full_g1(client: TestClient):
     assert disc_resp.json()["status"] == "disconnected"
 
 
+def test_g1_start_preserves_active_filter_and_pipeline(client: TestClient, integration_app):
+    """Entering G1 must not silently reset the desktop DSP/filter state."""
+    configured = client.post(
+        "/api/stream/filter",
+        json={"preset": "custom", "low_hz": 35, "high_hz": 420},
+    )
+    assert configured.status_code == 200
+    manager = integration_app.state.stream_manager
+    original_pipeline = manager.pipeline
+
+    connected = client.post("/api/device/usb/connect", json={"port": "SIMULATED_ESP32_S3"})
+    assert connected.status_code == 200
+    started = client.post(
+        "/api/device/usb/start",
+        json={"source_mode": 1, "target_samples": 128, "sample_rate_hz": 48000},
+    )
+    assert started.status_code == 200
+    assert manager.filter_preset == "custom"
+    assert (manager.filter_low_hz, manager.filter_high_hz) == (35.0, 420.0)
+    assert manager.pipeline is original_pipeline
+
+    assert client.post("/api/device/usb/stop").status_code == 200
+    assert client.post("/api/device/usb/disconnect").status_code == 200
+
+
 def test_usb_recording_integration(client: TestClient, integration_app):
     """Verify live USB stream recording commits valid WAV, metadata, and SHA-256 hashes."""
     # 1. Connect

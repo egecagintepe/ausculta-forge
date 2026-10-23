@@ -57,6 +57,8 @@ export default function App() {
   const [showRaw, setShowRaw] = useState<boolean>(true);
   const [listeningTrack, setListeningTrack] = useState<ListeningTrack>('filtered');
   const [visibleWindowSec, setVisibleWindowSec] = useState<number>(10);
+  const visibleWindowSecRef = useRef(visibleWindowSec);
+  visibleWindowSecRef.current = visibleWindowSec;
 
   // Fullscreen & Presentation
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -319,7 +321,7 @@ export default function App() {
       setFilteredData(new Float32Array(filtDisplayBuf.subarray(0, totalWritten)));
       setSampleRate(currentFs);
       setCurrentTime(latestTimestamp);
-      setDuration(Math.max(visibleWindowSec, latestTimestamp));
+      setDuration(Math.max(visibleWindowSecRef.current, latestTimestamp));
       setIsPlaying(true);
     };
 
@@ -403,7 +405,7 @@ export default function App() {
       unsubFrame();
       bridgeClient.disconnect();
     };
-  }, [addLog, addToast, visibleWindowSec]);
+  }, [addLog, addToast]);
 
   // Subscribe to audio engine time updates
   useEffect(() => {
