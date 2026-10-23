@@ -21,7 +21,7 @@ if __name__ == "__main__":
     vectors = {
         "hello_req": frame(0x10, struct.pack("<I", 0x12345678)),
         "hello_ack": frame(0x11, struct.pack("<IBBBBI4BHHI", 0x12345678,1,0,2,1,
-                                              48000,1,0,0,0,256,0,0x53433332)),
+                                              48000,1,1,0,0,256,0,0x53433332)),
         "start_req": frame(3, struct.pack("<IQBBBB", 48000,256,1,1,1,2)),
         "start_ack": frame(4, struct.pack("<QQIQBBBB",sid,1000000,48000,256,1,1,1,2),
                            flags=0x81, time=1000000),

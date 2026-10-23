@@ -10,9 +10,24 @@ void g1_init(G1Session *s, uint64_t seed, uint32_t uid) {
     s->uid = uid;
 }
 
+static void source_account(G1Session *s, AcquisitionMeta meta) {
+    if (s->source_mode != SOURCE_MODE_LIVE_I2S) return;
+    s->telemetry.generated_samples = meta.generated;
+    s->telemetry.dropped_samples += meta.dropped - s->source_drops;
+    s->source_drops = meta.dropped;
+    s->telemetry.dma_overflow_events = meta.dma_overflows;
+    s->telemetry.ring_overflow_events += meta.ring_overflows - s->source_ring_overflows;
+    s->source_ring_overflows = meta.ring_overflows;
+    if (meta.dma_overflows) {
+        s->telemetry.error_code = G1_ERR_ACQUISITION;
+        s->telemetry.stop_reason = STOP_REASON_DMA_OVERFLOW;
+    }
+}
+
 void g1_link(G1Session *s, bool open) {
     if (s->connected == open) return;
     if (!open && s->telemetry.session_id) {
+        source_account(s, acquisition_stop(s->source_mode));
         s->telemetry.usb_disconnect_events++;
         s->telemetry.stop_reason = STOP_REASON_USB_ERROR;
         s->telemetry.error_code = G1_ERR_TRANSPORT;
@@ -50,7 +65,7 @@ static void dispatch(G1Session *s, uint8_t opcode, const uint8_t *payload, uint6
         HelloAckPayload ack = {
             .nonce_echo=req.host_nonce, .protocol_version_major=1,
             .supported_profiles_mask=2, .supported_encodings_mask=1,
-            .hardware_sample_rate_hz=48000, .firmware_version_major=1,
+            .hardware_sample_rate_hz=48000, .firmware_version_major=1, .firmware_version_minor=1,
             .max_frame_samples=256, .device_uid_low=s->uid
         };
         G1Packet *p = reserve(s);
@@ -70,13 +85,21 @@ static void dispatch(G1Session *s, uint8_t opcode, const uint8_t *payload, uint6
             return;
         }
         if (req.sample_rate_hz != 48000 || req.encoding != 1 || req.channels != 1 ||
-            req.profile_id != 2 || !req.target_samples || req.target_samples > G1_TARGET_SAMPLES) {
+            req.profile_id != 2 || !req.target_samples || req.target_samples > G1_TARGET_SAMPLES ||
+            (req.source_mode == SOURCE_MODE_LIVE_I2S && req.target_samples % 256)) {
             error(s, G1_ERR_CONFIG, opcode);
             return;
         }
         G1Packet *p = reserve(s);
         if (!p) return;
+        if (acquisition_start(req.source_mode) != PROTOCOL_OK) {
+            packet_build_error(G1_ERR_MODE, req.source_mode, p->bytes, sizeof(p->bytes), &p->length);
+            return;
+        }
         memset(&s->telemetry, 0, sizeof(s->telemetry));
+        s->source_mode = req.source_mode;
+        s->source_drops = 0;
+        s->source_ring_overflows = 0;
         if (++s->next_session == 0) ++s->next_session;
         s->telemetry.session_id = s->next_session;
         s->reference_us = now;
@@ -86,7 +109,7 @@ static void dispatch(G1Session *s, uint8_t opcode, const uint8_t *payload, uint6
         StartAckPayload ack = {
             .session_id=s->next_session, .session_reference_time_us=now,
             .accepted_sample_rate_hz=48000, .accepted_target_samples=s->target,
-            .accepted_source_mode=1, .encoding=1, .channels=1, .profile_id=2
+            .accepted_source_mode=req.source_mode, .encoding=1, .channels=1, .profile_id=2
         };
         packet_build_start_ack(&ack, p->bytes, sizeof(p->bytes), &p->length);
         s->state = G1_STARTED;
@@ -104,9 +127,12 @@ static void dispatch(G1Session *s, uint8_t opcode, const uint8_t *payload, uint6
         }
         if (s->state == G1_COMPLETE) s->stop_ack_queued = false;
         s->stop_requested = true;
+        source_account(s, acquisition_stop(s->source_mode));
         s->state = G1_STOPPING;
-        s->telemetry.stop_reason = s->telemetry.generated_samples == s->target ?
-            STOP_REASON_NORMAL_TARGET_REACHED : STOP_REASON_HOST_REQUEST;
+        if (!s->telemetry.error_code) {
+            s->telemetry.stop_reason = s->telemetry.generated_samples == s->target ?
+                STOP_REASON_NORMAL_TARGET_REACHED : STOP_REASON_HOST_REQUEST;
+        }
     }
 }
 
@@ -171,23 +197,39 @@ void g1_tick(G1Session *s, uint64_t now, bool drained) {
     if (s->state == G1_STREAMING) {
         uint64_t index = s->telemetry.generated_samples;
         uint16_t n = (uint16_t)((s->target-index < 256) ? s->target-index : 256);
+        if (s->source_mode == SOURCE_MODE_LIVE_I2S) n = 256;
         /* Release a complete block only after its last sample's nominal deadline. */
-        if (now - s->reference_us < (index+n)*1000000U/48000U) return;
-        s->telemetry.generated_samples += n;
+        if (s->source_mode == SOURCE_MODE_SYNTH_RAMP &&
+            now - s->reference_us < (index+n)*1000000U/48000U) return;
+        int32_t samples[256];
+        AcquisitionMeta meta;
+        ProtocolStatus result = acquisition_block(s->source_mode, index, samples, n, &meta);
+        if (result == PROTOCOL_ERR_INCOMPLETE) return;
+        if (result != PROTOCOL_OK) {
+            source_account(s, acquisition_stop(s->source_mode));
+            s->telemetry.error_code = G1_ERR_ACQUISITION;
+            s->telemetry.stop_reason = s->telemetry.dma_overflow_events ?
+                STOP_REASON_DMA_OVERFLOW : STOP_REASON_USER_ABORT;
+            s->state = G1_STOPPING;
+            error(s, G1_ERR_ACQUISITION, s->source_mode);
+            return;
+        }
+        if (s->source_mode == SOURCE_MODE_SYNTH_RAMP) s->telemetry.generated_samples += n;
+        else { source_account(s, meta); index = meta.first_sample; }
         if (s->count >= G1_QUEUE_DEPTH-2) {
             s->telemetry.dropped_samples += n;
             s->telemetry.ring_overflow_events++;
         } else {
-            int32_t samples[256];
-            ProtocolStatus result = acquisition_read(SOURCE_MODE_SYNTH_RAMP, index, samples, n);
-            assert(result == PROTOCOL_OK);
-            (void)result;
             G1Packet *p = reserve(s);
             assert(p);
-            packet_build_profile_b(s->sequence, s->reference_us+index*1000000U/48000U,
+            packet_build_profile_b(s->sequence, s->source_mode == SOURCE_MODE_SYNTH_RAMP ?
+                s->reference_us+index*1000000U/48000U : meta.timestamp_us,
                 index, samples, n, 48000, 24,
-                FRAME_FLAG_TIMESTAMP_VALID | FRAME_FLAG_SIMULATED_SOURCE | FRAME_FLAG_SESSION_ACTIVE |
-                (s->telemetry.dropped_samples ? FRAME_FLAG_SAMPLE_DISCONTINUITY | FRAME_FLAG_USB_QUEUE_OVERFLOW : 0),
+                FRAME_FLAG_TIMESTAMP_VALID | FRAME_FLAG_SESSION_ACTIVE |
+                (s->source_mode == SOURCE_MODE_SYNTH_RAMP ? FRAME_FLAG_SIMULATED_SOURCE : 0) |
+                (s->telemetry.dropped_samples || s->telemetry.dma_overflow_events ? FRAME_FLAG_SAMPLE_DISCONTINUITY : 0) |
+                (s->telemetry.dropped_samples > s->source_drops ? FRAME_FLAG_USB_QUEUE_OVERFLOW : 0) |
+                (s->telemetry.dma_overflow_events ? FRAME_FLAG_DMA_BUFFER_OVERFLOW : 0),
                 1, (uint16_t)(s->telemetry.dropped_samples > 65535 ? 65535 : s->telemetry.dropped_samples),
                 p->bytes, sizeof(p->bytes), &p->length);
             s->telemetry.fully_queued_samples += n;
@@ -195,7 +237,10 @@ void g1_tick(G1Session *s, uint64_t now, bool drained) {
             s->telemetry.audio_bytes_queued += p->length;
         }
         s->sequence++;
-        if (s->telemetry.generated_samples == s->target) s->state = G1_STOPPING;
+        if (index+n >= s->target) {
+            source_account(s, acquisition_stop(s->source_mode));
+            s->state = G1_STOPPING;
+        }
         if (s->sequence % 188 == 0 && s->count < G1_QUEUE_DEPTH-2) {
             G1Packet *p = reserve(s);
             packet_build_status(&s->telemetry, s->sequence, now, p->bytes, sizeof(p->bytes), &p->length);
@@ -226,6 +271,7 @@ void g1_written(G1Session *s, size_t bytes) {
 }
 
 void g1_transport_fault(G1Session *s) {
+    source_account(s, acquisition_stop(s->source_mode));
     s->telemetry.usb_timeout_events++;
     s->telemetry.error_code = G1_ERR_TRANSPORT;
     if (s->telemetry.stop_reason != STOP_REASON_TIMEOUT) s->telemetry.stop_reason = STOP_REASON_USB_ERROR;

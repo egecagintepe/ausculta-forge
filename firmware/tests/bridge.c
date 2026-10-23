@@ -3,7 +3,27 @@
 #include <string.h>
 
 static G1Session session;
-void test_init(uint64_t seed) { g1_init(&session, seed, 0x53433332); g1_link(&session, true); }
+void test_init(uint64_t seed) {
+    acquisition_register_live(NULL);
+    g1_init(&session, seed, 0x53433332); g1_link(&session, true);
+}
+static uint64_t live_index;
+static bool live_fail;
+static ProtocolStatus live_start(void) { live_index=0; live_fail=false; return PROTOCOL_OK; }
+void test_fail_live(void) { live_fail=true; }
+static ProtocolStatus live_read(int32_t *out, uint16_t n, AcquisitionMeta *meta) {
+    if (live_fail) return PROTOCOL_ERR_INVALID_PARAM;
+    for (unsigned i=0;i<n;++i) out[i]=pcm24_from_i2s(0x80000000U+(i<<8));
+    *meta=(AcquisitionMeta){.first_sample=live_index,.timestamp_us=1000000+live_index*1000000/48000,
+                           .generated=live_index+n};
+    live_index+=n;
+    return PROTOCOL_OK;
+}
+static AcquisitionMeta live_stop(void) { return (AcquisitionMeta){.generated=live_index}; }
+void test_enable_live(void) {
+    static const LiveAcquisition adapter={.start=live_start,.read=live_read,.stop=live_stop};
+    acquisition_register_live(&adapter);
+}
 void test_rx(const uint8_t *p, size_t n, uint64_t now) { g1_receive(&session, p, n, now); }
 void test_tick(uint64_t now, int drained) { g1_tick(&session, now, drained != 0); }
 void test_link(int open) { g1_link(&session, open != 0); }

@@ -330,3 +330,55 @@ def test_real_time_core_against_existing_acceptance_validator(lib, tmp_path):
     assert metrics["host_frames_accepted"] == 1875
     assert 10 <= metrics["elapsed_seconds"] < 15
     (tmp_path / "firmware_g1_software_evidence.json").write_text(json.dumps(metrics, indent=2))
+
+
+def test_i2s_conversion_and_independent_live_adapter(lib):
+    lib.pcm24_from_i2s.argtypes=[ctypes.c_uint32]
+    lib.pcm24_from_i2s.restype=ctypes.c_int32
+    for word, expected in [(0,0),(0x100,1),(0x7fffff00,8388607),
+                            (0x80000000,-8388608),(0xffffff00,-1),(0xffffffab,-1)]:
+        assert lib.pcm24_from_i2s(word)==expected
+    device=Device(lib)
+    lib.test_enable_live()
+    host=HostProtocolSession()
+    device.rx(host.initiate_handshake(3)); host.handle_incoming_bytes(device.read())
+    device.rx(host.request_start(target_samples=256,source_mode=0))
+    host.handle_incoming_bytes(device.read())
+    device.tick(1006000)
+    packets=host.handle_incoming_bytes(device.read())
+    assert packets[0].raw_samples[0]==-8388608
+    assert packets[0].flags & c.FRAME_FLAG_SIMULATED_SOURCE == 0
+    device.rx(host.request_stop()); device.tick(1007000)
+    host.handle_incoming_bytes(device.read())
+    assert host.state==SessionState.COMPLETE
+    assert host.final_telemetry.generated_samples==256
+    assert host.final_telemetry.dropped_samples==0
+
+
+def test_live_source_does_not_erase_usb_overflow_counters(lib):
+    device=Device(lib)
+    lib.test_enable_live()
+    host=HostProtocolSession()
+    device.rx(host.initiate_handshake(4)); host.handle_incoming_bytes(device.read())
+    device.rx(host.request_start(target_samples=480000,source_mode=0))
+    host.handle_incoming_bytes(device.read())
+    for now in range(1006000,1026000,1000): device.tick(now)
+    device.rx(host.request_stop()); host.handle_incoming_bytes(device.read())
+    device.tick(1027000); host.handle_incoming_bytes(device.read())
+    t=host.final_telemetry
+    assert t.ring_overflow_events>0 and t.dropped_samples>0
+    assert t.generated_samples==t.fully_queued_samples+t.dropped_samples
+
+
+def test_acquisition_failure_is_not_a_usb_timeout(lib):
+    device=Device(lib)
+    lib.test_enable_live()
+    host=HostProtocolSession()
+    device.rx(host.initiate_handshake(5)); host.handle_incoming_bytes(device.read())
+    device.rx(host.request_start(target_samples=256,source_mode=0))
+    host.handle_incoming_bytes(device.read())
+    lib.test_fail_live(); device.tick(1006000)
+    assert device.packets()[0].control_payload.error_code==6
+    device.rx(c.build_stop_req_packet(host.active_session_id)); device.tick(1007000)
+    t=device.packets()[0].telemetry
+    assert t.error_code==6 and t.usb_timeout_events==0

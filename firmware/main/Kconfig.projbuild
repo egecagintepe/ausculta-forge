@@ -1,0 +1,24 @@
+menu "AuscultaForge board profile"
+config AF_I2S_CONFIRMED_PROFILE
+    bool "Enable physically reviewed INMP441 wiring (hardware qualification still required)"
+    default n
+    help
+        Enable only after checking actual PCB headers, 3.3 V supply, ground,
+        and a soldered/verified INMP441 connection. Default firmware remains G1 only.
+config AF_I2S_BCLK
+    int "Confirmed BCLK GPIO"
+    depends on AF_I2S_CONFIRMED_PROFILE
+    default 4
+config AF_I2S_WS
+    int "Confirmed WS GPIO"
+    depends on AF_I2S_CONFIRMED_PROFILE
+    default 5
+config AF_I2S_DIN
+    int "Confirmed SD -> DIN GPIO"
+    depends on AF_I2S_CONFIRMED_PROFILE
+    default 6
+config AF_I2S_RIGHT_SLOT
+    bool "INMP441 L/R tied to 3.3 V (right slot); otherwise tie to GND (left)"
+    depends on AF_I2S_CONFIRMED_PROFILE
+    default n
+endmenu

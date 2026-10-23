@@ -10,7 +10,7 @@ typedef enum {
 } G1State;
 /* Local ERROR vocabulary: canonical v0.1 defines the layout, not these values. */
 enum { G1_ERR_STATE=1, G1_ERR_MODE=2, G1_ERR_SESSION=3, G1_ERR_CONFIG=4,
-       G1_ERR_TRANSPORT=5 };
+       G1_ERR_TRANSPORT=5, G1_ERR_ACQUISITION=6 };
 typedef struct {
     uint8_t bytes[PROFILE_B_FRAME_TOTAL_BYTES];
     size_t length, offset;
@@ -21,6 +21,9 @@ typedef struct {
     uint64_t next_session, reference_us, target, last_rx_us;
     uint32_t uid, sequence, crc_errors, malformed_headers, control_overflows;
     bool connected, stop_requested, stop_ack_queued;
+    uint8_t source_mode;
+    uint64_t source_drops;
+    uint32_t source_ring_overflows;
     uint8_t rx[60];
     size_t rx_length;
     uint64_t rx_started_us;

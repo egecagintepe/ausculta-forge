@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(auscultaforge_g1 VERSION 1.0.0)
+project(auscultaforge_g1 VERSION 1.1.0)
 if(NOT "${IDF_VERSION_MAJOR}.${IDF_VERSION_MINOR}.${IDF_VERSION_PATCH}" VERSION_EQUAL "5.5.1")
     message(FATAL_ERROR "Use pinned ESP-IDF v5.5.1; see firmware/README.md")
 endif()
