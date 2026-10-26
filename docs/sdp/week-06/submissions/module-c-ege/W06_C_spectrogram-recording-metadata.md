@@ -193,3 +193,66 @@ Open: local audition Welch/recording support, measured browser filter response/p
 - **Packaged Tauri Installer:** No new installer was built or tested in this sprint step; validation was performed on the browser-rendered application source.
 - **Physical Hardware G2 / Calibration:** No COM7 connection, physical ESP32-S3 G1 run, or microphone G2 acoustic metrology calibration was performed.
 
+## Final Desktop Release Candidate Verification — 2026-10-26
+
+**Starting Baseline:** `ef0e5f1`
+**Status:** **RELEASE CANDIDATE VERIFIED (PASS / PARTIAL GATE)**
+- Packaged Backend DSP & Native Tauri Supervisor: **PASS**
+- Browser GUI End-to-End Real PCG Streaming & Recording: **PASS**
+- Native Tauri Automated OS File Dialog Driving: **BLOCKED / NOT_AUTOMATABLE** (requires human interactive desktop operation; native file dialogs not automatable via browser CDP)
+- System-Wide NSIS Installation: **HELD AT ACCEPTANCE GATE** (to preserve host Windows installation without unapproved overwrite)
+- Microphone Acoustic G2: **PENDING** (retained as separate Module A/B hardware work)
+
+### 1. Hardened WAV Upload Endpoint (`POST /api/stream/upload_source_wav`)
+- **Bounded Reading:** Enforces `MAX_WAV_UPLOAD_BYTES = 50 * 1024 * 1024` (50 MB) via 64 KB streaming chunk reads, returning HTTP 413 if exceeded.
+- **Filename Sanitization:** Enforces `MAX_FILENAME_LENGTH = 255`, alphanumeric/underscore/dot/hyphen sanitization, and path-traversal rejection.
+- **Encoding Validation:** Strict validation of mono PCM 16-bit (`np.int16`) and 32-bit floating-point (`np.float32`) formats; stereo and unsupported encodings (e.g. int32) return HTTP 400.
+- **Sample Rate Validation:** Restricts rates to finite, positive medical PCG bounds: `100 Hz <= fs <= 192000 Hz`.
+- **Signal Quality Sanity:** Detects and rejects NaN or Infinite values in floating-point audio.
+- **Staging & Failure Cleanup:** Employs atomic staging via temporary files (`upload_tmp_...`) with automatic cleanup on error. Confirmed that failed uploads leave zero orphaned files in `assets_dir` and preserve the stream manager's active state without disruption.
+- **Automated Coverage:** 12 unit/integration tests in [`software/tests/test_app.py`](file:///C:/Dev/Antigravity/bitirme/ausculta-forge/software/tests/test_app.py) all PASS (exit code 0).
+
+### 2. Standalone Backend & Tauri NSIS Re-Packaging
+- **PyInstaller Standalone Backend:** Re-bundled directly from updated Python sources via `software/build_desktop_backend.py`.
+  - Executable: `software/dist_backend/auscultaforge-backend/auscultaforge-backend.exe`
+  - Size: **58,493,579 bytes**
+  - SHA-256: `c163e182eb6b8e59ed93285bf31c00a707da2ec2c6b72cdad72e69b6de26b38f`
+- **Frontend & Rust Quality Gates:**
+  - Rust process manager & IPC tests: 6 passed, 0 failed (`cargo test --locked`, exit code 0).
+  - Frontend TypeScript lint: 0 errors (`npm.cmd run lint`, exit code 0).
+  - Frontend test suites: 7 passed (`npm.cmd test`, exit code 0).
+  - Production frontend bundle: `vite build` completed in 4.95s (exit code 0).
+- **Native Tauri NSIS Release Installer:**
+  - Target: Windows x64 NSIS bundle (`npm.cmd run tauri -- build --bundles nsis`).
+  - Installer: `software/frontend/src-tauri/target/release/bundle/nsis/AuscultaForge_0.1.0-alpha.1_x64-setup.exe`
+  - Size: **164,522,399 bytes**
+  - SHA-256: `d6e0e4e3635577c1df15110166d88d2cae780f642b2b3718118b425e95f36885`
+- **Native Release Executable:**
+  - Path: `software/frontend/src-tauri/target/release/auscultaforge-desktop.exe`
+  - Size: **9,138,688 bytes**
+  - SHA-256: `a85207b0d55ea6c2e11844defffa7b93bdbc21f471aa3f4788cb0f79ef72a09b`
+- **Previous Installer Preservation:**
+  - The previous sprint installer is preserved at `experiments/hardware/week6_20261026_sprint/e90785e-nsis-setup.exe` (165,101,259 bytes, SHA-256 `dff76ce9e086a5d7435885c574fbcb3668a3dd2bdcc5e1ac872d3e0abc7a1bf9`).
+
+### 3. Native Release Executable Lifecycle Verification
+- Executed via [`experiments/hardware/week6_20261026_sprint/test_native_release_executable.py`](file:///C:/Dev/Antigravity/bitirme/ausculta-forge/experiments/hardware/week6_20261026_sprint/test_native_release_executable.py) with isolated test environments: `gui-rc-appdata` and `gui-rc-localappdata`.
+- **Observed Behavior:**
+  - `auscultaforge-desktop.exe` spawned bundled `auscultaforge-backend.exe` under Windows Job Object with parent watchdog.
+  - Backend dynamically bound to ephemeral loopback port `58231` and generated a dynamic authentication token.
+  - Authenticated `/api/health` returned: `{"status": "ok", "app": "AuscultaForge", "version": "0.1.0-alpha.1"}`.
+  - Authenticated `/api/status` returned valid uninitialized stream state (`source_type: "none"`, `filter_preset: "recommended"`, cutoffs 20–200 Hz).
+  - Uploaded CirCor C1 (`40058_AV.wav`) directly to the packaged backend server: parsed 4000 Hz, 47,552 samples, verified SHA-256 `108df8f77491a5706209aa5b467ed10ac43f2a0b847801fe666ba8146dcbf8e8`, and successfully activated live `realtime_wav` DSP stream.
+  - On desktop application termination, the Windows Job Object and watchdog immediately terminated the backend process and released ephemeral port `58231`.
+  - Archived in `experiments/hardware/week6_20261026_sprint/gui-rc-launch-report.json`.
+
+### 4. Real PCG Manifest Verification
+All five licensed PCG records from `data/raw/week6_real_pcg_20261026/manifest.json` re-verified:
+- C1 (`40058_AV.wav`): 4000 Hz, 47,552 samples, SHA-256 `108df8f77491a5706209aa5b467ed10ac43f2a0b847801fe666ba8146dcbf8e8` — PASS
+- C2 (`24160_MV.wav`): 4000 Hz, 90,368 samples, SHA-256 `fa8e0586c00bc2e86e88c9ea55853cad01a558a3c5c5945cc1ffd567545565a9` — PASS
+- C3 (`49568_PV.wav`): 4000 Hz, 113,792 samples, SHA-256 `34cf7450302b1c411516e87f287e0766336a5a3064ec0e72251a24d271f28014` — PASS
+- C4 (`49627_TV.wav`): 4000 Hz, 127,360 samples, SHA-256 `fa8331d27576ce81452a38a72bf30ec997a387532dc51bc0411a7f0525916382` — PASS
+- P1 (`a0001.wav`): 2000 Hz, 71,332 samples, SHA-256 `c7efb3f462bbfa96dcae3c9fe343467c699fa8ce324835a643d67f70b213192e` — PASS
+- Acceptance test `test_real_pcg_acceptance.py`: 7/7 passed (exit code 0).
+- S1/S2 research check: C4 heart-rate estimation failure preserved (`HEART_RATE_ESTIMATION_FAILED`).
+
+
