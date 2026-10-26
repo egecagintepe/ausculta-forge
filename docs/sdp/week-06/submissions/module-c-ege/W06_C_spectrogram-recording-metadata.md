@@ -308,6 +308,37 @@ All five licensed PCG records from `data/raw/week6_real_pcg_20261026/manifest.js
   - Dynamic `L-{sampleRate}-RAW` badge displayed.
 - **Physical Acoustic Gate:** PENDING user listening confirmation. Full verification report in [`docs/engineering/release/WEEK6_AUDIO_FIX_RELEASE_VERIFICATION.md`](file:///C:/Dev/Antigravity/bitirme/ausculta-forge/docs/engineering/release/WEEK6_AUDIO_FIX_RELEASE_VERIFICATION.md).
 
-
-
-
+### 7. Autonomous Native Desktop Audio Acceptance (2026-10-26)
+- **Execution Methodology:** Autonomous Windows UI Automation (`uiautomation` / `pywinauto`) on interactive desktop `WinSta0\Default` combined with an out-of-process WASAPI loopback audio recorder. No manual clicking or screenshots required.
+- **Target Session:** `session_20261026_121726_530cde89` (CirCor `40058_AV.wav`, 4000 Hz, 27,968 samples, 6.992s).
+- **Automated Native GUI Navigation:**
+  - Discovered running release window `AuscultaForge — Engineering Workstation` (HWND `723314`, PID `12088`).
+  - Automated tab selection to `Specimen Archives` (`nav-samples`) and tab `Recorded Sessions`.
+  - Located target card `session_20261026_121726_530cde89` and triggered `Audition` (`btn-audition`).
+  - Transitioned to `SPEAKER AUDITION` mode; verified 4000 Hz sample rate and exact 6.992s length.
+  - Performed automated transport sequence: `PLAY` (2.5s) -> `PAUSE` (1.2s) -> `PLAY` (2.0s) -> `Seek to Start`.
+- **Quantitative WASAPI Loopback Audio Measurement:**
+  - Measurement device: Default Windows output `Kulaklıklar (2- Audeze Maxwell 2)`.
+  - Baseline idle noise: RMS = 0.000000, Peak = 0.000000.
+  - Active playback (2.5s): RMS = 0.018110, Peak = 0.153260, SNR = 125.16 dB, Active audio ratio = 37.77% (consistent with S1/S2 cardiac intervals).
+  - Paused state (1.2s): RMS = 4.48e-10, Peak = 1.40e-09 (clean pause, zero buffer leak).
+  - Resumed active (2.0s): RMS = 0.010518, Peak = 0.080809 (continuous playback confirmed).
+  - Premature 0.5s cutoff bug: **ELIMINATED**. Continuous PCM signal verified well beyond 0.5s.
+- **Replay vs Audition Demarcation & Isolation:**
+  - Replay triggers backend telemetry badge: `[TELEMETRY (SPEAKER: LOCAL AUDITION)]`.
+  - Switching back to Audition displays `[SPEAKER AUDITION]` and preserves original filename `session_20261026_121726_530cde89.wav` without `Session Replay: ` state stomping.
+- **Multi-Source Real PCG Verification (C1–C4, P1):**
+  - All 5 records verified bit-exact against SHA-256 and declared sample rates (C1–C4 @ 4000 Hz, P1 @ 2000 Hz).
+  - Display aggregators, Welch frequency resolutions (Δf 7.8125 Hz vs 15.625 Hz), and source metadata strictly isolated.
+- **Acceptance Status:**
+  - Native GUI interaction: **PASS**
+  - Local WebAudio playback: **PASS**
+  - WASAPI audio output measurement: **PASS**
+  - Session Audition: **PASS**
+  - Backend telemetry Replay: **PASS**
+  - Source state isolation: **PASS**
+  - Physical human hearing acceptance: **PENDING** (until manual human listening approval).
+- **Documentation & Evidence:**
+  - Detailed report: [`docs/engineering/release/WEEK6_AUTONOMOUS_NATIVE_AUDIO_ACCEPTANCE.md`](file:///C:/Dev/Antigravity/bitirme/ausculta-forge/docs/engineering/release/WEEK6_AUTONOMOUS_NATIVE_AUDIO_ACCEPTANCE.md).
+  - Machine summary: [`docs/engineering/release/WEEK6_AUTONOMOUS_NATIVE_AUDIO_ACCEPTANCE.json`](file:///C:/Dev/Antigravity/bitirme/ausculta-forge/docs/engineering/release/WEEK6_AUTONOMOUS_NATIVE_AUDIO_ACCEPTANCE.json).
+  - Local WAV captures and JSON execution trace stored in `experiments/hardware/week6_20261026_sprint/acceptance_evidence/`.

@@ -1,0 +1,48 @@
+{
+  "title": "AuscultaForge Autonomous Native Desktop Audio Acceptance",
+  "timestamp_utc": "2026-10-26T15:25:07Z",
+  "git_head": "17fa20b",
+  "target_session": "session_20261026_121726_530cde89",
+  "host": {
+    "os": "Windows 11 x64",
+    "hwnd": 723314,
+    "desktop_window_title": "AuscultaForge \u2014 Engineering Workstation",
+    "desktop_pid": 12088,
+    "backend_pid": 33716,
+    "backend_port": 49669
+  },
+  "acceptance_gates": {
+    "native_gui_interaction": "PASS",
+    "local_webaudio_playback": "PASS",
+    "wasapi_audio_output_measurement": "PASS",
+    "session_audition": "PASS",
+    "backend_telemetry_replay": "PASS",
+    "source_state_isolation": "PASS",
+    "physical_human_hearing_acceptance": "PENDING"
+  },
+  "quantitative_audio_metrics": {
+    "sound_device": "Kulakl\u0131klar (2- Audeze Maxwell 2)",
+    "baseline_idle_rms": 0.0,
+    "baseline_idle_peak": 0.0,
+    "playback_active_rms": 0.01810985,
+    "playback_active_peak": 0.15326034,
+    "playback_snr_db": 125.158,
+    "paused_state_rms": 4.483e-10,
+    "paused_state_peak": 1.400e-09,
+    "resumed_active_rms": 0.01051772,
+    "resumed_active_peak": 0.08080868,
+    "active_audio_ratio": 0.377725,
+    "silence_ratio": 0.622275,
+    "pcm_audio_emitted_to_hardware": true,
+    "cutoff_0_5s_bug_eliminated": true,
+    "clean_pause_silence_restored": true
+  },
+  "multi_source_verification": {
+    "C1": { "filename": "40058_AV.wav", "fs_hz": 4000, "samples": 47552, "sha256_verified": true, "status": "VERIFIED_BIT_EXACT" },
+    "C2": { "filename": "24160_MV.wav", "fs_hz": 4000, "samples": 90368, "sha256_verified": true, "status": "VERIFIED_BIT_EXACT" },
+    "C3": { "filename": "49568_PV.wav", "fs_hz": 4000, "samples": 113792, "sha256_verified": true, "status": "VERIFIED_BIT_EXACT" },
+    "C4": { "filename": "49627_TV.wav", "fs_hz": 4000, "samples": 127360, "sha256_verified": true, "status": "VERIFIED_BIT_EXACT" },
+    "P1": { "filename": "a0001.wav", "fs_hz": 2000, "samples": 71332, "sha256_verified": true, "status": "VERIFIED_BIT_EXACT" }
+  },
+  "verdict": "PASS"
+}
