@@ -15,6 +15,7 @@ import {
   Download,
   CheckCircle2,
   AlertTriangle,
+  Volume2,
 } from 'lucide-react';
 import { HeartSoundMetadata } from '../types';
 import { STARTER_SAMPLES } from '../audio/samplesData';
@@ -23,14 +24,17 @@ import { bridgeClient, SessionItem } from '../api/bridgeClient';
 interface SamplesViewProps {
   onSelectSample: (sample: HeartSoundMetadata) => void;
   onReplaySession?: (sessionId: string) => void;
+  onAuditionSession?: (sessionId: string) => void;
   onAnalyzeSession?: (sessionId: string) => void;
   activeSampleId?: string;
   isDark: boolean;
+  onOpenCustomFile?: (file: File) => void;
 }
 
 export const SamplesView: React.FC<SamplesViewProps> = ({
   onSelectSample,
   onReplaySession,
+  onAuditionSession,
   onAnalyzeSession,
   activeSampleId,
 }) => {
@@ -38,9 +42,11 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [loadingSessions, setLoadingSessions] = useState<boolean>(false);
   const [replayingId, setReplayingId] = useState<string | null>(null);
+  const [auditioningId, setAuditioningId] = useState<string | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [integrityChecks, setIntegrityChecks] = useState<Record<string, any>>({});
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
 
   const loadSessionsList = async () => {
     setLoadingSessions(true);
@@ -71,6 +77,18 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
       setReplayingId(null);
     }
   };
+
+  const handleAuditionClick = async (sessionId: string) => {
+    setAuditioningId(sessionId);
+    try {
+      if (onAuditionSession) {
+        onAuditionSession(sessionId);
+      }
+    } finally {
+      setAuditioningId(null);
+    }
+  };
+
 
   const handleVerifyClick = async (sessionId: string) => {
     setVerifyingId(sessionId);
@@ -428,6 +446,17 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
                           <span>Analyze</span>
                         </button>
 
+                        {/* Audition via WebAudio (Speaker Playback) */}
+                        <button
+                          onClick={() => handleAuditionClick(sess.session_id)}
+                          disabled={auditioningId === sess.session_id || isCorrupted || isIncomplete}
+                          title="Audition recorded sound through workstation speakers (WebAudio local playback)"
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-[var(--on-surface)] border border-[var(--border-strong)] hover:border-[var(--accent-oxblood)] hover:text-[var(--accent-oxblood)] hover:bg-[var(--surface-muted)] flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 disabled:opacity-50"
+                        >
+                          <Volume2 size={13} className={auditioningId === sess.session_id ? 'animate-spin' : ''} />
+                          <span>Audition</span>
+                        </button>
+
                         {/* Replay */}
                         <button
                           onClick={() => handleReplayClick(sess.session_id)}
@@ -437,6 +466,7 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
                           <Play size={13} className={replayingId === sess.session_id ? 'animate-spin' : ''} />
                           <span>Replay</span>
                         </button>
+
 
                         {/* Delete Trigger */}
                         {deleteConfirmId === sess.session_id ? (

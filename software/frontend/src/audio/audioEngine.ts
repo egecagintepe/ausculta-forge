@@ -69,8 +69,6 @@ class HeartAudioEngine {
   private ctx: AudioContext | null = null;
   private sourceNode: AudioBufferSourceNode | null = null;
   private gainNode: GainNode | null = null;
-  private filterHighPass: BiquadFilterNode | null = null;
-  private filterLowPass: BiquadFilterNode | null = null;
   private rawGainNode: GainNode | null = null;
   private filteredGainNode: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
@@ -99,7 +97,7 @@ class HeartAudioEngine {
       this.ctx = new AudioContextClass();
     }
     if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
   }
 
@@ -110,7 +108,7 @@ class HeartAudioEngine {
     this.stop();
     this.rawData = raw;
     this.filteredData = filtered;
-    this.duration = raw.length / sampleRate;
+    this.duration = raw.length > 0 && sampleRate > 0 ? raw.length / sampleRate : 0;
     this.sampleRate = sampleRate;
     this.pauseOffset = 0;
 
@@ -156,9 +154,16 @@ class HeartAudioEngine {
     };
   }
 
-  public play() {
+  public async play(): Promise<void> {
     this.init();
     if (!this.ctx || !this.currentAudioBuffer) return;
+    if (this.ctx.state === 'suspended') {
+      try {
+        await this.ctx.resume();
+      } catch {
+        // ignore resume rejection
+      }
+    }
     if (this.isPlaying) return;
 
     if (this.pauseOffset >= this.duration) {
@@ -172,20 +177,12 @@ class HeartAudioEngine {
     const splitter = this.ctx.createChannelSplitter(2);
     this.sourceNode.connect(splitter);
 
-    // Biquad filters for physiological heart sounds
-    this.filterHighPass = this.ctx.createBiquadFilter();
-    this.filterHighPass.type = 'highpass';
-    this.filterLowPass = this.ctx.createBiquadFilter();
-    this.filterLowPass.type = 'lowpass';
-    this.updateFilterParams();
-
     this.filteredGainNode = this.ctx.createGain();
     this.rawGainNode = this.ctx.createGain();
 
-    splitter.connect(this.filterHighPass, 0);
-    this.filterHighPass.connect(this.filterLowPass);
-    this.filterLowPass.connect(this.filteredGainNode);
-
+    // Channel 0: pre-filtered with exact physiological Biquad transfer function (no double filtering)
+    splitter.connect(this.filteredGainNode, 0);
+    // Channel 1: raw acoustic signal
     splitter.connect(this.rawGainNode, 1);
 
     this.gainNode = this.ctx.createGain();
@@ -205,7 +202,7 @@ class HeartAudioEngine {
     this.isPlaying = true;
 
     this.sourceNode.onended = () => {
-      if (this.getCurrentTime() >= this.duration - 0.05) {
+      if (this.isPlaying && this.getCurrentTime() >= this.duration - 0.05) {
         this.pause();
         this.pauseOffset = 0;
         this.notifyTime(0);
@@ -237,6 +234,17 @@ class HeartAudioEngine {
     this.pauseOffset = 0;
     this.notifyTime(0);
   }
+
+  public clear(): void {
+    this.stop();
+    this.currentAudioBuffer = null;
+    this.rawData = new Float32Array(0);
+    this.filteredData = new Float32Array(0);
+    this.duration = 0;
+    this.pauseOffset = 0;
+    this.notifyTime(0);
+  }
+
 
   public seek(timeInSeconds: number) {
     const clamped = Math.max(0, Math.min(this.duration, timeInSeconds));
@@ -287,12 +295,17 @@ class HeartAudioEngine {
 
   public setFilterPreset(preset: FilterPreset) {
     this.filterPreset = preset;
-    this.updateFilterParams();
     if (this.rawData.length > 0) {
       const { lowHz, highHz } = FRONTEND_FILTER_PRESETS[preset] ?? FRONTEND_FILTER_PRESETS.recommended;
       this.filteredData = computeBiquadFilteredAudio(this.rawData, this.sampleRate, lowHz, highHz);
       if (this.ctx) {
+        const wasPlaying = this.isPlaying;
+        const currentPos = this.getCurrentTime();
         this.setAudioData(this.rawData, this.filteredData, this.sampleRate);
+        if (wasPlaying) {
+          this.pauseOffset = currentPos;
+          this.play().catch(() => {});
+        }
       }
     }
   }
@@ -303,7 +316,6 @@ class HeartAudioEngine {
 
   public setFilterStrength(strength: FilterStrength) {
     this.filterStrength = strength;
-    this.updateFilterParams();
   }
 
   public getFilterStrength(): FilterStrength {
@@ -368,21 +380,29 @@ class HeartAudioEngine {
   }
 
   private startTracking() {
+    const reqFn = typeof requestAnimationFrame !== 'undefined'
+      ? requestAnimationFrame
+      : (typeof window !== 'undefined' && (window as any).requestAnimationFrame ? (window as any).requestAnimationFrame : null);
+    if (!reqFn) return;
     const loop = () => {
       if (this.isPlaying) {
         this.notifyTime(this.getCurrentTime());
-        this.animFrameId = requestAnimationFrame(loop);
+        this.animFrameId = reqFn(loop);
       }
     };
-    this.animFrameId = requestAnimationFrame(loop);
+    this.animFrameId = reqFn(loop);
   }
 
   private stopTracking() {
     if (this.animFrameId !== null) {
-      cancelAnimationFrame(this.animFrameId);
+      const cancelFn = typeof cancelAnimationFrame !== 'undefined'
+        ? cancelAnimationFrame
+        : (typeof window !== 'undefined' && (window as any).cancelAnimationFrame ? (window as any).cancelAnimationFrame : null);
+      if (cancelFn) cancelFn(this.animFrameId);
       this.animFrameId = null;
     }
   }
+
 
   private updateMasterVolume() {
     if (this.gainNode && this.ctx) {
@@ -401,14 +421,6 @@ class HeartAudioEngine {
       const target = this.activeTrack === 'raw' ? 1.0 : 0.0;
       this.rawGainNode.gain.setTargetAtTime(target, this.ctx.currentTime, 0.02);
     }
-  }
-
-  private updateFilterParams() {
-    if (!this.filterHighPass || !this.filterLowPass || !this.ctx) return;
-    const { lowHz, highHz } = FRONTEND_FILTER_PRESETS[this.filterPreset] ?? FRONTEND_FILTER_PRESETS.recommended;
-    this.filterHighPass.frequency.setTargetAtTime(lowHz, this.ctx.currentTime, 0.03);
-    this.filterLowPass.frequency.setTargetAtTime(highHz, this.ctx.currentTime, 0.03);
-    this.filterLowPass.Q.setTargetAtTime(0.7071, this.ctx.currentTime, 0.03);
   }
 
   // Export 16-bit PCM WAV

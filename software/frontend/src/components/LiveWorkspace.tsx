@@ -1242,8 +1242,9 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                 FULL RECORDING OVERVIEW (15.0s ARCHIVE)
               </span>
               <span className="text-[var(--on-surface-variant)]">
-                L-44100-RAW
+                L-{sampleRate}-RAW
               </span>
+
             </div>
             <span className="font-mono-code text-[10px] text-[var(--accent-metal)]">
               WINDOW: {formatTime(windowStart)} - {formatTime(windowEnd)} [{visibleWindowSec}s SPAN | {sampleRate} Hz]
@@ -1363,7 +1364,28 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
           </div>
 
           {/* Acoustic Monitoring Volume & Filter Adjustment Popover Cluster */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* Audio Monitoring Mode Truthful Demarcation */}
+            {sourceType === 'file' || sourceType === 'sample' ? (
+              <div
+                id="audio-monitor-mode-badge"
+                className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--status-success)]/10 border border-[var(--status-success)]/30 text-[var(--status-success)] text-[10px] font-mono-code font-bold select-none"
+                title="WebAudio engine active. Sound is played directly through workstation speakers."
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] animate-pulse" />
+                <span>SPEAKER AUDITION</span>
+              </div>
+            ) : (
+              <div
+                id="audio-monitor-mode-badge"
+                className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--surface-muted)] border border-[var(--border-subtle)] text-[var(--on-surface-variant)] text-[10px] font-mono-code select-none"
+                title="Display waveforms are driven by the backend DSP telemetry bus (25 Hz decimated display points). Live speaker audio is not streamed over telemetry. To audition sound with speakers, open the specimen or session in Local Audition."
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-metal)]" />
+                <span>TELEMETRY (SPEAKER: LOCAL AUDITION)</span>
+              </div>
+            )}
+
             {/* Volume Slider Control */}
             <div
               className="flex items-center gap-2 px-3 py-1.5 rounded border"
@@ -1372,6 +1394,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                 borderColor: 'var(--border-subtle)'
               }}
             >
+
               <button
                 id="vol-mute-btn"
                 onClick={onToggleMute}

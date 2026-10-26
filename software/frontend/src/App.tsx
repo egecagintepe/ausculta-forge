@@ -230,7 +230,8 @@ export default function App() {
 
     const unsubState = bridgeClient.onStreamState((st: StreamStateData) => {
       const localAudition = ['file', 'sample'].includes(currentSourceTypeRef.current);
-      if (localAudition && !st.is_streaming) return;
+      // Strictly isolate Local Audition from backend stream events to prevent state stomping
+      if (localAudition) return;
       if (st.source_type !== 'none') setActiveMetadata(null);
       if (st.filter_preset) setFilterPreset(st.filter_preset);
       if (st.sample_rate_hz) setSampleRate(st.sample_rate_hz);
@@ -242,6 +243,7 @@ export default function App() {
         setIsPlaying(!st.is_paused && st.is_streaming);
       }
     });
+
 
     const unsubRec = bridgeClient.onRecordingState((rec: RecordingStateData) => {
       setIsRecording(rec.is_recording);
@@ -433,6 +435,10 @@ export default function App() {
 
   // Load a starter sample
   const loadSample = useCallback((sample: HeartSoundMetadata) => {
+    currentSourceTypeRef.current = 'sample';
+    if (backendConnected) {
+      bridgeClient.selectSource('none');
+    }
     const { raw, filtered } = generateSyntheticHeartAudio(sample.id, sample.durationSeconds, sample.sampleRateHz);
     audioEngine.setAudioData(raw, filtered, sample.sampleRateHz);
     audioEngine.seek(0);
@@ -443,16 +449,21 @@ export default function App() {
     setCurrentTime(0);
     setIsPlaying(false);
     setActiveMetadata(sample);
+    setActiveSourceName(sample.title);
     setSourceType('sample');
     setCurrentDestination('live');
 
     addLog(`Loaded specimen: ${sample.title} (${sample.filename})`, 'info', 'FileIO');
     addToast(`Loaded ${sample.title}`, 'success');
-  }, [addLog, addToast]);
+  }, [backendConnected, addLog, addToast]);
 
   // Open a user file
   const handleOpenFile = useCallback(async (file: File) => {
     try {
+      currentSourceTypeRef.current = 'file';
+      if (backendConnected) {
+        bridgeClient.selectSource('none');
+      }
       setCurrentLocalFile(file);
       addLog(`Decoding auscultation file: ${file.name}`, 'info', 'Decoder');
       const decoded = await audioEngine.decodeUserFile(file);
@@ -490,7 +501,7 @@ export default function App() {
       addLog(`Failed to open audio file: ${String(err)}`, 'error', 'Decoder');
       addToast('Could not open audio file. Supported formats: WAV, MP3', 'warning');
     }
-  }, [addLog, addToast]);
+  }, [backendConnected, addLog, addToast]);
 
   // Explicit user action to route local audition WAV to backend DSP streaming pipeline
   const handleStreamViaBackend = useCallback(async () => {
@@ -504,8 +515,10 @@ export default function App() {
       return;
     }
     try {
+      audioEngine.clear();
       addLog(`Uploading '${currentLocalFile.name}' to backend DSP pipeline...`, 'info', 'Stream');
       const res = await bridgeClient.uploadAndSelectSourceWav(currentLocalFile);
+      currentSourceTypeRef.current = 'session';
       setSourceType('session');
       setActiveSourceName(`Replay: ${res.filename}`);
       setSampleRate(res.sample_rate_hz);
@@ -518,6 +531,7 @@ export default function App() {
       addToast(`Could not route to backend DSP: ${String(err)}`, 'warning');
     }
   }, [backendConnected, currentLocalFile, addLog, addToast]);
+
 
   // Truthful Device Discovery and Disconnect
   const handleDetectDevice = useCallback(async () => {
@@ -567,6 +581,8 @@ export default function App() {
 
   const handleUseDeviceInLive = useCallback(() => {
     if (deviceRuntimeState?.connected) {
+      audioEngine.clear();
+      currentSourceTypeRef.current = 'device';
       bridgeClient.selectSource('hardware');
       setSourceType('device');
       setActiveSourceName(`Physical Hardware: ${deviceRuntimeState.device_id || 'ESP32-S3'}`);
@@ -606,6 +622,8 @@ export default function App() {
   }, [addLog]);
 
   const handleReplaySession = useCallback((sessionId: string) => {
+    audioEngine.clear();
+    currentSourceTypeRef.current = 'session';
     bridgeClient.selectSource('session', undefined, sessionId);
     setSourceType('session');
     setActiveSourceName(`Session Replay: ${sessionId}`);
@@ -614,6 +632,23 @@ export default function App() {
     addToast(`Replaying session ${sessionId}`, 'info');
   }, [addLog, addToast]);
 
+  const handleAuditionSession = useCallback(async (sessionId: string) => {
+    try {
+      addLog(`Fetching audio for session: ${sessionId}...`, 'info', 'Audition');
+      const blob = await bridgeClient.getSessionWavBlob(sessionId);
+      if (!blob) {
+        addToast(`Could not fetch audio for session ${sessionId}`, 'warning');
+        return;
+      }
+      const file = new File([blob], `${sessionId}.wav`, { type: 'audio/wav' });
+      await handleOpenFile(file);
+      addToast(`Session loaded for local audition: ${sessionId}`, 'success');
+    } catch (err) {
+      addLog(`Failed to audition session: ${String(err)}`, 'error', 'Audition');
+      addToast('Failed to load session audio', 'warning');
+    }
+  }, [handleOpenFile, addLog, addToast]);
+
   const handleAnalyzeSession = useCallback((sessionId: string) => {
     setAnalysisTargetSessionId(sessionId);
     setCurrentDestination('analysis');
@@ -621,6 +656,8 @@ export default function App() {
   }, [addLog]);
 
   const handleSelectMockSource = useCallback(() => {
+    audioEngine.clear();
+    currentSourceTypeRef.current = 'synthetic';
     bridgeClient.selectSource('synthetic_dev');
     setSourceType('synthetic');
     setActiveSourceName('Synthetic Development Signal — Not Hardware');
@@ -646,19 +683,32 @@ export default function App() {
   }, [addLog, addToast]);
 
   // Audio Playback Controls
-  const handleTogglePlay = useCallback(() => {
-    if (isPlaying) {
-      bridgeClient.pauseStream();
-      audioEngine.pause();
-      setIsPlaying(false);
-      addLog('Stream & playback paused', 'info', 'Transport');
+  const handleTogglePlay = useCallback(async () => {
+    const isLocalAudition = ['file', 'sample'].includes(sourceType);
+    if (isLocalAudition) {
+      if (isPlaying) {
+        audioEngine.pause();
+        setIsPlaying(false);
+        addLog('Local audio playback paused', 'info', 'Transport');
+      } else {
+        await audioEngine.play();
+        setIsPlaying(true);
+        addLog('Local audio playback started', 'info', 'Transport');
+      }
     } else {
-      bridgeClient.resumeStream();
-      audioEngine.play();
-      setIsPlaying(true);
-      addLog('Stream & playback resumed', 'info', 'Transport');
+      // Backend streaming pipeline (device, synthetic, session replay)
+      if (isPlaying) {
+        bridgeClient.pauseStream();
+        setIsPlaying(false);
+        addLog('Backend telemetry stream paused', 'info', 'Transport');
+      } else {
+        bridgeClient.resumeStream();
+        setIsPlaying(true);
+        addLog('Backend telemetry stream resumed', 'info', 'Transport');
+      }
     }
-  }, [isPlaying, addLog]);
+  }, [isPlaying, sourceType, addLog]);
+
 
   const handleRestart = useCallback(() => {
     audioEngine.seek(0);
@@ -985,11 +1035,14 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
             <SamplesView
               onSelectSample={loadSample}
               onReplaySession={handleReplaySession}
+              onAuditionSession={handleAuditionSession}
               onAnalyzeSession={handleAnalyzeSession}
               activeSampleId={activeMetadata?.id}
               isDark={isDark}
+              onOpenCustomFile={handleOpenFile}
             />
           )}
+
 
           {currentDestination === 'analysis' && (
             <AnalysisWorkbench

@@ -555,6 +555,17 @@ class BridgeClient {
     }
   }
 
+  public async getSessionWavBlob(sessionId: string): Promise<Blob | null> {
+    try {
+      const resp = await this.request(`/sessions/${encodeURIComponent(sessionId)}/wav`);
+      if (!resp.ok) return null;
+      return await resp.blob();
+    } catch {
+      return null;
+    }
+  }
+
+
   public async replaySession(sessionId: string): Promise<boolean> {
     try {
       const resp = await this.request(`/sessions/${encodeURIComponent(sessionId)}/replay`, { method: 'POST' });
