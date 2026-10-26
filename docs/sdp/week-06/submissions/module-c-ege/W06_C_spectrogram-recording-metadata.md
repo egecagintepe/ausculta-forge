@@ -255,4 +255,29 @@ All five licensed PCG records from `data/raw/week6_real_pcg_20261026/manifest.js
 - Acceptance test `test_real_pcg_acceptance.py`: 7/7 passed (exit code 0).
 - S1/S2 research check: C4 heart-rate estimation failure preserved (`HEART_RATE_ESTIMATION_FAILED`).
 
+### 5. Native Windows Audio Playback & Source State Bugfix (2026-10-26)
+- **Problem Diagnosis:**
+  - Manual testing on native Windows x64 build with real CirCor recording (`40058_AV.wav`, 4000 Hz, 11.888s) and recorded session `session_20261026_121726_530cde89` revealed two critical issues:
+    1. During backend DSP replay, waveforms animated on screen, but user heard no speaker sound, and clicking PLAY generated ~0.5s of wind/static noise before cutting off.
+    2. Opening a local WAV as Local Audition appeared successful, but navigating back showed the active source was reverted to the previous session replay.
+- **Root Cause:**
+  - Backend streaming operates on 25 Hz decimated display points over WebSocket, not PCM speaker streaming.
+  - `handleTogglePlay` mistakenly invoked `audioEngine.play()` during backend replay with a stale buffer.
+  - Channel 0 was pre-filtered in software and then double-filtered through WebAudio BiquadFilterNodes in series, causing phase distortion and transient cutoff.
+  - `onStreamState` events lacked an unconditional guard for local audition, allowing backend `is_streaming: true` messages to stomp over `sourceType` and active file metadata.
+- **Architecture & Fixes:**
+  - **Local Audition:** Dedicated WebAudio playback engine for local `.wav` files and starter models with direct speaker output and software Biquad filtering (single-pass).
+  - **Backend DSP Replay:** Dedicated Python Welch waterfall, decimation, and telemetry pipeline. Marked with truthful badge: `[TELEMETRY (SPEAKER: LOCAL AUDITION)]`.
+  - **Recorded Session Audition:** Added `GET /api/sessions/{session_id}/wav` endpoint in FastAPI and added **Audition** button alongside **Replay** in `SamplesView.tsx`, enabling full WebAudio speaker audition of recorded PCG sessions.
+  - **State Isolation:** In `App.tsx`, `onStreamState` strictly ignores backend stream messages while in Local Audition, and switching to backend streaming explicitly clears `audioEngine`.
+- **Quality Gates & Regression Tests:**
+  - Added `software/frontend/src/tests/audio_playback_regression.test.ts` (8 passed).
+  - All 8 frontend test suites passed (`npm.cmd test`).
+  - Frontend TypeScript lint: 0 errors (`npm.cmd run lint`).
+  - Frontend production build: `vite build` completed in 14.91s (`npm.cmd run build`).
+  - Python tests: `test_app.py` (13 passed), `test_real_pcg_acceptance.py` (2 passed, 1 skipped), `test_morning_release.py` (24 passed).
+  - Prioritized UX bug backlog catalogued in [`docs/engineering/backlog/WEEK6_UX_AUDIO_BACKLOG.md`](file:///C:/Dev/Antigravity/bitirme/ausculta-forge/docs/engineering/backlog/WEEK6_UX_AUDIO_BACKLOG.md).
+- **Physical Speaker Acceptance:** PENDING until physical user acoustic listening verification.
+
+
 
