@@ -107,6 +107,7 @@ export default function App() {
   const [recordingSessionId, setRecordingSessionId] = useState<string | null>(null);
   const [activeSourceName, setActiveSourceName] = useState<string>('None');
   const [spectralFrame, setSpectralFrame] = useState<SpectralFrameData | null>(null);
+  useEffect(() => { setSpectralFrame(null); }, [sourceType, activeMetadata?.id]);
   const [droppedDisplayFrames, setDroppedDisplayFrames] = useState<number>(0);
   const currentSourceTypeRef = useRef<AudioSourceType>(sourceType);
   currentSourceTypeRef.current = sourceType;
@@ -230,6 +231,9 @@ export default function App() {
       if (st.filter_preset) setFilterPreset(st.filter_preset);
       if (st.sample_rate_hz) setSampleRate(st.sample_rate_hz);
       if (st.active_source_name) setActiveSourceName(st.active_source_name);
+      if (st.source_type === 'hardware') setSourceType('device');
+      else if (st.source_type === 'synthetic_dev') setSourceType('synthetic');
+      else if (st.source_type === 'session' || st.source_type === 'realtime_wav') setSourceType('session');
       if (typeof st.is_paused === 'boolean') {
         setIsPlaying(!st.is_paused && st.is_streaming);
       }
@@ -306,6 +310,7 @@ export default function App() {
     let currentFs = 48000;
     let latestSpectral: SpectralFrameData | null = null;
     let latestDroppedFrames = 0;
+    let displayStreamId: string | undefined;
 
     const commitDisplayUpdate = () => {
       animFrameId = null;
@@ -322,7 +327,6 @@ export default function App() {
       setSampleRate(currentFs);
       setCurrentTime(latestTimestamp);
       setDuration(Math.max(visibleWindowSecRef.current, latestTimestamp));
-      setIsPlaying(true);
     };
 
     const scheduleUpdate = () => {
@@ -338,6 +342,13 @@ export default function App() {
       const src = currentSourceTypeRef.current;
       if (src !== 'device' && src !== 'synthetic' && src !== 'session') {
         return;
+      }
+
+      if (frame.stream_id !== displayStreamId) {
+        displayStreamId = frame.stream_id;
+        totalWritten = 0;
+        latestSpectral = null;
+        setSpectralFrame(null);
       }
 
       latestMetrics = frame.metrics;
@@ -1017,6 +1028,7 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
 
       {/* 4. Bottom Status Footer Strip */}
       <FooterStatus
+        isStreaming={isPlaying}
         backendConnected={backendConnected}
         backendEndpoint={bridgeClient.getEndpoint()}
         deviceConnected={deviceRuntimeState?.connected ?? false}

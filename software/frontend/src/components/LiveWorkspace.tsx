@@ -29,6 +29,7 @@ import {
   SpectralFrameData,
 } from '../types';
 import { resolveStreamHealthState } from './FooterStatus';
+import { appendSpectrum, spectrumColumn, spectralMaxFrequency, spectrumOrigin } from '../api/spectralHistory';
 
 interface LiveWorkspaceProps {
   sourceType: AudioSourceType;
@@ -126,7 +127,9 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
   const overviewCanvasRef = useRef<HTMLCanvasElement>(null);
   const fftCanvasRef = useRef<HTMLCanvasElement>(null);
   const spectrogramCanvasRef = useRef<HTMLCanvasElement>(null);
-  const spectralHistoryRef = useRef<Array<{ freqs: number[]; powers: number[] }>>([]);
+  const [spectralHistory, setSpectralHistory] = useState<SpectralFrameData[]>([]);
+  const maxSpectralHz = spectralMaxFrequency(sampleRate);
+  useEffect(() => { setSpectralHistory([]); }, [sourceType, activeMetadata?.id, sampleRate]);
 
   // Close filter menu when clicking outside
   useEffect(() => {
@@ -305,15 +308,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
 
   // Accumulate spectral history for the waterfall spectrogram heatmap
   useEffect(() => {
-    if (!spectralFrame || !spectralFrame.frequencies_hz || spectralFrame.frequencies_hz.length === 0) return;
-    const history = spectralHistoryRef.current;
-    history.push({
-      freqs: spectralFrame.frequencies_hz,
-      powers: spectralFrame.power_db,
-    });
-    if (history.length > 80) {
-      history.shift();
-    }
+    if (spectralFrame) setSpectralHistory(history => appendSpectrum(history, spectralFrame));
   }, [spectralFrame]);
 
   // Draw FFT / Power Spectral Density on Canvas
@@ -337,7 +332,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
     if (spectralFrame && spectralFrame.frequencies_hz && spectralFrame.frequencies_hz.length > 0) {
       const freqs = spectralFrame.frequencies_hz;
       const powers = spectralFrame.power_db;
-      const maxFreq = 2000;
+      const maxFreq = maxSpectralHz;
       const minDb = -85;
       const maxDb = 0;
 
@@ -471,7 +466,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
       ctx.textAlign = 'center';
       ctx.fillText(sourceType === 'none' ? 'NO ACQUISITION SOURCE ACTIVE' : 'AWAITING SPECTRAL FRAME TICKS...', w / 2, h / 2);
     }
-  }, [viewMode, spectralFrame, isDark, sourceType]);
+  }, [viewMode, spectralFrame, isDark, sourceType, maxSpectralHz]);
 
   // Draw Waterfall Spectrogram Heatmap on Canvas
   useEffect(() => {
@@ -491,24 +486,26 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
     const h = rect.height;
     ctx.clearRect(0, 0, w, h);
 
-    const history = spectralHistoryRef.current;
+    const history = spectralHistory;
     if (history.length === 0) return;
 
-    const maxFreq = 2000;
+    const maxFreq = maxSpectralHz;
     const minDb = -85;
     const maxDb = 0;
-    const colW = w / Math.max(1, history.length);
+    const latestEnd = history[history.length - 1].window_end_ts!;
 
-    history.forEach((frame, colIdx) => {
-      const x = colIdx * colW;
-      const freqs = frame.freqs;
-      const powers = frame.powers;
+    history.forEach((frame) => {
+      const column = spectrumColumn(frame, latestEnd);
+      const x = column.x * w;
+      const colW = column.width * w;
+      const freqs = frame.frequencies_hz;
+      const powers = frame.power_db;
       const nBins = freqs.length;
       if (nBins === 0) return;
 
       for (let i = 0; i < nBins; i++) {
         if (freqs[i] > maxFreq) break;
-        const freqNext = i < nBins - 1 ? freqs[i + 1] : maxFreq;
+        const freqNext = Math.min(maxFreq, i < nBins - 1 ? freqs[i + 1] : maxFreq);
         const yTop = h - (freqNext / maxFreq) * h;
         const yBottom = h - (freqs[i] / maxFreq) * h;
         const binH = Math.max(1, yBottom - yTop);
@@ -529,10 +526,10 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
         }
 
         ctx.fillStyle = color;
-        ctx.fillRect(x, yTop, colW + 0.5, binH);
+        ctx.fillRect(x, yTop, colW, binH);
       }
     });
-  }, [viewMode, spectralFrame, isDark]);
+  }, [viewMode, spectralHistory, isDark, maxSpectralHz]);
 
   // Draw Full Overview mini-waveform
   useEffect(() => {
@@ -629,7 +626,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                   </span>
                   <span className="bg-[var(--surface-muted)] text-[var(--on-surface-variant)] font-mono-code text-[10px] px-2 py-0.5 rounded font-semibold border border-[var(--border-subtle)]">
                     {sourceType === 'device'
-                      ? 'LIVE HARDWARE'
+                      ? `${spectrumOrigin(spectralFrame?.acquisition_origin)} · ${isPlaying ? 'STREAMING' : 'STOPPED'}`
                       : sourceType === 'synthetic'
                       ? 'SYNTHETIC BENCHMARK (NOT HARDWARE)'
                       : sourceType === 'session'
@@ -644,7 +641,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                 <span className="font-mono-code text-[10px] text-[var(--on-surface-variant)] uppercase tracking-wider font-medium">
                   {sourceType === 'none'
                     ? 'ACQUISITION IDLE · NO REAL-TIME SIGNAL MEASURED'
-                    : `PCM STREAM · ${(sampleRate / 1000).toFixed(1)} KHZ · FLOAT32 APP · LIVE BENCH`}
+                    : `PCM STREAM · ${(sampleRate / 1000).toFixed(1)} KHZ · FLOAT32 APP · ${isPlaying ? 'PLAYING' : 'STOPPED'}`}
                 </span>
               </div>
             </div>
@@ -664,6 +661,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
             {/* Signal / Stream Quality Badge with Truthful MCU vs UI Separation */}
             {backendConnected && (() => {
               const streamStatus = resolveStreamHealthState({
+                isStreaming: isPlaying,
                 backendConnected,
                 sourceType,
                 totalBlocks: streamQuality?.total_blocks,
@@ -883,7 +881,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
 
               {viewMode === 'fft' && (
                 <div className="font-mono-code text-[10px] px-2 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--accent-metal)] border border-[var(--border-subtle)] font-semibold">
-                  PASSBAND: 0–2000 Hz
+                  DISPLAY BAND: 0–{maxSpectralHz} Hz
                 </div>
               )}
             </div>
@@ -931,13 +929,13 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                       color: 'var(--accent-metal)'
                     }}
                   >
-                    {sourceType === 'none' ? 'INPUT: NO ACQUISITION SOURCE' : `INPUT: ACTIVE STREAM (${(sampleRate / 1000).toFixed(1)} kHz)`}
+                    {sourceType === 'none' ? 'INPUT: NO ACQUISITION SOURCE' : `INPUT: ${isPlaying ? 'PLAYING' : 'STOPPED'} (${(sampleRate / 1000).toFixed(1)} kHz)`}
                   </div>
                 </>
               ) : (
                 <>
-                  {[0, 100, 200, 500, 1000, 1500, 2000].map(f => (
-                    <div key={f} className="flex items-center gap-1">
+                  {[0, 100, 200, 500, 1000, 1500, 2000].filter(f => f <= maxSpectralHz).map(f => (
+                    <div key={f} className="absolute flex items-center gap-1" style={{ left: `${100 * f / maxSpectralHz}%`, transform: 'translateX(-100%)' }}>
                       <span>{f} Hz</span>
                       <div className="w-px h-2 bg-[var(--border-strong)]" />
                     </div>
@@ -951,7 +949,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                       color: 'var(--accent-metal)'
                     }}
                   >
-                    ACOUSTIC BAND: 0–2000 Hz · WELCH PSD
+                    SPECTRAL BAND: 0–{maxSpectralHz} Hz · WELCH PSD
                   </div>
                 </>
               )}
@@ -1071,14 +1069,14 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                 <div className="flex items-center gap-2">
                   <Layers size={16} className="text-[var(--accent-metal)]" />
                   <span className="font-mono-code text-[11px] text-[var(--on-surface-variant)] font-semibold tracking-wider uppercase">
-                    Track S2: Continuous Waterfall Spectrogram Heatmap
+                    Track S2: Timed Spectral History
                   </span>
                   <span className="font-mono-code text-[10px] text-[var(--border-strong)]">
-                    [0–2000 Hz · TIME-FREQUENCY ROLLING STFT]
+                    [0–{maxSpectralHz} Hz · TIMED WELCH PSD HISTORY · 15 s]
                   </span>
                 </div>
                 <div className="text-[var(--on-surface-variant)] font-mono-code text-[10px]">
-                  INTENSITY: -85 dBFS (BURGUNDY) → 0 dBFS (GOLD)
+                  PSD: -85 → 0 dB relative to 1 FS²/Hz · Δf {spectralFrame?.frequency_bin_spacing_hz?.toFixed(2) ?? '—'} Hz
                 </div>
               </div>
 
@@ -1091,10 +1089,10 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
               >
                 <canvas ref={spectrogramCanvasRef} className="absolute inset-0 w-full h-full z-10" />
                 <div className="absolute right-2 top-1 font-mono-code text-[9px] text-white/50 select-none pointer-events-none z-20">
-                  ▲ 2000 Hz
+                  ▲ {maxSpectralHz} Hz
                 </div>
                 <div className="absolute right-2 bottom-1 font-mono-code text-[9px] text-white/50 select-none pointer-events-none z-20">
-                  ▼ 0 Hz
+                  ▼ 0 Hz · {((spectralHistory.at(-1)?.window_end_ts ?? 0) - 15).toFixed(3)} → {(spectralHistory.at(-1)?.window_end_ts ?? 0).toFixed(3)} s
                 </div>
               </div>
             </div>

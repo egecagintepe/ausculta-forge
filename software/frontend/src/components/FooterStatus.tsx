@@ -26,6 +26,7 @@ export function resolveStreamHealthState(params: {
   isHealthy?: boolean;
   droppedBlocks?: number;
   uiDroppedFrames?: number;
+  isStreaming?: boolean;
 }): StreamHealthResolution {
   const {
     backendConnected = false,
@@ -44,7 +45,7 @@ export function resolveStreamHealthState(params: {
     };
   }
 
-  if (sourceType === 'none') {
+  if (sourceType === 'none' || params.isStreaming === false) {
     return {
       state: 'NO_ACTIVE_ACQUISITION',
       label: 'NO ACTIVE ACQUISITION',
@@ -115,6 +116,7 @@ export function resolveStreamHealthState(params: {
 }
 
 export interface FooterStatusProps {
+  isStreaming?: boolean;
   backendConnected?: boolean;
   backendEndpoint?: string;
   deviceConnected?: boolean;
@@ -130,6 +132,7 @@ export interface FooterStatusProps {
 }
 
 export const FooterStatus: React.FC<FooterStatusProps> = ({
+  isStreaming,
   backendConnected = false,
   backendEndpoint,
   deviceConnected = false,
@@ -171,6 +174,7 @@ export const FooterStatus: React.FC<FooterStatusProps> = ({
 
   const devInfo = getDeviceDisplay();
   const streamStatus = resolveStreamHealthState({
+    isStreaming,
     backendConnected,
     sourceType,
     totalBlocks,

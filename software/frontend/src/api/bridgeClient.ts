@@ -63,6 +63,7 @@ export interface SignalFrameData {
 }
 
 export interface DisplayFrameData {
+  stream_id?: string;
   type: 'display_frame';
   version: string;
   source_seq_start: number;

@@ -17,6 +17,7 @@ downsampling for UI display.
 from dataclasses import dataclass, field
 import math
 import time
+import uuid
 from typing import Any, Optional
 
 import numpy as np
@@ -125,10 +126,12 @@ class DisplayFrame:
     recording_active: bool
     dropped_display_frames: int = 0
     spectral_frame: Optional[dict[str, Any]] = None
+    stream_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
             "type": "display_frame",
+            "stream_id": self.stream_id,
             "version": "2.0.0",
             "source_seq_start": self.source_seq_start,
             "source_seq_end": self.source_seq_end,
@@ -174,6 +177,8 @@ class DisplayAggregator:
         self._ts_start: Optional[float] = None
         self._ts_end: Optional[float] = None
         self._fs: int = 48000
+        self.stream_id = uuid.uuid4().hex
+        self._previous_end_ts: Optional[float] = None
 
         # Timing tracking for cadence control (acquisition time based)
         self._last_display_ts: float = 0.0
@@ -189,6 +194,8 @@ class DisplayAggregator:
 
     def reset(self) -> None:
         """Reset internal accumulators and timing state."""
+        self.stream_id = uuid.uuid4().hex
+        self._previous_end_ts = None
         self._raw_accum.clear()
         self._filt_accum.clear()
         self._accum_samples = 0
@@ -229,6 +236,12 @@ class DisplayAggregator:
         raw_samples = raw_block.samples
         filt_samples = filtered_block.samples
         n_samples = len(raw_samples)
+        if self._previous_end_ts is not None and (
+            raw_block.sample_rate_hz != self._fs
+            or abs(raw_block.timestamp_s - self._previous_end_ts) > 1.5 / self._fs
+        ):
+            # Never estimate a spectrum across a replay rewind, rate change or gap.
+            self.reset()
         self._fs = raw_block.sample_rate_hz
 
         # Sequence tracking
@@ -240,6 +253,7 @@ class DisplayAggregator:
         # End timestamp: start of block + block duration
         block_dur = n_samples / max(1, self._fs)
         self._ts_end = raw_block.timestamp_s + block_dur
+        self._previous_end_ts = self._ts_end
 
         # Accumulate
         self._raw_accum.append(raw_samples)
@@ -253,6 +267,9 @@ class DisplayAggregator:
         while self._recent_filt_count > max_spec_samples and len(self._recent_filt) > 1:
             dropped = self._recent_filt.pop(0)
             self._recent_filt_count -= len(dropped)
+        if self._recent_filt_count > max_spec_samples:
+            self._recent_filt[0] = self._recent_filt[0][-max_spec_samples:]
+            self._recent_filt_count = max_spec_samples
 
         # Check cadence: has display interval elapsed since last emitted display frame?
         current_ts = raw_block.timestamp_s
@@ -317,6 +334,13 @@ class DisplayAggregator:
                     nperseg=min(target_nperseg, len(spec_samples)),
                 )
                 spectral_dict = {
+                    "stream_id": self.stream_id,
+                    "window_start_ts": self._ts_end - len(spec_samples) / self._fs,
+                    "window_end_ts": self._ts_end,
+                    "sample_rate_hz": self._fs,
+                    "nperseg": min(target_nperseg, len(spec_samples)),
+                    "frequency_bin_spacing_hz": self._fs / min(target_nperseg, len(spec_samples)),
+                    "power_reference": "1 FS^2/Hz",
                     "frequencies_hz": spec_frame.frequencies_hz,
                     "power_db": spec_frame.power_db,
                     "peak_frequency_hz": spec_frame.peak_frequency_hz,
@@ -328,6 +352,7 @@ class DisplayAggregator:
         filt_list = [round(float(v), 5) for v in filt_dec]
 
         display_frame = DisplayFrame(
+            stream_id=self.stream_id,
             source_seq_start=self._seq_start if self._seq_start is not None else 0,
             source_seq_end=self._seq_end if self._seq_end is not None else 0,
             window_start_ts=self._ts_start if self._ts_start is not None else 0.0,

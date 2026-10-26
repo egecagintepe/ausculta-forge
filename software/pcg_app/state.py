@@ -270,6 +270,8 @@ class StreamManager:
     def publish_display_frame(self, frame: DisplayFrame) -> None:
         """Publish display frame to all connected clients with backpressure isolation."""
         frame_dict = frame.to_dict()
+        if frame_dict.get("spectral_frame") is not None:
+            frame_dict["spectral_frame"]["acquisition_origin"] = self.acquisition_origin()
         dead = []
         for ws, session in list(self._clients.items()):
             if not session.is_alive:
@@ -487,6 +489,19 @@ class StreamManager:
 
         return self.get_state_dict()
 
+    def acquisition_origin(self) -> str:
+        if self.source_type != "hardware":
+            return self.source_type
+        engine = self.device_runtime.canonical_engine
+        if engine is None:
+            return "hardware_unverified"
+        if engine.is_simulated:
+            return "software_simulated"
+        config = engine.session.active_start_config
+        if config is None:
+            return "hardware_unverified"
+        return "physical_deterministic_g1" if config.source_mode == 1 else "physical_i2s_unqualified"
+
     def start_recording(self, source_label: Optional[str] = None) -> str:
         """Start recording incoming blocks into a new session.
 
@@ -519,7 +534,14 @@ class StreamManager:
             "filter_preset": self.filter_preset,
             "low_hz": self.filter_low_hz,
             "high_hz": self.filter_high_hz,
+            "acquisition_origin": self.acquisition_origin(),
         }
+        if self.source_type == "session" and self.source_session_id:
+            processing_profile["replay_session_id"] = self.source_session_id
+            original = get_session(self.source_session_id, self.sessions_dir)
+            processing_profile["replay_origin"] = {
+                key: original.get(key) for key in ("source", "acquisition_mode", "raw_wav_sha256", "processing_profile")
+            }
 
         sid = self.recorder.start(
             source=source,

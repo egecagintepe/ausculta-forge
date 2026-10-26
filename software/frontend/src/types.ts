@@ -122,6 +122,14 @@ export interface DiagnosticLogEvent {
 }
 
 export interface SpectralFrameData {
+  stream_id?: string;
+  window_start_ts?: number;
+  window_end_ts?: number;
+  sample_rate_hz?: number;
+  nperseg?: number;
+  frequency_bin_spacing_hz?: number;
+  power_reference?: string;
+  acquisition_origin?: string;
   frequencies_hz: number[];
   power_db: number[];
   peak_frequency_hz: number;
