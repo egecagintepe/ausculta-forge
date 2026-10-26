@@ -32,6 +32,7 @@ import { resolveStreamHealthState } from './FooterStatus';
 import { appendSpectrum, spectrumColumn, spectralMaxFrequency, spectrumOrigin } from '../api/spectralHistory';
 
 interface LiveWorkspaceProps {
+  activeSourceName?: string;
   sourceType: AudioSourceType;
   activeMetadata: HeartSoundMetadata | null;
   rawData: Float32Array;
@@ -76,6 +77,7 @@ interface LiveWorkspaceProps {
 }
 
 export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
+  activeSourceName,
   sourceType,
   activeMetadata,
   rawData,
@@ -129,6 +131,8 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
   const spectrogramCanvasRef = useRef<HTMLCanvasElement>(null);
   const [spectralHistory, setSpectralHistory] = useState<SpectralFrameData[]>([]);
   const maxSpectralHz = spectralMaxFrequency(sampleRate);
+  const localAudition = sourceType === 'file' || sourceType === 'sample';
+  const canRecord = backendConnected && !localAudition && sourceType !== 'none' && isPlaying;
   useEffect(() => { setSpectralHistory([]); }, [sourceType, activeMetadata?.id, sampleRate]);
 
   // Close filter menu when clicking outside
@@ -464,7 +468,9 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
       ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.35)' : 'rgba(0, 0, 0, 0.35)';
       ctx.font = '11px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(sourceType === 'none' ? 'NO ACQUISITION SOURCE ACTIVE' : 'AWAITING SPECTRAL FRAME TICKS...', w / 2, h / 2);
+      ctx.fillText(sourceType === 'none' ? 'NO ACQUISITION SOURCE ACTIVE'
+        : sourceType === 'file' || sourceType === 'sample' ? 'FILE AUDITION: USE BACKEND REPLAY FOR WELCH HISTORY'
+        : 'AWAITING SPECTRAL FRAME TICKS...', w / 2, h / 2);
     }
   }, [viewMode, spectralFrame, isDark, sourceType, maxSpectralHz]);
 
@@ -622,7 +628,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
                   <span className="font-sans-ui text-sm font-semibold text-[var(--on-surface)] tracking-tight">
-                    {sourceType === 'none' ? 'No Active Source' : (activeMetadata?.filename || 'Live Stream')}
+                    {sourceType === 'none' ? 'No Active Source' : (activeMetadata?.filename || activeSourceName || 'Live Stream')}
                   </span>
                   <span className="bg-[var(--surface-muted)] text-[var(--on-surface-variant)] font-mono-code text-[10px] px-2 py-0.5 rounded font-semibold border border-[var(--border-subtle)]">
                     {sourceType === 'device'
@@ -790,7 +796,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
               <div className="flex items-center gap-1.5">
                 <span className={`w-2.5 h-2.5 rounded-full ${viewMode === 'fft' ? 'bg-[var(--accent-metal)]' : 'bg-[var(--accent-oxblood)]'}`} />
                 <span className="font-mono-code text-[11px] text-[var(--on-surface)] font-bold tracking-wider uppercase">
-                  {viewMode === 'fft' ? 'Track S: Real-Time Acoustic Spectral Density (PSD)' : 'Track A: Processed Phonocardiogram (PCG)'}
+                  {viewMode === 'fft' ? 'Track S: Spectral Density (PSD)' : localAudition ? 'Track A: Audition Preview (Playback Filter Separate)' : 'Track A: Processed Phonocardiogram (PCG)'}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2 font-mono-code text-[10px]">
@@ -1112,7 +1118,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                 <div className="flex items-center gap-2">
                   <Radio size={17} className="text-[var(--waveform-raw)]" />
                   <span className="font-mono-code text-[11px] text-[var(--on-surface-variant)] font-semibold tracking-wider uppercase">
-                    Track B: Synchronized Raw Sensor Stream
+                    Track B: Unfiltered Source Audio
                   </span>
                   <span className="font-mono-code text-[10px] text-[var(--border-strong)]">
                     [UNFILTERED DIRECT STREAM · FLOAT32 APP]
@@ -1432,10 +1438,10 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
               <button
                 id="btn-start-recording"
                 onClick={onStartRecording}
-                disabled={sourceType === 'none'}
-                title={sourceType === 'none' ? 'Cannot record: no active acquisition source' : 'Start Session Recording'}
+                disabled={!canRecord}
+                title={localAudition ? 'File audition is local playback; use backend WAV/session replay for recording' : !canRecord ? 'Cannot record: no active backend stream' : 'Start Session Recording'}
                 className={`h-10 px-4 rounded transition-all flex items-center gap-2 shadow-xs text-xs font-medium border ${
-                  sourceType === 'none'
+                  !canRecord
                     ? 'opacity-40 cursor-not-allowed text-[var(--on-surface-variant)]'
                     : 'text-[var(--on-surface)] active:scale-95 cursor-pointer hover:bg-[var(--surface-muted)]'
                 }`}
@@ -1444,7 +1450,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                   borderColor: 'var(--border-subtle)'
                 }}
               >
-                <Disc size={16} className={sourceType === 'none' ? 'text-[var(--on-surface-variant)]' : 'text-[var(--status-danger)]'} />
+                <Disc size={16} className={!canRecord ? 'text-[var(--on-surface-variant)]' : 'text-[var(--status-danger)]'} />
                 <span>Record Session</span>
               </button>
             )}

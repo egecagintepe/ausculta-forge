@@ -228,6 +228,9 @@ export default function App() {
     });
 
     const unsubState = bridgeClient.onStreamState((st: StreamStateData) => {
+      const localAudition = ['file', 'sample'].includes(currentSourceTypeRef.current);
+      if (localAudition && !st.is_streaming) return;
+      if (st.source_type !== 'none') setActiveMetadata(null);
       if (st.filter_preset) setFilterPreset(st.filter_preset);
       if (st.sample_rate_hz) setSampleRate(st.sample_rate_hz);
       if (st.active_source_name) setActiveSourceName(st.active_source_name);
@@ -476,6 +479,7 @@ export default function App() {
       };
 
       setActiveMetadata(metadata);
+      setActiveSourceName(file.name);
       setSourceType('file');
       setCurrentDestination('live');
       addLog(`File successfully decoded · Duration: ${decoded.duration.toFixed(2)}s`, 'info', 'Decoder');
@@ -655,12 +659,12 @@ export default function App() {
   }, [addLog]);
 
   const handleChangeFilterPreset = useCallback((preset: FilterPreset) => {
-    bridgeClient.setFilter(preset);
+    if (sourceType !== 'file' && sourceType !== 'sample') bridgeClient.setFilter(preset);
     audioEngine.setFilterPreset(preset);
     setFilterPreset(preset);
     addLog(`DSP passband switched to: ${preset.toUpperCase()}`, 'info', 'DSP');
     addToast(`Filter: ${preset.toUpperCase()}`, 'info');
-  }, [addLog, addToast]);
+  }, [addLog, addToast, sourceType]);
 
   const handleChangeFilterStrength = useCallback((strength: FilterStrength) => {
     audioEngine.setFilterStrength(strength);
@@ -902,6 +906,7 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
 
           {currentDestination === 'live' && (
             <LiveWorkspace
+              activeSourceName={activeSourceName}
               sourceType={sourceType}
               activeMetadata={activeMetadata}
               rawData={rawData}

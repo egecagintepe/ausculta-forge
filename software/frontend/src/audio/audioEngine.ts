@@ -1,4 +1,5 @@
 import { FilterPreset, FilterStrength, ListeningTrack, AudioMetrics } from '../types';
+import { decodePcmWav } from './pcmWav';
 
 class HeartAudioEngine {
   private ctx: AudioContext | null = null;
@@ -23,6 +24,7 @@ class HeartAudioEngine {
   private filterPreset: FilterPreset = 'recommended';
   private filterStrength: FilterStrength = 'Normal';
   private duration: number = 15.0;
+  private sampleRate: number = 4000;
 
   private playbackCallbacks: Set<(currentTime: number) => void> = new Set();
   private animFrameId: number | null = null;
@@ -45,12 +47,23 @@ class HeartAudioEngine {
     this.rawData = raw;
     this.filteredData = filtered;
     this.duration = raw.length / sampleRate;
+    this.sampleRate = sampleRate;
     this.pauseOffset = 0;
 
     // Create 2-channel AudioBuffer: Channel 0 = Filtered, Channel 1 = Raw
-    const buffer = this.ctx.createBuffer(2, raw.length, sampleRate);
-    buffer.copyToChannel(filtered, 0);
-    buffer.copyToChannel(raw, 1);
+    // Playback-only interpolation for low-rate PCG; analysis/export retain source samples.
+    const playbackRate = Math.max(8000, sampleRate);
+    const playbackLength = Math.ceil(raw.length * playbackRate / sampleRate);
+    const buffer = this.ctx.createBuffer(2, playbackLength, playbackRate);
+    for (const [channel, data] of [filtered, raw].entries()) {
+      const playback = new Float32Array(playbackLength);
+      for (let i = 0; i < playbackLength; i++) {
+        const position = i * sampleRate / playbackRate;
+        const left = Math.floor(position), right = Math.min(left + 1, data.length - 1);
+        playback[i] = data[left] + (data[right] - data[left]) * (position - left);
+      }
+      buffer.copyToChannel(playback, channel);
+    }
     this.currentAudioBuffer = buffer;
   }
 
@@ -59,16 +72,17 @@ class HeartAudioEngine {
     if (!this.ctx) throw new Error('Audio Context unavailable');
 
     const arrayBuffer = await file.arrayBuffer();
-    const decodedBuffer = await this.ctx.decodeAudioData(arrayBuffer);
-
-    const channel0 = decodedBuffer.getChannelData(0);
+    const wav = decodePcmWav(arrayBuffer);
+    const decodedBuffer = wav ? null : await this.ctx.decodeAudioData(arrayBuffer);
+    const sampleRate = wav?.sampleRate ?? decodedBuffer!.sampleRate;
+    const channel0 = wav?.raw ?? decodedBuffer!.getChannelData(0);
     const length = channel0.length;
     const raw = new Float32Array(length);
     const filtered = new Float32Array(length);
     raw.set(channel0);
 
-    // Apply 20 Hz - 200 Hz acoustic passband
-    const nyquist = decodedBuffer.sampleRate / 2;
+    // shortcut: fixed audition preview is not the playback filter; compute preset traces before using it for analysis.
+    const nyquist = sampleRate / 2;
     const lowCutNorm = Math.max(0.001, Math.min(0.9, 20 / nyquist));
     const highCutNorm = Math.max(0.01, Math.min(0.95, 200 / nyquist));
 
@@ -79,12 +93,12 @@ class HeartAudioEngine {
       filtered[i] = hp * (1 - (1 - highCutNorm) * 0.4);
     }
 
-    this.setAudioData(raw, filtered, decodedBuffer.sampleRate);
+    this.setAudioData(raw, filtered, sampleRate);
     return {
       raw,
       filtered,
-      sampleRate: decodedBuffer.sampleRate,
-      duration: decodedBuffer.duration
+      sampleRate,
+      duration: raw.length / sampleRate
     };
   }
 
@@ -357,7 +371,7 @@ class HeartAudioEngine {
   // Export 16-bit PCM WAV
   public exportWav(track: 'filtered' | 'raw' = 'filtered'): Blob {
     const data = track === 'filtered' ? this.filteredData : this.rawData;
-    const sampleRate = 4000;
+    const sampleRate = this.sampleRate;
     const numChannels = 1;
     const bitsPerSample = 16;
     const bytesPerSample = bitsPerSample / 8;

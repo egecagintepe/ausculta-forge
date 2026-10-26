@@ -21,6 +21,8 @@ import numpy as np
 from pcg_core.models import SampleBlock
 from pcg_core.sources import MockPCGSource, WavSource, RealtimeWavSource
 from pcg_core.streaming import LiveStreamingPipeline
+from pcg_core.validation import load_wav_as_float32
+from pcg_core.experiment import compute_file_sha256
 from pcg_core.recording import (
     SessionRecorder,
     SessionMetadata,
@@ -407,6 +409,8 @@ class StreamManager:
             if not session_id:
                 raise ValueError("session_id must be provided when source_type is 'session'")
             validate_session_id(session_id, self.sessions_dir)
+            _, source_fs = load_wav_as_float32(self.sessions_dir / session_id / "raw.wav")
+            self.sample_rate_hz = source_fs
             self.source_type = "session"
             self.source_path = None
             self.source_session_id = session_id
@@ -421,6 +425,8 @@ class StreamManager:
             p = Path(path)
             if not p.exists():
                 raise FileNotFoundError(f"Source WAV not found: {p}")
+            _, source_fs = load_wav_as_float32(p)
+            self.sample_rate_hz = source_fs
             self.source_type = "realtime_wav"
             self.source_path = str(p)
             self.source_session_id = None
@@ -487,6 +493,10 @@ class StreamManager:
         else:
             raise ValueError(f"Invalid or unsupported source type: {source_type!r}")
 
+        self.pipeline = LiveStreamingPipeline(
+            buffer_duration_s=5.0, filter_low_hz=self.filter_low_hz,
+            filter_high_hz=self.filter_high_hz, filter_order=4, enable_spectral_frame=False,
+        )
         return self.get_state_dict()
 
     def acquisition_origin(self) -> str:
@@ -536,6 +546,8 @@ class StreamManager:
             "high_hz": self.filter_high_hz,
             "acquisition_origin": self.acquisition_origin(),
         }
+        if self.source_type == "realtime_wav" and self.source_path:
+            processing_profile["source_wav_sha256"] = compute_file_sha256(Path(self.source_path))
         if self.source_type == "session" and self.source_session_id:
             processing_profile["replay_session_id"] = self.source_session_id
             original = get_session(self.source_session_id, self.sessions_dir)
