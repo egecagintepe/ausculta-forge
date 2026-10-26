@@ -209,6 +209,53 @@ def test_streaming_from_realtime_wav_source(test_app_and_dir, tmp_path: Path):
             assert frame["sample_rate_hz"] == fs
 
 
+def test_upload_source_wav_endpoint(test_app_and_dir, tmp_path: Path):
+    """Verify POST /api/stream/upload_source_wav validates WAV, preserves fs/hash, and selects realtime_wav."""
+    import hashlib
+    import io
+    app, _ = test_app_and_dir
+    with TestClient(app) as client:
+        # 1. Valid 2000 Hz mono WAV
+        fs = 2000
+        samples = (np.sin(2 * np.pi * 50 * np.arange(512) / fs) * 16384).astype(np.int16)
+        buf = io.BytesIO()
+        wavfile.write(buf, fs, samples)
+        wav_bytes = buf.getvalue()
+        expected_sha = hashlib.sha256(wav_bytes).hexdigest()
+
+        resp = client.post(
+            "/api/stream/upload_source_wav",
+            files={"file": ("test_upload.wav", wav_bytes, "audio/wav")},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["source_type"] == "realtime_wav"
+        assert data["sample_rate_hz"] == fs
+        assert data["sha256"] == expected_sha
+        assert data["total_samples"] == 512
+        assert Path(data["path"]).exists()
+        assert Path(data["path"]).read_bytes() == wav_bytes
+
+        # 2. Reject empty / corrupt file
+        resp_bad = client.post(
+            "/api/stream/upload_source_wav",
+            files={"file": ("corrupt.wav", b"not a wav", "audio/wav")},
+        )
+        assert resp_bad.status_code == 400
+
+        # 3. Reject stereo file
+        stereo_samples = np.zeros((256, 2), dtype=np.int16)
+        stereo_buf = io.BytesIO()
+        wavfile.write(stereo_buf, fs, stereo_samples)
+        resp_stereo = client.post(
+            "/api/stream/upload_source_wav",
+            files={"file": ("stereo.wav", stereo_buf.getvalue(), "audio/wav")},
+        )
+        assert resp_stereo.status_code == 400
+        assert "Stereo" in resp_stereo.json()["detail"]
+
+
 def test_session_id_path_traversal_rejected(test_app_and_dir):
     app, _ = test_app_and_dir
     with TestClient(app) as client:

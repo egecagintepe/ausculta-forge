@@ -104,6 +104,15 @@ class StreamQualityMonitor:
         """Reset all diagnostic counters."""
         self.report = QualityReport(current_fs=None)
 
+    def notify_rewind(self) -> None:
+        """Acknowledge an intentional rewind or normal EOF loop wrap.
+
+        Clears sequence and timestamp continuation pointers for the new cycle
+        without resetting cumulative anomaly counters or faking healthy state.
+        """
+        self.report.last_sequence = None
+        self.report.last_timestamp_s = None
+
 
 @dataclass(slots=True)
 class LiveMetrics:
@@ -231,6 +240,12 @@ class LiveStreamingPipeline:
         self.quality_monitor = StreamQualityMonitor()
         self.filter: Optional[StreamingBandpass] = None
         self._fs: Optional[int] = None
+
+    def notify_rewind(self) -> None:
+        """Acknowledge intentional rewind or EOF wrap across streaming pipeline components."""
+        self.quality_monitor.notify_rewind()
+        if self.filter is not None:
+            self.filter.reset()
 
     def process_block(self, block: SampleBlock) -> LiveStreamFrame:
         """Process an incoming SampleBlock through the streaming pipeline."""

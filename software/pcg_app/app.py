@@ -6,6 +6,7 @@ device runtime foundation, and the React frontend desktop client.
 
 import asyncio
 from contextlib import asynccontextmanager
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Optional
@@ -1036,6 +1037,71 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(e))
         await manager.broadcast(make_stream_state_message(st))
         return st
+
+    @app.post("/api/stream/upload_source_wav")
+    async def api_upload_source_wav(file: UploadFile = File(...)) -> dict[str, Any]:
+        """Upload a local PCG WAV file and select it as the active realtime_wav replay source.
+
+        Preserves original sampling rate (e.g. 2 kHz, 4 kHz), exact byte content, and SHA-256 hash.
+        Connects local audition files to the backend DSP streaming pipeline, live Welch spectrogram,
+        and session recording.
+        """
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="Filename missing")
+
+        content = await file.read()
+        if not content or len(content) < 44:
+            raise HTTPException(status_code=400, detail="Invalid WAV file: data empty or shorter than 44-byte header")
+
+        import io
+        import re
+        from scipy.io import wavfile
+        try:
+            buf = io.BytesIO(content)
+            fs, data = wavfile.read(buf)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Corrupt or unsupported WAV format: {e}")
+
+        if fs <= 0:
+            raise HTTPException(status_code=400, detail=f"Invalid sample rate: {fs}")
+
+        if data.ndim > 1:
+            if (data.shape[1] if data.ndim >= 2 else 2) > 1:
+                raise HTTPException(status_code=400, detail="Stereo audio is not supported. Please provide a mono WAV file.")
+            data = data.squeeze()
+
+        if len(data) < 16:
+            raise HTTPException(status_code=400, detail=f"Audio signal too short: {len(data)} samples (min 16 required)")
+
+        sha256_hash = hashlib.sha256(content).hexdigest()
+        clean_name = Path(file.filename).name.strip()
+        clean_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", clean_name)
+        if not clean_name.lower().endswith(".wav"):
+            clean_name += ".wav"
+
+        # Save to assets_dir preserving exact bytes unchanged
+        target_path = analysis.assets_dir / f"stream_{sha256_hash[:12]}_{clean_name}"
+        if not target_path.exists():
+            target_path.write_bytes(content)
+
+        # Select as realtime_wav
+        try:
+            st = manager.select_source("realtime_wav", path=str(target_path))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to activate source: {e}")
+
+        await manager.broadcast(make_stream_state_message(st))
+        return {
+            "status": "ok",
+            "source_type": "realtime_wav",
+            "path": str(target_path),
+            "filename": clean_name,
+            "sha256": sha256_hash,
+            "sample_rate_hz": int(fs),
+            "total_samples": int(len(data)),
+            "duration_s": round(float(len(data) / fs), 4),
+            "stream_state": st,
+        }
 
     @app.post("/api/recording/start")
     async def api_start_recording(req: RecordingStartRequest) -> dict[str, Any]:

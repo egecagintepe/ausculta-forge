@@ -395,6 +395,7 @@ class StreamManager:
             self.device_runtime.stop_streaming()
 
         self.display_aggregator.reset()
+        self.pipeline.notify_rewind()
 
         if source_type == "none":
             self.source_type = "none"
@@ -612,11 +613,13 @@ class StreamManager:
     def resume_stream(self) -> None:
         if self.source_type != "none":
             self.display_aggregator.reset()
+            self.pipeline.notify_rewind()
             self.is_paused = False
 
     def stop_stream(self) -> None:
         self.is_streaming = False
         self.display_aggregator.reset()
+        self.pipeline.notify_rewind()
         if self.source_type == "hardware":
             self.device_runtime.stop_supervisor()
             self.device_runtime.stop_streaming()
@@ -812,7 +815,25 @@ class StreamManager:
                 try:
                     block: SampleBlock = next(self._source_generator)
                 except StopIteration:
-                    # Loop offline source for continuous playback
+                    # Normal EOF reached: if recording is active, safely finalize session
+                    if self.recorder.is_recording:
+                        try:
+                            meta = self.recorder.stop(termination_reason="completed")
+                            rec_msg = make_recording_state_message(
+                                is_recording=False,
+                                session_id=meta.session_id,
+                                elapsed_seconds=meta.duration_s,
+                                samples_recorded=meta.total_samples,
+                                blocks_recorded=meta.total_blocks,
+                                source=meta.source,
+                                sample_rate_hz=meta.sample_rate_hz,
+                            )
+                            await self.broadcast(rec_msg)
+                        except Exception:
+                            pass
+                    # Acknowledge conscious EOF loop wrap
+                    self.pipeline.notify_rewind()
+                    self.display_aggregator.reset()
                     self._source_generator = self._create_source_generator()
                     if self._source_generator is None:
                         self.is_streaming = False
