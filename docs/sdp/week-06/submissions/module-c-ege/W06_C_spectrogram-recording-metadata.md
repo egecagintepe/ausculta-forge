@@ -3,7 +3,7 @@
 **Week:** 6
 **Module:** C
 **Owner:** Ege Çağın Tepe
-**Status:** SOFTWARE VERIFICATION PASS — PHYSICAL GUI ACCEPTANCE TRACKED SEPARATELY; G2 PENDING
+**Status:** SOFTWARE VERIFICATION & UX STABILIZATION PASS — AUTOMATED WINDOWS AUDIO ACCEPTANCE PASS; ACOUSTIC HUMAN HEARING ACCEPTANCE PENDING; TEAM G2 PENDING
 **Plan date:** 2026-10-26
 **Starting baseline:** `106d3e0`; software implementation `574b52e`, followed by simulation-status correction `59d773e` and flat device-message decoding fix `e90785e`. Original plan retained below, followed by actual 2026-10-26 execution results.
 
@@ -342,3 +342,44 @@ All five licensed PCG records from `data/raw/week6_real_pcg_20261026/manifest.js
   - Detailed report: [`docs/engineering/release/WEEK6_AUTONOMOUS_NATIVE_AUDIO_ACCEPTANCE.md`](file:///C:/Dev/Antigravity/bitirme/ausculta-forge/docs/engineering/release/WEEK6_AUTONOMOUS_NATIVE_AUDIO_ACCEPTANCE.md).
   - Machine summary: [`docs/engineering/release/WEEK6_AUTONOMOUS_NATIVE_AUDIO_ACCEPTANCE.json`](file:///C:/Dev/Antigravity/bitirme/ausculta-forge/docs/engineering/release/WEEK6_AUTONOMOUS_NATIVE_AUDIO_ACCEPTANCE.json).
   - Local WAV captures and JSON execution trace stored in `experiments/hardware/week6_20261026_sprint/acceptance_evidence/`.
+
+### 8. Week 6 Final Closeout & UX Stabilization (2026-10-26)
+
+- **UX Stabilization & Bug Fixes:**
+  1. *Specimen Archives Layout Obstruction (P2):* Fixed `SamplesView.tsx` scrollable container bottom padding by expanding from `pb-8` to `pb-28` (112px). The final recorded session card is now completely visible above the fixed bottom status footer across all viewport heights.
+  2. *Misleading Drive Phrasing & Click Event Separation (P3):* In `HomeView.tsx`, replaced ambiguous `Browse Workstation Drives` with an explicit HTML button labeled `Choose Local Audio File (*.wav, *.mp3)` (`id="browse-local-files-btn"`). Added `e.stopPropagation()` preventing inadvertent navigation bubbling to the reference corpus archives. Renamed the reference archive button to `Open Reference Corpus & Sessions` (`data-testid="open-samples-archive-btn"`).
+  3. *Live Recording Timer Synchronization (P2):* Fixed frozen `REC 0.0s` indicator. `StreamManager` now calculates elapsed recording duration strictly as `total_samples / sample_rate_hz` and broadcasts `recording_state` updates at 5 Hz (200 ms throttle) during active recording. Pause operations freeze sample acquisition and elapsed time cleanly; stream resumption continues counting from the exact sample index.
+  4. *Manifest Export Feedback (P3):* Wired `onToast` and `onLog` notification callbacks into `SamplesView.tsx`. Successfully exporting session manifests triggers an instant toast alert (`Manifest exported: manifest_<id>...json`) and an audit trail log entry; download failures display error toasts.
+  5. *Version Semantics Disambiguation (P3):* Resolved architectural ambiguity between DSP backend and desktop client versions. `SessionMetadata` and manifest export JSON schema now explicitly specify `dsp_engine_version: "2.0.0"` and `desktop_client_version: "0.1.0-alpha.1"`, while maintaining backward-compatible `app_version: "2.0.0"` fallback for legacy v1.0.0 and v2.0.0 manifests.
+
+- **Automated WASAPI Loopback Audio & SNR Clarification:**
+  - Automated Windows WASAPI loopback output measurement: **PASS**. The loopback recorder confirms active PCM audio stream flow to the Windows default sound device (`Kulaklıklar (2- Audeze Maxwell 2)`), with active playback RMS = 0.018110, clean zero-buffer pause (RMS = 4.48e-10), and sustained playback eliminating the former 0.5s cut-off defect.
+  - *Acoustic / Clinical SNR Interpretation Caution:* The measured digital loopback SNR of 125.16 dB is computed against a digital zero baseline (idle RMS = 0.000000). **This measurement must strictly NOT be interpreted as real acoustic, transducer, or clinical phonocardiogram SNR.** It solely proves that digital audio samples are actively dispatched to and rendered by the Windows audio engine without truncation or driver stalls.
+  - *Physical Human Ear Listening:* Remains **PENDING** until verified by human auditory perception.
+
+- **Standalone Release Packaging & Provenance:**
+  - Standalone PyInstaller backend: `software/dist_backend/auscultaforge-backend/auscultaforge-backend.exe` (SHA-256: `e2407a59f3024ff886acffa09c91c6e0c4f2a2ea9103ebff366c1b895a8ff442`, 58,952,619 bytes).
+  - Tauri NSIS setup installer: `software/frontend/src-tauri/target/release/bundle/nsis/AuscultaForge_0.1.0-alpha.1_x64-setup.exe` (SHA-256: `d86b3e330e9e182b2c9af46d90caed23222db5d8aa91e8b59dd404182c481943`, 165,657,128 bytes).
+  - Production desktop binary: `software/frontend/src-tauri/target/release/auscultaforge-desktop.exe` (SHA-256: `8215a9e58e027275601a7e973f4078d539cbf422cfd89412d9502a1b1e3d3ce4`, 9,139,712 bytes).
+  - Native release smoke test in clean environment: **PASS** (ephemeral port handshake, health checks, 4000 Hz PCG upload, clean job termination).
+
+- **Full Test Matrix Summary:**
+  - Python unit & regression tests: **587 passed**, 1 intentional placeholder skipped, 0 failed.
+  - 48 kHz high-speed streaming stress test: **6 passed** (0 dropped samples, 0 packet sequence gaps at > 2.0x real-time speed).
+  - Real PCG multi-session manifest acceptance: **7 passed** (`C1`, `C2`, `C3`, `C4`, `P1`).
+  - Rust Tauri unit tests: **6 passed**, 0 failed.
+  - Frontend TypeScript & ESLint: **0 errors**, clean compilation.
+  - Frontend Vitest test suites: **9 suites passed** (including new UX stabilization regression suite).
+
+- **Team Dependencies & Multi-Module Status:**
+  - Module C (Ege Çağın Tepe): **SOFTWARE & UX PASS** — Automated audio pipeline, spectrogram rendering, session recording, manifest provenance, and desktop UX stabilized and verified.
+  - Module A (Kaan): **BLOCKED / PENDING** — ESP32-S3 firmware streaming telemetry, packet flow control, and physical transducer interface awaiting completion.
+  - Module B (Ozan): **BLOCKED / PENDING** — Transducer acoustic characterization, microphone calibration, and analog pre-amp validation awaiting physical lab measurements.
+  - Microphone G2 Acceptance: **STRICTLY PENDING** — Synthetic and local WAV G1 verifications must not be promoted to physical microphone G2 without real acoustic measurement evidence from Modules A and B.
+
+- **Week 7 Priority Recommendations:**
+  1. *Module B Acoustic Characterization & G2 Physical Gating:* Execute physical acoustic frequency-response and SPL calibration in the lab; validate microphone transducer SNR against calibrated cardiac phantoms.
+  2. *Module A Hardware Flow Control & Telemetry:* Implement MCU hardware UART flow control (RTS/CTS) and packet buffer telemetry in ESP32-S3 firmware to eliminate potential serial buffer overruns during sustained 48 kHz acquisitions.
+  3. *Human Auditory Listening Protocol:* Formalize a standardized human acoustic listening evaluation protocol (ABX blind listening) for clinician review of recorded heart sound specimens.
+  4. *Clinical DSP & Heart Sound Segmentation:* Advance Module C DSP algorithms with automated S1/S2 heart sound envelope extraction, murmur segmentation, and real-time clinical bandpass presets (aortic, mitral, pulmonary, tricuspid).
+

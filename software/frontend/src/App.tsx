@@ -246,15 +246,17 @@ export default function App() {
 
 
     const unsubRec = bridgeClient.onRecordingState((rec: RecordingStateData) => {
-      setIsRecording(rec.is_recording);
+      setIsRecording(prev => {
+        if (rec.is_recording && !prev) {
+          addLog(`Session recording started: ${rec.session_id}`, 'info', 'Recorder');
+        } else if (!rec.is_recording && prev && rec.session_id) {
+          addLog(`Session recording saved: ${rec.session_id} (${rec.samples_recorded} samples)`, 'info', 'Recorder');
+          addToast(`Session saved: ${rec.session_id}`, 'success');
+        }
+        return rec.is_recording;
+      });
       setRecordingElapsedSeconds(rec.elapsed_seconds);
       setRecordingSessionId(rec.session_id);
-      if (rec.is_recording) {
-        addLog(`Session recording started: ${rec.session_id}`, 'info', 'Recorder');
-      } else if (rec.session_id) {
-        addLog(`Session recording saved: ${rec.session_id} (${rec.samples_recorded} samples)`, 'info', 'Recorder');
-        addToast(`Session saved: ${rec.session_id}`, 'success');
-      }
     });
 
     const unsubDevState = bridgeClient.onDeviceState((dev) => {
@@ -1040,6 +1042,8 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
               activeSampleId={activeMetadata?.id}
               isDark={isDark}
               onOpenCustomFile={handleOpenFile}
+              onToast={addToast}
+              onLog={addLog}
             />
           )}
 

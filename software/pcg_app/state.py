@@ -208,6 +208,7 @@ class StreamManager:
         # Session recorder
         self.recorder = SessionRecorder(output_dir=self.sessions_dir, wav_format="float32")
         self._recording_started_wall: float = 0.0
+        self._last_rec_broadcast_time: float = 0.0
 
     @property
     def enable_legacy_signal_frames(self) -> bool:
@@ -609,12 +610,42 @@ class StreamManager:
 
     def pause_stream(self) -> None:
         self.is_paused = True
+        if self.recorder.is_recording and self._active_connections:
+            rec_msg = make_recording_state_message(
+                is_recording=True,
+                session_id=self.recorder.session_id,
+                elapsed_seconds=self.recorder.elapsed_seconds,
+                samples_recorded=self.recorder.total_samples,
+                blocks_recorded=self.recorder.total_blocks,
+                source=self.recorder.source,
+                sample_rate_hz=self.recorder.sample_rate_hz or self.sample_rate_hz,
+            )
+            try:
+                loop = asyncio.get_running_loop()
+                asyncio.run_coroutine_threadsafe(self.broadcast(rec_msg), loop)
+            except RuntimeError:
+                pass
 
     def resume_stream(self) -> None:
         if self.source_type != "none":
             self.display_aggregator.reset()
             self.pipeline.notify_rewind()
             self.is_paused = False
+            if self.recorder.is_recording and self._active_connections:
+                rec_msg = make_recording_state_message(
+                    is_recording=True,
+                    session_id=self.recorder.session_id,
+                    elapsed_seconds=self.recorder.elapsed_seconds,
+                    samples_recorded=self.recorder.total_samples,
+                    blocks_recorded=self.recorder.total_blocks,
+                    source=self.recorder.source,
+                    sample_rate_hz=self.recorder.sample_rate_hz or self.sample_rate_hz,
+                )
+                try:
+                    loop = asyncio.get_running_loop()
+                    asyncio.run_coroutine_threadsafe(self.broadcast(rec_msg), loop)
+                except RuntimeError:
+                    pass
 
     def stop_stream(self) -> None:
         self.is_streaming = False
@@ -671,6 +702,24 @@ class StreamManager:
         if self.recorder.is_recording:
             try:
                 self.recorder.record_block(block)
+                now = time.monotonic()
+                if now - self._last_rec_broadcast_time >= 0.2:
+                    self._last_rec_broadcast_time = now
+                    rec_msg = make_recording_state_message(
+                        is_recording=True,
+                        session_id=self.recorder.session_id,
+                        elapsed_seconds=self.recorder.elapsed_seconds,
+                        samples_recorded=self.recorder.total_samples,
+                        blocks_recorded=self.recorder.total_blocks,
+                        source=self.recorder.source,
+                        sample_rate_hz=self.recorder.sample_rate_hz or self.sample_rate_hz,
+                    )
+                    if self._active_connections:
+                        try:
+                            loop = asyncio.get_running_loop()
+                            asyncio.run_coroutine_threadsafe(self.broadcast(rec_msg), loop)
+                        except RuntimeError:
+                            pass
             except Exception as e:
                 self.device_runtime.event_log.log(
                     "RECORDING_WRITE_ERROR",
@@ -741,6 +790,19 @@ class StreamManager:
         if self.recorder.is_recording:
             try:
                 self.recorder.record_block(block)
+                now = time.monotonic()
+                if now - self._last_rec_broadcast_time >= 0.2:
+                    self._last_rec_broadcast_time = now
+                    rec_msg = make_recording_state_message(
+                        is_recording=True,
+                        session_id=self.recorder.session_id,
+                        elapsed_seconds=self.recorder.elapsed_seconds,
+                        samples_recorded=self.recorder.total_samples,
+                        blocks_recorded=self.recorder.total_blocks,
+                        source=self.recorder.source,
+                        sample_rate_hz=self.recorder.sample_rate_hz or self.sample_rate_hz,
+                    )
+                    await self.broadcast(rec_msg)
             except Exception as e:
                 await self.broadcast(make_error_message(f"Recording error: {e}", "RECORDING_ERROR"))
                 raise RuntimeError("Raw recording write failed") from e

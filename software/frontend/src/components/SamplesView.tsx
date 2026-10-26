@@ -29,6 +29,8 @@ interface SamplesViewProps {
   activeSampleId?: string;
   isDark: boolean;
   onOpenCustomFile?: (file: File) => void;
+  onToast?: (message: string, type?: 'info' | 'success' | 'warning') => void;
+  onLog?: (message: string, severity?: 'info' | 'warning' | 'error', component?: string) => void;
 }
 
 export const SamplesView: React.FC<SamplesViewProps> = ({
@@ -37,6 +39,8 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
   onAuditionSession,
   onAnalyzeSession,
   activeSampleId,
+  onToast,
+  onLog,
 }) => {
   const [activeTab, setActiveTab] = useState<'specimens' | 'sessions'>('specimens');
   const [sessions, setSessions] = useState<SessionItem[]>([]);
@@ -115,7 +119,10 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
   const handleExportManifestClick = async (sessionId: string) => {
     try {
       const manifest = await bridgeClient.getSessionManifest(sessionId);
-      if (!manifest) return;
+      if (!manifest) {
+        onToast?.(`Manifest not found for session ${sessionId.slice(0, 16)}`, 'warning');
+        return;
+      }
       const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -125,8 +132,11 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      // ignore error
+      onToast?.(`Manifest exported: manifest_${sessionId.slice(0, 16)}...json`, 'success');
+      onLog?.(`Exported session manifest: manifest_${sessionId}.json`, 'info', 'Manifest');
+    } catch (err) {
+      onToast?.(`Failed to export manifest: ${String(err)}`, 'warning');
+      onLog?.(`Manifest export failed: ${String(err)}`, 'error', 'Manifest');
     }
   };
 
@@ -138,7 +148,7 @@ export const SamplesView: React.FC<SamplesViewProps> = ({
         backgroundColor: 'var(--bg-canvas)'
       }}
     >
-      <div className="max-w-5xl mx-auto w-full flex flex-col gap-6 pb-8">
+      <div className="max-w-5xl mx-auto w-full flex flex-col gap-6 pb-28">
         {/* Header Section */}
         <div
           className="pb-4 border-b flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4"

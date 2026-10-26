@@ -86,7 +86,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         className="hidden"
       />
 
-      <div className="max-w-7xl mx-auto w-full flex flex-col gap-6 pb-8">
+      <div className="max-w-7xl mx-auto w-full flex flex-col gap-6 pb-20">
         {/* Top Header Section (from Stitch reference) */}
         <section
           className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b"
@@ -325,10 +325,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 Drop an acoustic specimen or time-series auscultation capture here to decode raw &amp; filtered waveform tracks.
               </p>
 
-              <span className="font-mono-code text-[11px] uppercase tracking-widest text-[var(--accent-metal)] font-semibold flex items-center gap-1 group-hover:underline">
-                <FolderOpen size={13} />
-                <span>Browse Workstation Drives</span>
-              </span>
+              <button
+                id="browse-local-files-btn"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fileInputRef.current?.click();
+                }}
+                className="font-mono-code text-[11px] uppercase tracking-wider text-[var(--accent-oxblood)] font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--accent-metal)]/40 hover:bg-[var(--accent-soft)] transition-colors cursor-pointer"
+              >
+                <FolderOpen size={14} />
+                <span>Choose Local Audio File (*.wav, *.mp3)</span>
+              </button>
             </div>
 
             {/* Auscultation Reference Archive Banner */}
@@ -363,12 +371,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
               <button
                 id="browse-samples-btn"
+                data-testid="open-samples-archive-btn"
                 onClick={() => onNavigate('samples')}
                 className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-white font-medium text-xs transition-all shadow-xs cursor-pointer active:scale-[0.98]"
                 style={{ backgroundColor: 'var(--accent-oxblood)' }}
               >
                 <Disc size={15} />
-                <span>Browse Starter Signals &amp; Sessions</span>
+                <span>Open Reference Corpus &amp; Sessions</span>
               </button>
             </div>
 

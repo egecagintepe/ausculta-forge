@@ -116,6 +116,8 @@ class SessionMetadata:
     acquisition_mode: str = "offline"
     termination_reason: str = "completed"
     device_info: Optional[dict[str, Any]] = None
+    dsp_engine_version: str = "2.0.0"
+    desktop_client_version: str = "0.1.0-alpha.1"
     app_version: str = "2.0.0"
     schema_version: str = "2.0.0"
     storage_format: str = "normalized_float32"
@@ -136,7 +138,11 @@ class SessionMetadata:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SessionMetadata":
-        """Construct SessionMetadata from a dictionary with robust backward compatibility for schema v1.0.0."""
+        """Construct SessionMetadata from a dictionary with robust backward compatibility for schema v1.0.0 and v2.0.0."""
+        dsp_ver = str(data.get("dsp_engine_version") or data.get("app_version", "2.0.0"))
+        desktop_ver = str(data.get("desktop_client_version", "0.1.0-alpha.1"))
+        app_ver = str(data.get("app_version", dsp_ver))
+
         return cls(
             session_id=data["session_id"],
             started_at_utc=data.get("started_at_utc", ""),
@@ -158,7 +164,9 @@ class SessionMetadata:
             acquisition_mode=data.get("acquisition_mode", "offline"),
             termination_reason=data.get("termination_reason", "completed"),
             device_info=data.get("device_info"),
-            app_version=data.get("app_version", "1.0.0"),
+            dsp_engine_version=dsp_ver,
+            desktop_client_version=desktop_ver,
+            app_version=app_ver,
             schema_version=data.get("schema_version", "1.0.0"),
             storage_format=data.get("storage_format", "normalized_float32"),
             wire_format=data.get("wire_format"),
@@ -233,6 +241,21 @@ class SessionRecorder:
     @property
     def total_samples(self) -> int:
         return self._total_samples
+
+    @property
+    def total_blocks(self) -> int:
+        return self._total_blocks
+
+    @property
+    def source(self) -> str:
+        return self._source
+
+    @property
+    def elapsed_seconds(self) -> float:
+        with self._lock:
+            if not self._sample_rate_hz or self._sample_rate_hz <= 0:
+                return 0.0
+            return self._total_samples / float(self._sample_rate_hz)
 
     def start(
         self,
@@ -754,6 +777,8 @@ def export_session_manifest(
         },
         "environment": meta_dict.get("environment", {}),
         "app_provenance": {
+            "dsp_engine_version": meta_dict.get("dsp_engine_version") or meta_dict.get("app_version", "2.0.0"),
+            "desktop_client_version": meta_dict.get("desktop_client_version", "0.1.0-alpha.1"),
             "app_version": meta_dict.get("app_version", "2.0.0"),
             "schema_version": meta_dict.get("schema_version", "2.0.0"),
             "git_commit_sha": meta_dict.get("git_commit_sha"),
