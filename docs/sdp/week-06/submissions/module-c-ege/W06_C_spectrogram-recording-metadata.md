@@ -279,5 +279,35 @@ All five licensed PCG records from `data/raw/week6_real_pcg_20261026/manifest.js
   - Prioritized UX bug backlog catalogued in [`docs/engineering/backlog/WEEK6_UX_AUDIO_BACKLOG.md`](file:///C:/Dev/Antigravity/bitirme/ausculta-forge/docs/engineering/backlog/WEEK6_UX_AUDIO_BACKLOG.md).
 - **Physical Speaker Acceptance:** PENDING until physical user acoustic listening verification.
 
+### 6. Week 6 Audio Fix Release Build & Acceptance (2026-10-26)
+- **Standalone Packaged Backend:**
+  - Packaged via PyInstaller into `software/dist_backend/auscultaforge-backend/auscultaforge-backend.exe` (SHA-256: `9605b4df6966fe7a66e004cf3623f5db8f19216c8cde9d1d90f9a8b65429e7c5`, 58,493,866 bytes).
+  - Verified `GET /api/sessions/{session_id}/wav` audio download endpoint, path traversal protection, and `/api/health`.
+- **Production Tauri Release & Installer:**
+  - Release executable: `software/frontend/src-tauri/target/release/auscultaforge-desktop.exe` (SHA-256: `99e1000bf053c6458b122ead8489f7c8fb68cc78660ca30681e6a703993fb812`, 9,139,200 bytes).
+  - NSIS setup installer: `software/frontend/src-tauri/target/release/bundle/nsis/AuscultaForge_0.1.0-alpha.1_x64-setup.exe` (SHA-256: `29aac14209df7e1c82d1fe0bdd0a3c1076fa754db3a466b79e1920367e1ad2f4`, 164,521,275 bytes).
+  - Built from source commit: `ccc98eb54280e10b975a757be8d58ec68689411d`.
+- **Test Matrix Execution:**
+  - Python test suite: 583 passed, 1 intentional placeholder skipped, 0 failed.
+  - 48 kHz streaming performance suite: 6 passed (240,128 samples continuous ingestion at > 2.0x real-time speed, 0 dropped samples, 0 MCU sequence gaps).
+  - Real PCG manifest acceptance suite: 7 passed with local verified manifest (`C1`, `C2`, `C3`, `C4`, `P1`).
+  - Rust unit tests: 6 passed, 0 failed (`cargo test`).
+  - Frontend TypeScript lint: 0 errors (`tsc --noEmit`).
+  - Frontend test suites: 8 suites passed (including all 8 audio playback & synchronization regression tests).
+- **Isolated Native Runtime Verification:**
+  - Verified in isolated APPDATA/LOCALAPPDATA environments.
+  - Dynamic ephemeral port handshake, backend supervision, `/api/health` OK.
+  - Real PCG WAV upload (`40058_AV.wav`, 4000 Hz, 11.888s) preserved.
+  - Session recording and `GET /api/sessions/{session_id}/wav` verified.
+  - Source transitions (`realtime_wav` -> `session` -> `synthetic_dev` -> `realtime_wav`) confirmed state stomping elimination.
+- **GUI Behavioral Verification:**
+  - Audition button present in Recorded Sessions.
+  - Replay and Audition clearly separated.
+  - Local WAV does not restore old replay header.
+  - 4000 Hz and actual duration correctly displayed.
+  - Dynamic `L-{sampleRate}-RAW` badge displayed.
+- **Physical Acoustic Gate:** PENDING user listening confirmation. Full verification report in [`docs/engineering/release/WEEK6_AUDIO_FIX_RELEASE_VERIFICATION.md`](file:///C:/Dev/Antigravity/bitirme/ausculta-forge/docs/engineering/release/WEEK6_AUDIO_FIX_RELEASE_VERIFICATION.md).
+
+
 
 
