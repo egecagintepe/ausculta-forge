@@ -500,3 +500,35 @@ def test_device_lifecycle_states_and_transitions(test_app_and_dir):
         assert st["device_state"] == "incompatible"
 
 
+def test_get_session_wav_endpoint(test_app_and_dir, tmp_path: Path):
+    """Verify GET /api/sessions/{session_id}/wav serves raw audio correctly and protects against traversal."""
+    app, sessions_dir = test_app_and_dir
+    session_id = "session_20261026_120000_1234abcd"
+    session_path = sessions_dir / session_id
+    session_path.mkdir(parents=True, exist_ok=True)
+
+    # Write a test WAV file
+    fs = 4000
+    samples = (np.sin(2 * np.pi * 100 * np.arange(400) / fs) * 16384).astype(np.int16)
+    wav_path = session_path / "raw.wav"
+    wavfile.write(str(wav_path), fs, samples)
+    expected_bytes = wav_path.read_bytes()
+
+    with TestClient(app) as client:
+        # 1. Fetch valid session wav
+        resp = client.get(f"/api/sessions/{session_id}/wav")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "audio/wav"
+        assert resp.content == expected_bytes
+
+        # 2. Non-existent session returns 404
+        resp_404 = client.get("/api/sessions/session_20261026_000000_00000000/wav")
+        assert resp_404.status_code == 404
+
+        # 3. Invalid session ID attempts return 400
+        resp_invalid = client.get("/api/sessions/sess@bad!/wav")
+        assert resp_invalid.status_code == 400
+
+
+
+

@@ -650,6 +650,23 @@ def create_app(
             raise HTTPException(status_code=404, detail="Session not found")
         return sess
 
+    @app.get("/api/sessions/{session_id}/wav")
+    def api_get_session_wav(session_id: str):
+        try:
+            valid_id = validate_session_id(session_id, manager.sessions_dir)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid session ID")
+        root = Path(manager.sessions_dir).resolve()
+        wav_path = root / valid_id / "raw.wav"
+        if not wav_path.is_file():
+            raise HTTPException(status_code=404, detail="Session audio file not found")
+        return FileResponse(
+            path=str(wav_path),
+            media_type="audio/wav",
+            filename=f"{valid_id}.wav",
+        )
+
+
     @app.get("/api/sessions/{session_id}/verify")
     def api_verify_session(session_id: str) -> dict[str, Any]:
         try:
