@@ -1,0 +1,648 @@
+{
+  "generated_utc": "2026-10-26T09:44:31.914552+00:00",
+  "baseline_commit": "61cd48a09b5e310a8b99d7ddd0656af79d99b8c7",
+  "code_commit": "06315de5d09f3fef915fd3ba14f84bdaada56d84",
+  "revision_caveat": "Runs used baseline HEAD plus the uncommitted implementation now in code_commit; session git_commit_sha records HEAD only, not a clean tree. A later comment change has no runtime effect.",
+  "source_files_sha256": {
+    "software/frontend/package.json": "d0df1352389f08bcb78a506c4d2a281a5fb4990ce87e883cd5258ac0601a8acb",
+    "software/frontend/src/App.tsx": "1c9237a4ebd38da7943545cbeb00d835b4973e802376f895c68cbd7d5cb3a0c3",
+    "software/frontend/src/audio/audioEngine.ts": "56baaf0d12969d5e8ef821fd1cbf4545cb7d07e43cd580a3497b999f9e8d9cb2",
+    "software/frontend/src/audio/pcmWav.ts": "3ce4dc195f9978ec1b38085f070baedda5c5b2a7146f83ad69773123ed843b26",
+    "software/frontend/src/components/LiveWorkspace.tsx": "65509b1d7c817629dd64bf5861dd433c8f1c3704b87e66d9127def01f6144463",
+    "software/frontend/src/tests/file_audio_import.test.ts": "b66bfdf317107a28128c8c008db896bdce19b11cd74382ab2a034db7a305cf13",
+    "software/pcg_app/state.py": "b66dba110c84fb53f65f8e71779df469abe3406960b261001b70b97a2925d2d7",
+    "software/tests/test_real_pcg_acceptance.py": "4cabcd7608865a9f50d3ec8b1856646a842df7f983dc067ee89c7dcfcdbb863d"
+  },
+  "local_manifest": "data/raw/week6_real_pcg_20261026/manifest.json",
+  "manifest_sha256": "0d529e255b248c8c158e3239f28619732b3f5688e7045a2ef97ccb91a04ca0da",
+  "local_evidence_root": "experiments/output/week6_real_pcg_20261026",
+  "overall_status": "PARTIAL: bounded backend acceptance PASS; local audition lacks backend Welch/recording; loop/UI limits remain",
+  "records": [
+    {
+      "alias": "C1",
+      "filename": "40058_AV.wav",
+      "sample_rate_hz": 4000,
+      "samples": 47552,
+      "duration_s": 11.888,
+      "source_sha256": "108df8f77491a5706209aa5b467ed10ac43f2a0b847801fe666ba8146dcbf8e8",
+      "session_wav_sha256": "feba6b699185254e2ee7dab50ca711fde053d2cbb7040d0d0abdec46d1f03689",
+      "session_id": "session_20261026_092326_d55f3812",
+      "spectra": 47,
+      "first_spectral_window": [
+        0.0,
+        0.128
+      ],
+      "last_spectral_window": [
+        10.879999999999999,
+        11.888
+      ],
+      "nyquist_hz": 2000.0,
+      "frequency_bin_spacing_hz": 15.625,
+      "filters": {
+        "recommended": {
+          "band_hz": [
+            20.0,
+            200.0
+          ],
+          "rms": 0.023806339129805565
+        },
+        "bell": {
+          "band_hz": [
+            20.0,
+            120.0
+          ],
+          "rms": 0.018905403092503548
+        },
+        "diaphragm": {
+          "band_hz": [
+            100.0,
+            500.0
+          ],
+          "rms": 0.02661512792110443
+        },
+        "extended": {
+          "band_hz": [
+            20.0,
+            600.0
+          ],
+          "rms": 0.035108670592308044
+        }
+      },
+      "recording_replay_integrity": "PASS",
+      "tamper_detection": "PASS",
+      "scope": "BACKEND SOFTWARE/API; NOT GUI RECORDING"
+    },
+    {
+      "alias": "C2",
+      "filename": "24160_MV.wav",
+      "sample_rate_hz": 4000,
+      "samples": 90368,
+      "duration_s": 22.592,
+      "source_sha256": "fa8e0586c00bc2e86e88c9ea55853cad01a558a3c5c5945cc1ffd567545565a9",
+      "session_wav_sha256": "398a0c14e20cfc213374b4236506989a74d907aeb3000da5b538ae26833938a0",
+      "session_id": "session_20261026_092326_36e602b0",
+      "spectra": 88,
+      "first_spectral_window": [
+        0.0,
+        0.128
+      ],
+      "last_spectral_window": [
+        21.375999999999998,
+        22.4
+      ],
+      "nyquist_hz": 2000.0,
+      "frequency_bin_spacing_hz": 15.625,
+      "filters": {
+        "recommended": {
+          "band_hz": [
+            20.0,
+            200.0
+          ],
+          "rms": 0.01337884459644556
+        },
+        "bell": {
+          "band_hz": [
+            20.0,
+            120.0
+          ],
+          "rms": 0.009486478753387928
+        },
+        "diaphragm": {
+          "band_hz": [
+            100.0,
+            500.0
+          ],
+          "rms": 0.01742151379585266
+        },
+        "extended": {
+          "band_hz": [
+            20.0,
+            600.0
+          ],
+          "rms": 0.021262669935822487
+        }
+      },
+      "recording_replay_integrity": "PASS",
+      "tamper_detection": "PASS",
+      "scope": "BACKEND SOFTWARE/API; NOT GUI RECORDING"
+    },
+    {
+      "alias": "C3",
+      "filename": "49568_PV.wav",
+      "sample_rate_hz": 4000,
+      "samples": 113792,
+      "duration_s": 28.448,
+      "source_sha256": "3560cfd2b9f901b4ad30b744f3a6b7103660dd4fe203cc6d789b084028752bd7",
+      "session_wav_sha256": "a4194420c9a6676d6e2ef2cbdc11ac8ab02ae23a44b95d0b16ff0d14086e83a4",
+      "session_id": "session_20261026_092328_49008625",
+      "spectra": 111,
+      "first_spectral_window": [
+        0.0,
+        0.128
+      ],
+      "last_spectral_window": [
+        27.264,
+        28.288
+      ],
+      "nyquist_hz": 2000.0,
+      "frequency_bin_spacing_hz": 15.625,
+      "filters": {
+        "recommended": {
+          "band_hz": [
+            20.0,
+            200.0
+          ],
+          "rms": 0.03188560530543327
+        },
+        "bell": {
+          "band_hz": [
+            20.0,
+            120.0
+          ],
+          "rms": 0.028827453032135963
+        },
+        "diaphragm": {
+          "band_hz": [
+            100.0,
+            500.0
+          ],
+          "rms": 0.024600103497505188
+        },
+        "extended": {
+          "band_hz": [
+            20.0,
+            600.0
+          ],
+          "rms": 0.03803896903991699
+        }
+      },
+      "recording_replay_integrity": "PASS",
+      "tamper_detection": "PASS",
+      "scope": "BACKEND SOFTWARE/API; NOT GUI RECORDING"
+    },
+    {
+      "alias": "C4",
+      "filename": "49627_TV.wav",
+      "sample_rate_hz": 4000,
+      "samples": 127360,
+      "duration_s": 31.84,
+      "source_sha256": "dc5c1edbdbfe2d8e07b64528989386d24a8763d78ee1bee2763e51596b914caf",
+      "session_wav_sha256": "672eb4d7fd03c680e51d678761b8a4502372961926e01128efcb6e03cd1cf586",
+      "session_id": "session_20261026_092330_23b4aecd",
+      "spectra": 124,
+      "first_spectral_window": [
+        0.0,
+        0.128
+      ],
+      "last_spectral_window": [
+        30.592,
+        31.616
+      ],
+      "nyquist_hz": 2000.0,
+      "frequency_bin_spacing_hz": 15.625,
+      "filters": {
+        "recommended": {
+          "band_hz": [
+            20.0,
+            200.0
+          ],
+          "rms": 0.051240697503089905
+        },
+        "bell": {
+          "band_hz": [
+            20.0,
+            120.0
+          ],
+          "rms": 0.0420556515455246
+        },
+        "diaphragm": {
+          "band_hz": [
+            100.0,
+            500.0
+          ],
+          "rms": 0.062357667833566666
+        },
+        "extended": {
+          "band_hz": [
+            20.0,
+            600.0
+          ],
+          "rms": 0.07679661363363266
+        }
+      },
+      "recording_replay_integrity": "PASS",
+      "tamper_detection": "PASS",
+      "scope": "BACKEND SOFTWARE/API; NOT GUI RECORDING"
+    },
+    {
+      "alias": "P1",
+      "filename": "a0001.wav",
+      "sample_rate_hz": 2000,
+      "samples": 71332,
+      "duration_s": 35.666,
+      "source_sha256": "54af4b3bf9646860bf1c6fd6fd2ccc4241012bce730b116fd732375e6d7e8aa0",
+      "session_wav_sha256": "0b94c6a3ed13f29c3bab70f6f79a4ccf7d294768c6dd527955abcc9e4fe2d44c",
+      "session_id": "session_20261026_092332_f142f744",
+      "spectra": 140,
+      "first_spectral_window": [
+        0.0,
+        0.128
+      ],
+      "last_spectral_window": [
+        33.664,
+        35.666000000000004
+      ],
+      "nyquist_hz": 1000.0,
+      "frequency_bin_spacing_hz": 7.8125,
+      "filters": {
+        "recommended": {
+          "band_hz": [
+            20.0,
+            200.0
+          ],
+          "rms": 0.019689416512846947
+        },
+        "bell": {
+          "band_hz": [
+            20.0,
+            120.0
+          ],
+          "rms": 0.01965087093412876
+        },
+        "diaphragm": {
+          "band_hz": [
+            100.0,
+            500.0
+          ],
+          "rms": 0.0038341351319104433
+        },
+        "extended": {
+          "band_hz": [
+            20.0,
+            600.0
+          ],
+          "rms": 0.01958542689681053
+        }
+      },
+      "recording_replay_integrity": "PASS",
+      "tamper_detection": "PASS",
+      "scope": "BACKEND SOFTWARE/API; NOT GUI RECORDING"
+    }
+  ],
+  "gui_import": {
+    "count": 5,
+    "status": "PASS",
+    "rates_hz": [
+      2000,
+      4000
+    ],
+    "scope": "Actual Windows in-app browser, React/Vite + Python source; not installed Tauri acceptance",
+    "sample_count": "Exact N is verified in backend tests and frontend engine regression; GUI displays rounded duration, not exact N"
+  },
+  "gui_recording": {
+    "session_id": "session_20261026_093813_b74580ba",
+    "sample_rate_hz": 2000,
+    "samples": 8192,
+    "duration_s": 4.096,
+    "source_offset_samples": 11136,
+    "sha256": "5ba8a96bc87ad377c0230044eaf2f0de4071326844642fd416689f2c9622a4f6",
+    "recording_replay": "PASS",
+    "stream_quality": {
+      "total_blocks": 64,
+      "dropped_blocks": 0,
+      "repeated_sequences": 0,
+      "sequence_discontinuities": 0,
+      "timestamp_regressions": 0,
+      "sample_rate_changes": 0,
+      "is_healthy": true
+    },
+    "checked_utc": "2026-10-26T09:38:54.896740+00:00",
+    "scope": "API selected source; actual GUI start/stop; Python sample/hash/replay verification"
+  },
+  "research": {
+    "started_utc": "2026-10-26T09:31:58.258085+00:00",
+    "model_sha256": "abe437aa55664a6e3bf18dede9db3573d9c396028886e4016afcc8d41f7e6674",
+    "scope": "EXPLORATORY existing non-production-validated model; reconstructed held-out subset; no training",
+    "inference_inputs": "audio and fs only; TSV loaded only after inference",
+    "event_tolerance_ms": 100,
+    "state_0": "IGNORE in both event and frame evaluation",
+    "records": [
+      {
+        "alias": "C1",
+        "filename": "40058_AV.wav",
+        "runtime_s": 0.04023570000026666,
+        "algorithm_status": "SUCCESS",
+        "annotated_frames": 423,
+        "ignored_frames": 171,
+        "events": {
+          "S1": {
+            "tolerance_ms": 100.0,
+            "tp": 13,
+            "fp": 0,
+            "fn": 1,
+            "sensitivity": 0.9286,
+            "recall": 0.9286,
+            "precision": 1.0,
+            "f1": 0.963,
+            "predictions_ignored_outside_annotation": 6
+          },
+          "S2": {
+            "tolerance_ms": 100.0,
+            "tp": 13,
+            "fp": 0,
+            "fn": 0,
+            "sensitivity": 1.0,
+            "recall": 1.0,
+            "precision": 1.0,
+            "f1": 1.0,
+            "predictions_ignored_outside_annotation": 6
+          }
+        },
+        "annotated_frame_agreement": 0.8676122931442081
+      },
+      {
+        "alias": "C2",
+        "filename": "24160_MV.wav",
+        "runtime_s": 0.07388900000023568,
+        "algorithm_status": "SUCCESS",
+        "annotated_frames": 403,
+        "ignored_frames": 727,
+        "events": {
+          "S1": {
+            "tolerance_ms": 100.0,
+            "tp": 16,
+            "fp": 0,
+            "fn": 1,
+            "sensitivity": 0.9412,
+            "recall": 0.9412,
+            "precision": 1.0,
+            "f1": 0.9697,
+            "predictions_ignored_outside_annotation": 30
+          },
+          "S2": {
+            "tolerance_ms": 100.0,
+            "tp": 17,
+            "fp": 0,
+            "fn": 0,
+            "sensitivity": 1.0,
+            "recall": 1.0,
+            "precision": 1.0,
+            "f1": 1.0,
+            "predictions_ignored_outside_annotation": 30
+          }
+        },
+        "annotated_frame_agreement": 0.9007444168734491
+      },
+      {
+        "alias": "C3",
+        "filename": "49568_PV.wav",
+        "runtime_s": 0.0944787999997061,
+        "algorithm_status": "SUCCESS",
+        "annotated_frames": 1317,
+        "ignored_frames": 105,
+        "events": {
+          "S1": {
+            "tolerance_ms": 100.0,
+            "tp": 32,
+            "fp": 3,
+            "fn": 2,
+            "sensitivity": 0.9412,
+            "recall": 0.9412,
+            "precision": 0.9143,
+            "f1": 0.9275,
+            "predictions_ignored_outside_annotation": 4
+          },
+          "S2": {
+            "tolerance_ms": 100.0,
+            "tp": 34,
+            "fp": 2,
+            "fn": 1,
+            "sensitivity": 0.9714,
+            "recall": 0.9714,
+            "precision": 0.9444,
+            "f1": 0.9577,
+            "predictions_ignored_outside_annotation": 3
+          }
+        },
+        "annotated_frame_agreement": 0.8914198936977981
+      },
+      {
+        "alias": "C4",
+        "filename": "49627_TV.wav",
+        "runtime_s": 0.010109200000442797,
+        "algorithm_status": "HEART_RATE_ESTIMATION_FAILED",
+        "annotated_frames": 153,
+        "ignored_frames": 1439,
+        "events": {
+          "S1": {
+            "tolerance_ms": 100.0,
+            "tp": 0,
+            "fp": 0,
+            "fn": 5,
+            "sensitivity": 0.0,
+            "recall": 0.0,
+            "precision": 0.0,
+            "f1": 0.0,
+            "predictions_ignored_outside_annotation": 0
+          },
+          "S2": {
+            "tolerance_ms": 100.0,
+            "tp": 0,
+            "fp": 0,
+            "fn": 5,
+            "sensitivity": 0.0,
+            "recall": 0.0,
+            "precision": 0.0,
+            "f1": 0.0,
+            "predictions_ignored_outside_annotation": 0
+          }
+        }
+      }
+    ],
+    "ended_utc": "2026-10-26T09:31:58.517388+00:00"
+  },
+  "runs": {
+    "frontend-import-red": {
+      "command": [
+        ".\\node_modules\\.bin\\tsx.cmd",
+        "src/tests/file_audio_import.test.ts"
+      ],
+      "cwd": ".",
+      "started_utc": "2026-10-26T08:59:40.941591+00:00",
+      "ended_utc": "2026-10-26T08:59:41.902115+00:00",
+      "exit_code": 1,
+      "log_sha256": "fe753510be871f583caa87239c7422151e51b72d1276a60ac09136fd5b0fc256"
+    },
+    "frontend-import-final": {
+      "command": [
+        ".\\node_modules\\.bin\\tsx.cmd",
+        "src/tests/file_audio_import.test.ts"
+      ],
+      "cwd": ".",
+      "started_utc": "2026-10-26T09:26:36.965804+00:00",
+      "ended_utc": "2026-10-26T09:26:37.247375+00:00",
+      "exit_code": 0,
+      "log_sha256": "400ef382a60fb891593b710383a1c502fdbe4c827931e917114e5ee723a704e2"
+    },
+    "real-pcg-backend": {
+      "command": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "pytest",
+        "software/tests/test_real_pcg_acceptance.py",
+        "-q",
+        "--junitxml=experiments/output/week6_real_pcg_20261026/real-backend.xml"
+      ],
+      "cwd": ".",
+      "started_utc": "2026-10-26T09:19:53.354266+00:00",
+      "ended_utc": "2026-10-26T09:20:04.114286+00:00",
+      "exit_code": 1,
+      "log_sha256": "4a3e1ca65e4ccf2940dee173bb6c4e4800bdbfc776c2458be05eda821b01dc4f"
+    },
+    "real-pcg-backend-v2": {
+      "command": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "pytest",
+        "software/tests/test_real_pcg_acceptance.py",
+        "-q",
+        "--junitxml=experiments/output/week6_real_pcg_20261026/real-backend-v2.xml"
+      ],
+      "cwd": ".",
+      "started_utc": "2026-10-26T09:23:23.261286+00:00",
+      "ended_utc": "2026-10-26T09:23:33.742529+00:00",
+      "exit_code": 0,
+      "log_sha256": "8bca65a00a353428a94008021cb6a4a51a409c67962353fb41aefcab92cf26e8"
+    },
+    "research-s1s2": {
+      "command": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-B",
+        "experiments/output/week6_real_pcg_20261026/research_check.py"
+      ],
+      "cwd": ".",
+      "started_utc": "2026-10-26T09:31:56.225560+00:00",
+      "ended_utc": "2026-10-26T09:31:58.573383+00:00",
+      "exit_code": 0,
+      "log_sha256": "40090166483b828af52be8f2d26b9c8a2e05061484a5ee4d3d7172eeae6b6aaa"
+    },
+    "gui-recording-check": {
+      "command": [
+        ".venv\\Scripts\\python.exe",
+        "-B",
+        "experiments/output/week6_real_pcg_20261026/verify_gui_recording.py"
+      ],
+      "cwd": ".",
+      "started_utc": "2026-10-26T09:38:52.186804+00:00",
+      "ended_utc": "2026-10-26T09:38:54.980264+00:00",
+      "exit_code": 0,
+      "log_sha256": "c1af0929111f47cf1de8b2417140fd901a42bb27b4c1e8626cc650135c1738f2"
+    },
+    "final-frontend": {
+      "command": [
+        "cmd.exe",
+        "/d",
+        "/c",
+        "npm.cmd run lint && npm.cmd test && npm.cmd run build"
+      ],
+      "cwd": "software/frontend",
+      "started_utc": "2026-10-26T09:37:36.812994+00:00",
+      "ended_utc": "2026-10-26T09:37:56.399194+00:00",
+      "exit_code": 0,
+      "log_sha256": "ee59bf7124360d883be645403f7a96441193e5e621382bd9c1c48a8fb7f037b7"
+    },
+    "final-python": {
+      "command": [
+        ".venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "pytest",
+        "software/tests",
+        "-q"
+      ],
+      "cwd": ".",
+      "started_utc": "2026-10-26T09:37:26.683935+00:00",
+      "ended_utc": "2026-10-26T09:39:50.929015+00:00",
+      "exit_code": 1,
+      "log_sha256": "1c761eff92e786ec7ff258e48e80c75e0f20bb7d4e58fa05b443c2da91f96b5b"
+    },
+    "final-python-v2": {
+      "command": [
+        ".venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "pytest",
+        "software/tests",
+        "-q",
+        "--junitxml=experiments/output/week6_real_pcg_20261026/final-python-v2.xml"
+      ],
+      "cwd": ".",
+      "started_utc": "2026-10-26T09:40:02.627267+00:00",
+      "ended_utc": "2026-10-26T09:41:02.519951+00:00",
+      "exit_code": 0,
+      "log_sha256": "1b91cf2e336731fabafb66c2c4b7e036d4bc06797211b294520bc14c73d8f0de"
+    }
+  },
+  "evidence_sha256": {
+    "backend-cinc-rate-red.json": "dd86f013ea7e99c55e8afb6cc28dd8945f79ed61bb29f1921d41c826987e458b",
+    "backend-source-rate-red.json": "25e61617cfff4598c91341ac90be02f9f6d2f59c8e08b4da25975b1d88e4f35d",
+    "final-python-v2.xml": "44e6a3844ab0d8e30101c54267e4d34932d2a5a6495b9ce3f5f43924c097286e",
+    "gui-backend-before-metadata-fix.txt": "98ff464611729642927a88de1e258ff50b5902ffdb873702e4c8b5ac31d867d0",
+    "gui-backend-C1-spectrum.png": "cdf3fe8f2ec49a388fa31c346d173a1bdfe3ddd2e09233c9e0e56b4591287cd2",
+    "gui-backend-C1-spectrum.txt": "6a66d47eff003fbbde2f5c083db342143f9f9c96406e287bf51f1beb5977bb0f",
+    "gui-backend-P1-spectrum.png": "0e6f8402ada3ba49ea67ee38ac95fcffe2476136fdff67bd2109b50c77ed3ad4",
+    "gui-backend-stderr.txt": "68b84643b2cdf8d474733d550178ed218d2dfc477ac2c4b27d545381e3aec380",
+    "gui-backend-stdout.txt": "c620f796f0db5099df76f3dd66276aa88330b3fb07ab42742955ddc33d209bd2",
+    "gui-C1.png": "3d74234a10b09fa821c3c575c9e0b84b1389a53306873a41ecbba3022b6ee495",
+    "gui-C1.txt": "c55dfb1be7997b21bf2fb79ba8df222418c5a94e9c32b242eab69f7a9c5031ef",
+    "gui-C2.png": "ee3f66d1a5fc0c79b31082f46818d54628f4a47b2431ab98d55c449dc3a77d58",
+    "gui-C2.txt": "1f4e5b28889d063aca6e334fb4d727d3f79bbfd8e8c3f58a94488a355354d1a1",
+    "gui-C3.png": "7a1268be04a1093f1bbc44dfe122cfc14f4a1cb944b46382325157f74c352c76",
+    "gui-C3.txt": "c2af1d40cd4bdfbbd3f9b93428be2d552e75d1eb9a91b3d66806421c4d27eef0",
+    "gui-C4.png": "0b9c3a385c40efe512b8337132e43be016fc478780f9bf1b8ccf9f859452fc5f",
+    "gui-C4.txt": "342620af4b65c0a70fd8cd3a5fa88971c4778dbf2459039cd3db71be1c81c6d3",
+    "gui-filter-controls.txt": "abaa60f3a097f8afd59d4a2582361c199f910bc7cf7ecde0300aa775ac6e578a",
+    "gui-P1-local-fft.png": "aa1ab4fd8d83f14ab560ab929fa89b6bf0b786d3886779444b643569d59b9aca",
+    "gui-P1-local-fft.txt": "4a23ae87f24152976733134c303bf11308201a459228ee905bf4d3f2452aff3b",
+    "gui-P1-seek.txt": "f59c0fa1b5f0ff65ea61a77dfd5ef16b2abe673b68dc3bd6b825c82a1b6c5acc",
+    "gui-P1.png": "d02a133bedfcee804b4ec3476810636b40c6c4cc04103530e40c8e33b22d3fbc",
+    "gui-P1.txt": "e04e4227f2474ddce963375a454dec1cc8f05e6b3697500fa18e4bbdf359c9bd",
+    "gui-recorded-session-replay.png": "143cd20574e1631c351cd7089e3510291c19147acabace4a5eaaac4655da7770",
+    "gui-recorded-session-replay.txt": "51de60f7592f1db8c87771b6b7101e834d9cce33e12652f067545edfe431d21c",
+    "gui-recording-active.txt": "dc9326a84ce2f9e4c9feb01154f3c87749ef45d78ebc03cf63473ba3ef943548",
+    "gui-recording-check.txt": "c1af0929111f47cf1de8b2417140fd901a42bb27b4c1e8626cc650135c1738f2",
+    "gui-recording-result.json": "2cb040f48ca9455faf225b16ce9e0a8e252be94cb1a5697a01f2b43a62f90886",
+    "gui-vite-stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gui-vite-stdout.txt": "db23770f282d5fb3ca04f9bfedeb6bc131db7f73c253ee7b46f1e8ef12805370",
+    "real-backend-v2.xml": "e681d629262b0191a78fafd18ed75158918b25d4d4672c294d39b630e47f5263",
+    "real-backend.xml": "e781e1c9dbc3071e86311978592e3a8c0b7e7898caf3fabaa5d65a578066e7fb",
+    "research-result.json": "b7c82a9d61dc934dac450118e996e517f048a17cb9e8f13e224e4bd0c5d0a2bb",
+    "research_check.py": "410d07c2ae5d0604dc5a65c840183eeef609fcf9cee8649a52a0a1f0bee3a11b",
+    "run_command.py": "620f3cb77dfd31c98d905de6af2b79c1ba6988317b746fd586a4dd971e86847d",
+    "verify_gui_recording.py": "e20d2e3052d614df0640015a219438a2465360cbe4ecc68efd11e0eea79796e7",
+    "backend/C1/result.json": "4deec85678ab42ce52fee659f491269c1ac5314e4a5e6e7b47f181c3a4fec4fd",
+    "backend/C2/result.json": "a9e2e970c21957cdbc17713a6a46813256b5b83548e8e0f012014f59601217cd",
+    "backend/C3/result.json": "fe4af42b10de2b2fa4b40023b1ecc214c27e6595dc03979acc30f057e8b1b6ce",
+    "backend/C4/result.json": "7608095d05256beb6c30c9688386c73d27f9bf960f40966375565945f95f77c2",
+    "backend-v2/C1/result.json": "d810c5a0bc226b5fab4cf3472381c5c80355da7c5669d134f3464558cec634be",
+    "backend-v2/C2/result.json": "020d2dcd7ffc98f85759f8de04372e5bb53a441cee0045bce3a9d8f5f6fc2cad",
+    "backend-v2/C3/result.json": "26f048016500d838b028816ad54fd6192481905fe8995347ead79a29ea7a12ec",
+    "backend-v2/C4/result.json": "dc96b8e87057c32e65c5feb2a826f5c664c936d192aabd792551d9aed0e0372f",
+    "backend-v2/P1/result.json": "51c7b559c0488f6d8cc3449a0890bbe893575b8c3001dc49363c2dc56ec76c6d"
+  },
+  "unchanged_historical_reports_sha256": {
+    "docs/engineering/release/WEEK6_SPRINT_REPORT.md": "eb6d4d3303fa2afdcfdafd3761e1bbaf08aa8e23827e74dd93c3f241a0324366",
+    "docs/engineering/release/WEEK6_VERIFICATION_SUMMARY.json": "f0ba5defaac82539769bb382763e0952609b4474bbe3866b0a67aa9b2de7bf16"
+  },
+  "not_executed": [
+    "COM7 access",
+    "physical G1 repeat",
+    "microphone G2",
+    "installer rebuild/install acceptance",
+    "native Tauri acceptance of this revision",
+    "GUI invalid-file recovery",
+    "quantitative WebAudio filter response"
+  ]
+}

@@ -98,3 +98,32 @@ See [Week-6 decision drafts](../../decisions.md). Window timing/reset and curren
 ## Next Week Handoff
 
 Deliver the acceptance matrix with each criterion linked to actual evidence or a specific remaining blocker. Ege owns Module C closure; Kaan/Ozan retain ownership of their measurements and approvals. Do not mark Week 6 complete while software criteria or new-GUI physical acceptance lack evidence.
+
+
+## Offline Real PCG Dataset Acceptance
+
+Executed 2026-10-26; baseline `61cd48a`, implementation `06315de5d09f3fef915fd3ba14f84bdaada56d84`. Tests ran with then-uncommitted source changes; session HEAD alone is not clean-tree provenance. Historical software PASS and CLI/GUI G1 evidence above are preserved unchanged. No COM7/G1/G2/firmware/installer work was done in this acceptance.
+
+**PARTIAL overall.** Bounded backend recording/spectral/replay: **PASS**. Actual browser-rendered source GUI import: **5/5 PASS**; this is not packaged Tauri acceptance. Local frontend audition and backend replay are separate paths.
+
+| Recording | fs (Hz) | N | Duration (s) | Nyquist / final Welch Δf (Hz) | Full-file backend WAV+JSON/hash/replay |
+|---|---:|---:|---:|---:|---|
+| C1 / 40058_AV.wav | 4000 | 47552 | 11.888 | 2000 / 15.625 | PASS |
+| C2 / 24160_MV.wav | 4000 | 90368 | 22.592 | 2000 / 15.625 | PASS |
+| C3 / 49568_PV.wav | 4000 | 113792 | 28.448 | 2000 / 15.625 | PASS |
+| C4 / 49627_TV.wav | 4000 | 127360 | 31.840 | 2000 / 15.625 | PASS |
+| P1 / a0001.wav | 2000 | 71332 | 35.666 | 1000 / 7.8125 | PASS |
+
+CirCor v1.0.3 supplied four officially checksum-verified WAV/HEA/TSV triplets; Challenge 2016 v1.0.0 supplied one officially verified WAV. License/access checked: Open Data Commons Attribution License v1.0. Sources, attribution, exact URLs, local manifest/hash inventory, UTC bounds, commands and outcomes are in the [new offline report](../../../../engineering/release/WEEK6_OFFLINE_REAL_PCG_REPORT.md) and [machine summary](../../../../engineering/release/WEEK6_OFFLINE_REAL_PCG_SUMMARY.json). Raw recordings/labels and screenshots stay local and are not published to Git.
+
+Source-rate import/export bugs were corrected (device-rate resampling and fixed-4-kHz export); backend selection now reports actual 2/4 kHz, resets processing state and records source-file SHA separately from final WAV SHA. GUI clears stale imported filenames when backend replay replaces the source. Five real GUI imports show correct rate/rounded duration and waveforms; P1 play/pause/seek and all four filter controls were observed. Local audition cannot record a backend session or produce Welch history: recording is disabled and the empty spectrum explains the supported backend-replay path. Its fixed preview is not a measured preset-filter trace.
+
+Five complete production backend runs verify source values/count/duration, mono float32 storage, JSON/UTC/session/origin/sequence/quality fields, independent final-WAV hashes, replay equality and rejection of tampered copies. Separately, actual GUI Record/Stop controls on an API-selected P1 replay produced 8192 samples at 2 kHz (4.096 s), source-offset/sample equality and hash/replay PASS; API-selected reopening rendered that session in GUI. This does not claim the file chooser starts backend acquisition.
+
+Backend Welch timing/frequency checks passed on all five files; source N/fs bounds use one-sample lower-bound tolerance and 1e-8 s end tolerance. GUI rendered real C1/P1 spectra with 0–2000/0–1000 Hz and Δf 15.625/7.8125 Hz. Source/stream identity and existing history regressions cover source/rate/rewind reset; earlier columns are not reused as new-session evidence. PSD is relative to 1 FS²/Hz, not acoustic calibration.
+
+Final regression: Python **562 passed, 1 intentional no-manifest skip, exit 0**; separate manifest-enabled real acceptance **7 passed, exit 0**; frontend lint, six test programs and build **exit 0**. Initial source-rate failures, floating-bound assertion and one load-sensitive CLI help timeout are preserved in new evidence; the final complete rerun passed. See report for exact times/warnings.
+
+Separate S1/S2 research used the existing unchanged non-production model and four reconstructed held-out CirCor records; inference received no reference labels and state 0 was ignored. C1/C2/C3 produced segmentations; C4 failed heart-rate estimation and remains included with S1/S2 F1=0. No training or clinical validation claim. The report lists every success/failure and the historical-split reconstruction caveat.
+
+Open: local audition Welch/recording support, measured browser filter response/preset consistency, EOF-loop degraded health and replay runtime/overview ID semantics, malformed-file GUI recovery, native packaged acceptance of this revision, C4 inference failure, physical G2/acoustic calibration. Bounded recording PASS does not close these gaps or Module A/B measurements.
