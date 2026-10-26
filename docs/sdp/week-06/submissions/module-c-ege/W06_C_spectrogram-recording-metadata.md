@@ -127,3 +127,69 @@ Final regression: Python **562 passed, 1 intentional no-manifest skip, exit 0**;
 Separate S1/S2 research used the existing unchanged non-production model and four reconstructed held-out CirCor records; inference received no reference labels and state 0 was ignored. C1/C2/C3 produced segmentations; C4 failed heart-rate estimation and remains included with S1/S2 F1=0. No training or clinical validation claim. The report lists every success/failure and the historical-split reconstruction caveat.
 
 Open: local audition Welch/recording support, measured browser filter response/preset consistency, EOF-loop degraded health and replay runtime/overview ID semantics, malformed-file GUI recovery, native packaged acceptance of this revision, C4 inference failure, physical G2/acoustic calibration. Bounded recording PASS does not close these gaps or Module A/B measurements.
+
+## Integration Verification — 2026-10-26 (Module C Final Integration)
+
+**Baseline:** `c736bbf` (synced with `origin/main`).
+**Status:** **PARTIAL** (Complete Software Pipeline & DSP Verification; Packaged Installer Acceptance & Microphone G2 Pending).
+
+### 1. Local WAV Audition vs Backend DSP Replay Bridge
+- **Gap Addressed:** In earlier revisions, opening local WAV files in the browser GUI only enabled client-side WebAudio audition, bypassing the backend Welch spectrogram history, streaming pipeline, and session recording.
+- **Implementation:**
+  - Added backend endpoint `POST /api/stream/upload_source_wav` accepting user-selected mono PCM16/float32 WAV files via multipart upload. Source file bytes are preserved without modification into backend assets, maintaining original SHA-256 hashes, sample counts, and source sample rates (2 kHz, 4 kHz). The backend sets the active source to `realtime_wav` with exact file provenance.
+  - Added `uploadAndSelectSourceWav(file: File)` in `software/frontend/src/api/bridgeClient.ts`.
+  - Added an explicit user action in `LiveWorkspace.tsx`: a dedicated `[Stream via Backend DSP]` button in the specimen header and an informative notice on the waterfall canvas when in local audition mode.
+  - Scientific demarcation: The UI clearly indicates whether the audio is playing in **Local File Audition** (client-side WebAudio preview without backend recording) or **Backend DSP Stream** (full Python Welch PSD waterfall, streaming telemetry, and sidecar-backed recording).
+
+### 2. Frontend / Backend Filter Consistency & Numerical Verification
+- **Gap Addressed:** Frontend WebAudio presets and backend Python DSP had mismatched passband cutoff definitions and undocumented transfer function differences.
+- **Passband Alignment:**
+  - `recommended`: 20 Hz – 200 Hz (Narrow auscultation band)
+  - `bell`: 20 Hz – 120 Hz (Low-frequency rumble / S3-S4 gallop)
+  - `diaphragm`: 100 Hz – 500 Hz (High-frequency murmurs / clicks)
+  - `extended`: 20 Hz – 600 Hz (Broad phonocardiogram auscultation band)
+- **Transfer Function Demarcation:**
+  - Backend Python DSP uses 4th-order Butterworth bandpass filters implemented via second-order sections (SOS), yielding 24 dB/octave rolloff.
+  - Frontend WebAudio uses cascaded 2nd-order Biquad highpass and lowpass filters, yielding 12 dB/octave rolloff.
+- **Numerical Frequency Response Verification:**
+  - Python: `software/tests/test_filter_transfer_response.py` verified single-tone attenuation and passband gain across 2 kHz and 4 kHz for all four presets (9/9 passed, exit 0).
+  - Frontend TypeScript: `software/frontend/src/tests/filter_transfer_response.test.ts` verified Biquad transfer function frequency responses at 2 kHz, 4 kHz, and 48 kHz (all presets verified, exit 0).
+
+### 3. Loop EOF Wrap & Conscious Rewind Health
+- **Gap Addressed:** Continuous loop replay previously degraded stream health to `DEGRADED` upon reaching EOF due to sequence regression flags.
+- **Implementation:**
+  - Implemented `notify_rewind()` on `StreamQualityMonitor` and `LiveStreamingPipeline` (`software/pcg_core/streaming.py`).
+  - Clears sequence/timestamp continuation pointers so the subsequent cycle starts cleanly from sequence 0 without wiping legitimate historical drop/anomaly counters or falsely resetting health to OPTIMAL.
+  - Causal filter delay lines (`zi`) are cleanly reset to avoid transient discontinuities.
+  - Active session recordings cleanly finalize on loop EOF wrap with `termination_reason="completed"`.
+  - Regression verified by `software/tests/test_replay_eof_health.py` (5/5 passed, exit 0).
+
+### 4. Real PCG Manifest-Driven Acceptance Rerun
+- Evaluated five verified real PCG files from `data/raw/week6_real_pcg_20261026/manifest.json`:
+  - CirCor C1 (`40058_AV.wav`, 4 kHz, 47,552 samples)
+  - CirCor C2 (`24160_MV.wav`, 4 kHz, 90,368 samples)
+  - CirCor C3 (`49568_PV.wav`, 4 kHz, 113,792 samples)
+  - CirCor C4 (`49627_TV.wav`, 4 kHz, 127,360 samples)
+  - Challenge 2016 P1 (`a0001.wav`, 2 kHz, 71,332 samples)
+- Manifest SHA-256 hashes verified and unchanged.
+- Backend acceptance test `test_real_pcg_acceptance.py`: 7/7 passed, exit 0. Rate preservation, sample counts, float32 WAV export, JSON metadata, and SHA-256 recomputation all passed.
+- S1/S2 research check `experiments/output/week6_real_pcg_20261026/research_check.py` re-run: C1, C2, C3 segmented; C4 heart rate estimation failure preserved and truthfully reported (algorithm_status: `HEART_RATE_ESTIMATION_FAILED`).
+
+### 5. Execution Matrix & Evidence
+| Scope | Command | Outcome | UTC Time | Exit Code |
+|---|---|---|---|---|
+| Python Unit & Core Tests | `.venv\Scripts\python.exe -B -m pytest software/tests -q` | 577 passed, 1 skipped | 2026-10-26 10:46 UTC | 0 |
+| Replay EOF Health Regressions | `.venv\Scripts\python.exe -B -m pytest software/tests/test_replay_eof_health.py -v` | 5 passed | 2026-10-26 10:40 UTC | 0 |
+| Filter Response Regressions | `.venv\Scripts\python.exe -B -m pytest software/tests/test_filter_transfer_response.py -v` | 9 passed | 2026-10-26 10:42 UTC | 0 |
+| Real PCG Acceptance Tests | `.venv\Scripts\python.exe -B -m pytest software/tests/test_real_pcg_acceptance.py -v` | 7 passed | 2026-10-26 10:46 UTC | 0 |
+| S1/S2 Research Script | `.venv\Scripts\python.exe -B experiments/output/week6_real_pcg_20261026/research_check.py` | Executed, C4 failure preserved | 2026-10-26 10:47 UTC | 0 |
+| Frontend Typecheck / Lint | `npm.cmd run lint` (in `software/frontend`) | 0 errors | 2026-10-26 10:46 UTC | 0 |
+| Frontend Test Suites | `npm.cmd test` (7 test programs in `software/frontend`) | 7 passed | 2026-10-26 10:47 UTC | 0 |
+| Frontend Production Build | `npm.cmd run build` (in `software/frontend`) | Built in 4.88s | 2026-10-26 10:47 UTC | 0 |
+| Browser GUI Subagent Test | Chromium browser subagent against `127.0.0.1:3000` + `127.0.0.1:8000` | Playback, UI controls, filters, and status bar verified | 2026-10-26 11:07 UTC | 0 |
+| Packaged Tauri GUI Installer | *Explicitly not executed pursuant to task constraint ("installer üretme")* | Stored sprint package stands | — | N/A |
+
+### 6. Remaining Scope and Limits
+- **Packaged Tauri Installer:** No new installer was built or tested in this sprint step; validation was performed on the browser-rendered application source.
+- **Physical Hardware G2 / Calibration:** No COM7 connection, physical ESP32-S3 G1 run, or microphone G2 acoustic metrology calibration was performed.
+

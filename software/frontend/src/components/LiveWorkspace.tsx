@@ -74,6 +74,7 @@ interface LiveWorkspaceProps {
   droppedDisplayFrames?: number;
   spectralFrame?: SpectralFrameData | null;
   displayPointsPerSec?: number;
+  onStreamViaBackend?: () => void;
 }
 
 export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
@@ -119,6 +120,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
   droppedDisplayFrames = 0,
   spectralFrame = null,
   displayPointsPerSec,
+  onStreamViaBackend,
 }) => {
   const [viewMode, setViewMode] = useState<'oscilloscope' | 'fft'>('oscilloscope');
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
@@ -588,11 +590,11 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
 
   // Preset labels map
   const presetLabels: Record<FilterPreset, { title: string; range: string }> = {
-    recommended: { title: 'Narrow [20–200 Hz]', range: '20 Hz – 200 Hz · 4th Order Chebyshev (Dev Preset)' },
-    bell: { title: 'Bell Acoustic Mode', range: '20 Hz – 100 Hz · Low Rumble Emphasized' },
-    diaphragm: { title: 'Diaphragm Modality', range: '100 Hz – 500 Hz · Murmur / Regurgitation' },
-    extended: { title: 'Extended Unfiltered Feed', range: '10 Hz – 2000 Hz · Direct Transducer' },
-    custom: { title: 'Custom Filter', range: 'User-defined backend cutoff frequencies' },
+    recommended: { title: 'Narrow [20–200 Hz]', range: '20 Hz – 200 Hz · Butterworth Bandpass (Dev Preset)' },
+    bell: { title: 'Bell Acoustic Mode', range: '20 Hz – 120 Hz · Low Rumble / S3–S4 Gallop' },
+    diaphragm: { title: 'Diaphragm Modality', range: '100 Hz – 500 Hz · Murmurs & High Frequencies' },
+    extended: { title: 'Extended PCG Band', range: '20 Hz – 600 Hz · Broad Auscultation Band' },
+    custom: { title: 'Custom Filter', range: 'User-defined cutoff frequencies' },
   };
 
   const resolvedPreset = presetLabels[filterPreset] ?? {
@@ -651,6 +653,23 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                 </span>
               </div>
             </div>
+
+            {sourceType === 'file' && onStreamViaBackend && (
+              <button
+                id="btn-stream-via-backend"
+                onClick={onStreamViaBackend}
+                disabled={!backendConnected}
+                title={backendConnected ? 'Stream this audio file through the backend Python DSP pipeline for real Welch PSD history and session recording' : 'Python DSP Bridge offline — connect backend to stream'}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono-code font-semibold border transition-all ${
+                  backendConnected
+                    ? 'bg-[var(--accent-oxblood)] text-white hover:opacity-90 active:scale-95 cursor-pointer shadow-xs'
+                    : 'bg-[var(--surface-muted)] text-[var(--on-surface-variant)] opacity-50 cursor-not-allowed border-[var(--border-subtle)]'
+                }`}
+              >
+                <Activity size={13} />
+                <span>STREAM VIA BACKEND DSP</span>
+              </button>
+            )}
 
             <div className="h-6 w-px bg-[var(--border-subtle)] hidden sm:block mx-1" />
 
@@ -1094,6 +1113,31 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                 }}
               >
                 <canvas ref={spectrogramCanvasRef} className="absolute inset-0 w-full h-full z-10" />
+                {sourceType === 'file' && spectralHistory.length === 0 && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/75 backdrop-blur-xs z-30 p-2 text-center pointer-events-auto">
+                    <span className="font-mono-code text-[11px] text-white/90 font-semibold tracking-wide">
+                      LOCAL AUDITION ACTIVE · WEBAUDIO LOCAL PLAYBACK ONLY
+                    </span>
+                    <span className="font-sans-ui text-[11px] text-white/70 max-w-md">
+                      Backend Welch PSD history and session recording require streaming through the Python DSP pipeline.
+                    </span>
+                    {onStreamViaBackend && (
+                      <button
+                        id="btn-stream-via-backend-overlay"
+                        onClick={onStreamViaBackend}
+                        disabled={!backendConnected}
+                        className={`mt-1 flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold shadow-md transition-all ${
+                          backendConnected
+                            ? 'bg-[var(--accent-oxblood)] text-white hover:opacity-90 active:scale-95 cursor-pointer'
+                            : 'bg-white/10 text-white/40 cursor-not-allowed'
+                        }`}
+                      >
+                        <Activity size={13} />
+                        <span>Stream via Backend DSP ({backendConnected ? 'Ready' : 'Bridge Offline'})</span>
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div className="absolute right-2 top-1 font-mono-code text-[9px] text-white/50 select-none pointer-events-none z-20">
                   ▲ {maxSpectralHz} Hz
                 </div>

@@ -503,6 +503,29 @@ class BridgeClient {
     this.sendCommand({ action: 'select_source', source_type: sourceType, path, session_id: sessionId });
   }
 
+  public async uploadAndSelectSourceWav(file: File): Promise<{
+    status: string;
+    source_type: string;
+    path: string;
+    filename: string;
+    sha256: string;
+    sample_rate_hz: number;
+    total_samples: number;
+    duration_s: number;
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const resp = await this.request('/stream/upload_source_wav', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Failed to upload WAV' }));
+      throw new Error(err.detail || `Upload failed with status ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
   public startRecording(source?: string) {
     this.sendCommand({ action: 'start_recording', source });
   }

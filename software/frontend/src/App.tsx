@@ -42,6 +42,7 @@ export default function App() {
   const [analysisTargetSessionId, setAnalysisTargetSessionId] = useState<string | null>(null);
   const [sourceType, setSourceType] = useState<AudioSourceType>('none');
   const [activeMetadata, setActiveMetadata] = useState<HeartSoundMetadata | null>(null);
+  const [currentLocalFile, setCurrentLocalFile] = useState<File | null>(null);
 
   // Audio Data (Empty at startup until source selected)
   const [rawData, setRawData] = useState<Float32Array>(new Float32Array(0));
@@ -452,6 +453,7 @@ export default function App() {
   // Open a user file
   const handleOpenFile = useCallback(async (file: File) => {
     try {
+      setCurrentLocalFile(file);
       addLog(`Decoding auscultation file: ${file.name}`, 'info', 'Decoder');
       const decoded = await audioEngine.decodeUserFile(file);
       setRawData(decoded.raw);
@@ -483,12 +485,39 @@ export default function App() {
       setSourceType('file');
       setCurrentDestination('live');
       addLog(`File successfully decoded · Duration: ${decoded.duration.toFixed(2)}s`, 'info', 'Decoder');
-      addToast(`Opened ${file.name}`, 'success');
+      addToast(`Opened ${file.name} (Local Audition)`, 'success');
     } catch (err) {
       addLog(`Failed to open audio file: ${String(err)}`, 'error', 'Decoder');
       addToast('Could not open audio file. Supported formats: WAV, MP3', 'warning');
     }
   }, [addLog, addToast]);
+
+  // Explicit user action to route local audition WAV to backend DSP streaming pipeline
+  const handleStreamViaBackend = useCallback(async () => {
+    if (!backendConnected) {
+      addToast('Cannot stream: Python DSP Bridge is offline', 'warning');
+      addLog('Backend stream request rejected: Bridge offline', 'warning', 'Stream');
+      return;
+    }
+    if (!currentLocalFile) {
+      addToast('No local auscultation file selected', 'warning');
+      return;
+    }
+    try {
+      addLog(`Uploading '${currentLocalFile.name}' to backend DSP pipeline...`, 'info', 'Stream');
+      const res = await bridgeClient.uploadAndSelectSourceWav(currentLocalFile);
+      setSourceType('session');
+      setActiveSourceName(`Replay: ${res.filename}`);
+      setSampleRate(res.sample_rate_hz);
+      setDuration(res.duration_s);
+      setIsPlaying(true);
+      addLog(`Backend DSP replay active for '${res.filename}' (${(res.sample_rate_hz / 1000).toFixed(1)} kHz, SHA: ${res.sha256.slice(0, 8)}...)`, 'info', 'Stream');
+      addToast(`Streaming via Backend: ${res.filename}`, 'success');
+    } catch (err) {
+      addLog(`Backend stream setup failed: ${String(err)}`, 'error', 'Stream');
+      addToast(`Could not route to backend DSP: ${String(err)}`, 'warning');
+    }
+  }, [backendConnected, currentLocalFile, addLog, addToast]);
 
   // Truthful Device Discovery and Disconnect
   const handleDetectDevice = useCallback(async () => {
@@ -948,6 +977,7 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
               droppedDisplayFrames={droppedDisplayFrames}
               spectralFrame={spectralFrame}
               displayPointsPerSec={sourceType === 'file' || sourceType === 'sample' ? sampleRate : 3200}
+              onStreamViaBackend={handleStreamViaBackend}
             />
           )}
 

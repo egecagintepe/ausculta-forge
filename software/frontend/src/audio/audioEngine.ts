@@ -1,6 +1,70 @@
 import { FilterPreset, FilterStrength, ListeningTrack, AudioMetrics } from '../types';
 import { decodePcmWav } from './pcmWav';
 
+export const FRONTEND_FILTER_PRESETS: Record<FilterPreset, { lowHz: number; highHz: number }> = {
+  recommended: { lowHz: 20, highHz: 200 },
+  bell: { lowHz: 20, highHz: 120 },
+  diaphragm: { lowHz: 100, highHz: 500 },
+  extended: { lowHz: 20, highHz: 600 },
+  custom: { lowHz: 20, highHz: 200 },
+};
+
+/**
+ * Causal cascaded 2nd-order Biquad filter (Highpass + Lowpass).
+ * Numerically matches WebAudio BiquadFilterNode's bilinear transform transfer function.
+ */
+export function computeBiquadFilteredAudio(
+  input: Float32Array,
+  sampleRate: number,
+  fLow: number,
+  fHigh: number
+): Float32Array {
+  const nyquist = sampleRate / 2;
+  const safeLow = Math.max(1.0, Math.min(fLow, nyquist - 2.0));
+  const safeHigh = Math.max(safeLow + 1.0, Math.min(fHigh, nyquist - 1.0));
+  const q = 0.7071;
+
+  // Biquad Highpass
+  const wHp = (2 * Math.PI * safeLow) / sampleRate;
+  const alphaHp = Math.sin(wHp) / (2 * q);
+  const cosHp = Math.cos(wHp);
+  const a0Hp = 1 + alphaHp;
+  const hpB0 = (1 + cosHp) / (2 * a0Hp);
+  const hpB1 = -(1 + cosHp) / a0Hp;
+  const hpB2 = (1 + cosHp) / (2 * a0Hp);
+  const hpA1 = (-2 * cosHp) / a0Hp;
+  const hpA2 = (1 - alphaHp) / a0Hp;
+
+  // Biquad Lowpass
+  const wLp = (2 * Math.PI * safeHigh) / sampleRate;
+  const alphaLp = Math.sin(wLp) / (2 * q);
+  const cosLp = Math.cos(wLp);
+  const a0Lp = 1 + alphaLp;
+  const lpB0 = (1 - cosLp) / (2 * a0Lp);
+  const lpB1 = (1 - cosLp) / a0Lp;
+  const lpB2 = (1 - cosLp) / (2 * a0Lp);
+  const lpA1 = (-2 * cosLp) / a0Lp;
+  const lpA2 = (1 - alphaLp) / a0Lp;
+
+  const out = new Float32Array(input.length);
+  let hpX1 = 0, hpX2 = 0, hpY1 = 0, hpY2 = 0;
+  let lpX1 = 0, lpX2 = 0, lpY1 = 0, lpY2 = 0;
+
+  for (let i = 0; i < input.length; i++) {
+    const x = input[i];
+    const hpOut = hpB0 * x + hpB1 * hpX1 + hpB2 * hpX2 - hpA1 * hpY1 - hpA2 * hpY2;
+    hpX2 = hpX1; hpX1 = x;
+    hpY2 = hpY1; hpY1 = hpOut;
+
+    const lpOut = lpB0 * hpOut + lpB1 * lpX1 + lpB2 * lpX2 - lpA1 * lpY1 - lpA2 * lpY2;
+    lpX2 = lpX1; lpX1 = hpOut;
+    lpY2 = lpY1; lpY1 = lpOut;
+
+    out[i] = lpOut;
+  }
+  return out;
+}
+
 class HeartAudioEngine {
   private ctx: AudioContext | null = null;
   private sourceNode: AudioBufferSourceNode | null = null;
@@ -78,20 +142,10 @@ class HeartAudioEngine {
     const channel0 = wav?.raw ?? decodedBuffer!.getChannelData(0);
     const length = channel0.length;
     const raw = new Float32Array(length);
-    const filtered = new Float32Array(length);
     raw.set(channel0);
 
-    // shortcut: fixed audition preview is not the playback filter; compute preset traces before using it for analysis.
-    const nyquist = sampleRate / 2;
-    const lowCutNorm = Math.max(0.001, Math.min(0.9, 20 / nyquist));
-    const highCutNorm = Math.max(0.01, Math.min(0.95, 200 / nyquist));
-
-    let prev = 0;
-    for (let i = 0; i < length; i++) {
-      const hp = raw[i] - prev * (1 - lowCutNorm);
-      prev = raw[i];
-      filtered[i] = hp * (1 - (1 - highCutNorm) * 0.4);
-    }
+    const { lowHz, highHz } = FRONTEND_FILTER_PRESETS[this.filterPreset] ?? FRONTEND_FILTER_PRESETS.recommended;
+    const filtered = computeBiquadFilteredAudio(raw, sampleRate, lowHz, highHz);
 
     this.setAudioData(raw, filtered, sampleRate);
     return {
@@ -234,6 +288,13 @@ class HeartAudioEngine {
   public setFilterPreset(preset: FilterPreset) {
     this.filterPreset = preset;
     this.updateFilterParams();
+    if (this.rawData.length > 0) {
+      const { lowHz, highHz } = FRONTEND_FILTER_PRESETS[preset] ?? FRONTEND_FILTER_PRESETS.recommended;
+      this.filteredData = computeBiquadFilteredAudio(this.rawData, this.sampleRate, lowHz, highHz);
+      if (this.ctx) {
+        this.setAudioData(this.rawData, this.filteredData, this.sampleRate);
+      }
+    }
   }
 
   public getFilterPreset(): FilterPreset {
@@ -344,28 +405,10 @@ class HeartAudioEngine {
 
   private updateFilterParams() {
     if (!this.filterHighPass || !this.filterLowPass || !this.ctx) return;
-
-    if (this.filterPreset === 'bell') {
-      // 20 Hz - 100 Hz (Low Rumble Emphasized)
-      this.filterHighPass.frequency.setTargetAtTime(20, this.ctx.currentTime, 0.03);
-      this.filterLowPass.frequency.setTargetAtTime(100, this.ctx.currentTime, 0.03);
-      this.filterLowPass.Q.setTargetAtTime(1.0, this.ctx.currentTime, 0.03);
-    } else if (this.filterPreset === 'diaphragm') {
-      // 100 Hz - 500 Hz (Murmur / Regurgitation)
-      this.filterHighPass.frequency.setTargetAtTime(100, this.ctx.currentTime, 0.03);
-      this.filterLowPass.frequency.setTargetAtTime(500, this.ctx.currentTime, 0.03);
-      this.filterLowPass.Q.setTargetAtTime(1.1, this.ctx.currentTime, 0.03);
-    } else if (this.filterPreset === 'extended') {
-      // 10 Hz - 2000 Hz (Extended Unfiltered Feed)
-      this.filterHighPass.frequency.setTargetAtTime(10, this.ctx.currentTime, 0.03);
-      this.filterLowPass.frequency.setTargetAtTime(2000, this.ctx.currentTime, 0.03);
-      this.filterLowPass.Q.setTargetAtTime(0.707, this.ctx.currentTime, 0.03);
-    } else {
-      // Narrow Dev Preset: 20 Hz - 200 Hz (4th Order Chebyshev/Butterworth)
-      this.filterHighPass.frequency.setTargetAtTime(20, this.ctx.currentTime, 0.03);
-      this.filterLowPass.frequency.setTargetAtTime(200, this.ctx.currentTime, 0.03);
-      this.filterLowPass.Q.setTargetAtTime(0.707, this.ctx.currentTime, 0.03);
-    }
+    const { lowHz, highHz } = FRONTEND_FILTER_PRESETS[this.filterPreset] ?? FRONTEND_FILTER_PRESETS.recommended;
+    this.filterHighPass.frequency.setTargetAtTime(lowHz, this.ctx.currentTime, 0.03);
+    this.filterLowPass.frequency.setTargetAtTime(highHz, this.ctx.currentTime, 0.03);
+    this.filterLowPass.Q.setTargetAtTime(0.7071, this.ctx.currentTime, 0.03);
   }
 
   // Export 16-bit PCM WAV

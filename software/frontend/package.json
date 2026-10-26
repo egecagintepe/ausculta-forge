@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx src/tests/live_workspace_math.test.ts && tsx src/tests/scientific_ui_truth.test.ts && tsx src/tests/device_first_contact.test.ts && tsx src/tests/acquisition_stop_gate.test.ts && tsx src/tests/spectral_history.test.ts && tsx src/tests/file_audio_import.test.ts",
+    "test": "tsx src/tests/live_workspace_math.test.ts && tsx src/tests/scientific_ui_truth.test.ts && tsx src/tests/device_first_contact.test.ts && tsx src/tests/acquisition_stop_gate.test.ts && tsx src/tests/spectral_history.test.ts && tsx src/tests/file_audio_import.test.ts && tsx src/tests/filter_transfer_response.test.ts",
     "tauri": "tauri"
   },
   "dependencies": {
