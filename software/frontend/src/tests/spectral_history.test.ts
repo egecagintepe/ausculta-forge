@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { appendSpectrum, spectrumColumn, spectralMaxFrequency, spectrumOrigin, MAX_SPECTRAL_FRAMES } from '../api/spectralHistory';
 import type { SpectralFrameData } from '../types';
 import { resolveStreamHealthState } from '../components/FooterStatus';
+import { bridgeClient } from '../api/bridgeClient';
 
 function frame(end: number, stream = 'A', fs = 48000): SpectralFrameData {
   return { stream_id: stream, window_start_ts: end - 0.1, window_end_ts: end,
@@ -35,4 +36,12 @@ assert.equal(resolveStreamHealthState({ backendConnected: true, sourceType: 'dev
   totalBlocks: 1875, isStreaming: false }).state, 'NO_ACTIVE_ACQUISITION');
 assert.equal(resolveStreamHealthState({ backendConnected: true, sourceType: 'device',
   totalBlocks: 1875, isStreaming: true }).state, 'STREAM_HEALTHY');
+const observedStates: string[] = [];
+const unsubscribe = bridgeClient.onDeviceState(device => observedStates.push(device.state));
+// Exercise the actual WebSocket dispatch seam with both supported wire shapes.
+const dispatch = bridgeClient as unknown as { handleMessage(message: Record<string, unknown>): void };
+dispatch.handleMessage({ type: 'device_state', state: 'streaming', connected: true });
+dispatch.handleMessage({ type: 'device_state', state: { state: 'ready', connected: true } });
+unsubscribe();
+assert.deepEqual(observedStates, ['streaming', 'ready']);
 console.log('PASS: timed columns, gaps, reset/rewind/rate change, bounds, Nyquist and origin labels');

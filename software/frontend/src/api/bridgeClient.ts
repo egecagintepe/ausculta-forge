@@ -413,7 +413,7 @@ class BridgeClient {
         this.deviceStateListeners.forEach(cb => cb(msg.device_state as unknown as DeviceRuntimeState));
       }
     } else if (type === 'device_state') {
-      const dev = (msg.state || msg) as unknown as DeviceRuntimeState;
+      const dev = (typeof msg.state === 'object' && msg.state !== null ? msg.state : msg) as unknown as DeviceRuntimeState;
       this.deviceStateListeners.forEach(cb => cb(dev));
     } else if (type === 'device_event') {
       const evt = (msg.event || msg) as unknown as DeviceEventItem;
