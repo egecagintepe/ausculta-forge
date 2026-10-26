@@ -27,4 +27,4 @@ All files in this folder must follow the canonical naming pattern:
 
 ## Status
 
-All tasks for Week 6 are initially **NOT STARTED**. Update status fields as work progresses.
+**2026-10-26:** [Spectrogram and recording metadata delivery](W06_C_spectrogram-recording-metadata.md) now records actual implementation (`574b52e`) and PASS software tests (615 Python, 6 Rust, frontend tests/typecheck/build). New physical CLI G1 is independently archived; actual GUI G1/export passed at 59d773e; final e90785e HELLO/READY/disconnect passed, with full G1 repeat NOT_EXECUTED (two-start limit). G2 remains PENDING. Historical reports retain their original test scope.

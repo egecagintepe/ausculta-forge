@@ -1,4 +1,9 @@
 # AuscultaForge — Week 05 Module C Technical Report
+
+> **Current-status addendum — 2026-10-26 (documentation review, baseline `106d3e0`):** **New physical CLI G1 PASS verified on 2026-10-26 at 07:50 UTC**, host `106d3e0`, COM7 / VID:PID `303A:4001`, firmware `1.1.0`, protocol `1.0`: 480000 accepted samples, 1875 frames, zero integrity errors and STOP_ACK. Local original evidence: `experiments/hardware/week6_20261026_sprint/cli-g1/20261026T075048Z_f26df565/g1_protocol_summary.json`. The earlier laptop run remains user-reported; this is a separate new mini PC run. GUI physical G1 **PASS at 59d773e** on 2026-10-26 08:14 UTC; final e90785e GUI HELLO/READY/disconnect **PASS**, full G1 repeat **NOT_EXECUTED (two-start limit)**. Real microphone G2 remains **PENDING**. See the [sprint report](../../../../engineering/release/WEEK6_SPRINT_REPORT.md). See the [current closeout and missing-evidence register](W05_C_live-display-recording-verification.md).
+>
+> The body below is a **historical snapshot**, including its status fields, proposals, implementation descriptions and test outputs; none was rerun today. Statements about hardware arrival, pending USB/decoder implementation or untested G1 describe that earlier baseline, not the current checkout. Canonical host code now exists in `software/pcg_app/canonical/`; implementation does not prove joint Module B sign-off or microphone qualification.
+
 ## Host Transport Readiness & Plug-and-Play Integration Architecture
 
 - **Document ID:** `W05_C_host-transport-readiness_v01`

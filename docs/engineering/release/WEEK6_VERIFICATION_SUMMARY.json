@@ -1,0 +1,298 @@
+{
+  "date": "2026-10-26",
+  "starting_commit": "106d3e00d9a9de4813eb100ec4a95f9736a09c50",
+  "code_commits": [
+    "574b52e583ea9bf758bb88eddab3b5a9fec4e641",
+    "59d773ef58a2b520475569f4b02fb6dac151eaf6",
+    "e90785e91853992138a1e421fe458073fe9fcb22"
+  ],
+  "physical_g1_starts": 2,
+  "port": "COM7",
+  "vid_pid": "303A:4001",
+  "cli_g1": {
+    "mode": "DETERMINISTIC_G1",
+    "target_samples": 480000,
+    "host_samples_accepted": 480000,
+    "host_frames_accepted": 1875,
+    "host_sample_value_errors": 0,
+    "host_index_discontinuities": 0,
+    "firmware_samples_generated": 480000,
+    "firmware_samples_dropped": 0,
+    "verification_result": "PASS",
+    "conclusion": "PHYSICAL_G1_PASSED",
+    "verified_at_utc": "2026-10-26T07:50:48.893838+00:00",
+    "is_simulated": false,
+    "physical_transport": true,
+    "gates": {
+      "handshake": "PASS",
+      "configuration": "PASS",
+      "firmware_version": "PASS",
+      "session": "PASS",
+      "stop_ack": "PASS",
+      "exact_samples": "PASS",
+      "exact_frames": "PASS",
+      "sample_integrity": "PASS",
+      "crc": "PASS",
+      "sequence": "PASS",
+      "indices": "PASS",
+      "timestamps": "PASS",
+      "frame_format": "PASS",
+      "parser": "PASS",
+      "session_errors": "PASS",
+      "host_ingestion": "PASS",
+      "physical_generation_window": "PASS",
+      "telemetry": "PASS"
+    },
+    "failure_reasons": [],
+    "sha256_hash": "08f55010ada204d8f4631749b2976afd432a29167c3a8a2220a46fad6386ce96",
+    "host_integrity": {
+      "crc_errors": 0,
+      "sequence_gaps": 0,
+      "duplicates": 0,
+      "reordered_frames": 0,
+      "malformed_headers": 0,
+      "incomplete_bytes": 0,
+      "discarded_garbage_bytes": 0,
+      "timestamp_errors": 0,
+      "host_ingestion_errors": 0
+    },
+    "telemetry": {
+      "generated_samples": 480000,
+      "fully_queued_samples": 480000,
+      "dropped_samples": 0,
+      "audio_frames_queued": 1875,
+      "dma_overflow_events": 0,
+      "ring_overflow_events": 0,
+      "usb_partial_write_events": 0,
+      "usb_timeout_events": 0,
+      "usb_disconnect_events": 0,
+      "audio_bytes_queued": 2002500,
+      "stop_reason": 0,
+      "error_code": 0
+    },
+    "firmware_version": "1.1.0",
+    "protocol_version": "1.0",
+    "sample_rate_hz": 48000,
+    "max_frame_samples": 256
+  },
+  "gui_g1": {
+    "mode": "DETERMINISTIC_G1",
+    "target_samples": 480000,
+    "host_samples_accepted": 480000,
+    "host_frames_accepted": 1875,
+    "host_sample_value_errors": 0,
+    "host_index_discontinuities": 0,
+    "firmware_samples_generated": 480000,
+    "firmware_samples_dropped": 0,
+    "verification_result": "PASS",
+    "conclusion": "PHYSICAL_G1_PASSED",
+    "verified_at_utc": "2026-10-26T08:14:50.261038+00:00",
+    "is_simulated": false,
+    "physical_transport": true,
+    "gates": {
+      "handshake": "PASS",
+      "configuration": "PASS",
+      "firmware_version": "PASS",
+      "session": "PASS",
+      "stop_ack": "PASS",
+      "exact_samples": "PASS",
+      "exact_frames": "PASS",
+      "sample_integrity": "PASS",
+      "crc": "PASS",
+      "sequence": "PASS",
+      "indices": "PASS",
+      "timestamps": "PASS",
+      "frame_format": "PASS",
+      "parser": "PASS",
+      "session_errors": "PASS",
+      "host_ingestion": "PASS",
+      "physical_generation_window": "PASS",
+      "telemetry": "PASS"
+    },
+    "failure_reasons": [],
+    "sha256_hash": "08f55010ada204d8f4631749b2976afd432a29167c3a8a2220a46fad6386ce96",
+    "host_integrity": {
+      "crc_errors": 0,
+      "sequence_gaps": 0,
+      "duplicates": 0,
+      "reordered_frames": 0,
+      "malformed_headers": 0,
+      "incomplete_bytes": 0,
+      "discarded_garbage_bytes": 0,
+      "timestamp_errors": 0,
+      "host_ingestion_errors": 0
+    },
+    "telemetry": {
+      "generated_samples": 480000,
+      "fully_queued_samples": 480000,
+      "dropped_samples": 0,
+      "audio_frames_queued": 1875,
+      "dma_overflow_events": 0,
+      "ring_overflow_events": 0,
+      "usb_partial_write_events": 0,
+      "usb_timeout_events": 0,
+      "usb_disconnect_events": 0,
+      "audio_bytes_queued": 2002500,
+      "stop_reason": 0,
+      "error_code": 0
+    },
+    "firmware_version": "1.1.0",
+    "protocol_version": "1.0",
+    "sample_rate_hz": 48000,
+    "max_frame_samples": 256
+  },
+  "gui_g1_source_commit": "59d773ef58a2b520475569f4b02fb6dac151eaf6",
+  "final_gui_source_commit": "e90785e91853992138a1e421fe458073fe9fcb22",
+  "final_gui_hello_and_ready": "PASS",
+  "final_gui_g1_repeat": "NOT_EXECUTED_TWO_ATTEMPT_LIMIT",
+  "port_release": "PASS",
+  "physical_recording": "NOT_EXECUTED_NO_WAV_CLAIM",
+  "g2_microphone": "NOT_EXECUTED",
+  "acoustics": "NOT_EXECUTED",
+  "firmware_binary_authentication": "UNAVAILABLE_HELLO_VERSION_ONLY",
+  "installer_installation": "NOT_EXECUTED_EXISTING_INSTALLATION_PRESERVED",
+  "tests": {
+    "python-full": {
+      "command": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "pytest",
+        "software/tests",
+        "firmware/tests",
+        "tools/protocol_lab/python/test_canonical_protocol.py",
+        "tools/protocol_lab/python/test_physical_acceptance_gates.py",
+        "-q",
+        "--junitxml=experiments/hardware/week6_20261026_sprint/python-full.xml"
+      ],
+      "cwd": ".",
+      "started_utc": "2026-10-26T07:54:45.709963+00:00",
+      "ended_utc": "2026-10-26T07:56:03.365594+00:00",
+      "exit_code": 0,
+      "passed": 615,
+      "failed": 0
+    },
+    "frontend-statefix-lint": {
+      "command": [
+        "npm.cmd",
+        "run",
+        "lint"
+      ],
+      "cwd": ".\\software\\frontend",
+      "started_utc": "2026-10-26T08:17:47.032184+00:00",
+      "ended_utc": "2026-10-26T08:17:49.467479+00:00",
+      "exit_code": 0
+    },
+    "frontend-statefix-test": {
+      "command": [
+        "npm.cmd",
+        "test"
+      ],
+      "cwd": ".\\software\\frontend",
+      "started_utc": "2026-10-26T08:17:47.032184+00:00",
+      "ended_utc": "2026-10-26T08:17:49.429643+00:00",
+      "exit_code": 0
+    },
+    "frontend-build": {
+      "command": [
+        "npm.cmd",
+        "run",
+        "build"
+      ],
+      "cwd": ".\\software\\frontend",
+      "started_utc": "2026-10-26T07:57:13.807018+00:00",
+      "ended_utc": "2026-10-26T07:57:28.954260+00:00",
+      "exit_code": 0
+    },
+    "rust-tests": {
+      "command": [
+        "cargo",
+        "test",
+        "--locked"
+      ],
+      "cwd": ".\\software\\frontend\\src-tauri",
+      "started_utc": "2026-10-26T07:55:02.130220+00:00",
+      "ended_utc": "2026-10-26T07:55:49.894685+00:00",
+      "exit_code": 0,
+      "passed": 6
+    },
+    "pyinstaller-build": {
+      "command": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-B",
+        "software/build_desktop_backend.py"
+      ],
+      "cwd": ".",
+      "started_utc": "2026-10-26T07:58:11.232772+00:00",
+      "ended_utc": "2026-10-26T08:01:42.162298+00:00",
+      "exit_code": 0
+    },
+    "nsis-statefix-build": {
+      "command": [
+        "npm.cmd",
+        "run",
+        "tauri",
+        "--",
+        "build",
+        "--bundles",
+        "nsis"
+      ],
+      "cwd": ".\\software\\frontend",
+      "started_utc": "2026-10-26T08:18:35.354594+00:00",
+      "ended_utc": "2026-10-26T08:23:08.008980+00:00",
+      "exit_code": 0
+    }
+  },
+  "artifacts": {
+    "installer": {
+      "path": "software/frontend/src-tauri/target/release/bundle/nsis/AuscultaForge_0.1.0-alpha.1_x64-setup.exe",
+      "bytes": 165101259,
+      "mtime_utc": "2026-10-26T08:23:07.943719+00:00",
+      "sha256": "dff76ce9e086a5d7435885c574fbcb3668a3dd2bdcc5e1ac872d3e0abc7a1bf9"
+    },
+    "gui_tested_installer": {
+      "path": "experiments/hardware/week6_20261026_sprint/gui-tested-59d773e-setup.exe",
+      "bytes": 165096422,
+      "mtime_utc": "2026-10-26T08:12:10.033509+00:00",
+      "sha256": "29aabaea1c4a661ced1f837e64e960f08a00b0bef4057b94efedf0109f5cd920"
+    },
+    "desktop": {
+      "path": "software/frontend/src-tauri/target/release/auscultaforge-desktop.exe",
+      "bytes": 9137152,
+      "mtime_utc": "2026-10-26T08:23:07.977088+00:00",
+      "sha256": "f6066f4ebcbc2506dd6b04e97b1b1b7d21c1588f1abf1a67f7aecd855178f4bd"
+    },
+    "backend": {
+      "path": "software/dist_backend/auscultaforge-backend/auscultaforge-backend.exe",
+      "bytes": 58488864,
+      "mtime_utc": "2026-10-26T08:01:34.773715+00:00",
+      "sha256": "0d852f9e68ab2c44b64acbef476db09d14c55c6b53a712577cb105e0ce612cb1"
+    }
+  },
+  "evidence_files": {
+    "experiments/hardware/week6_20261026_sprint/cli-g1/20261026T075048Z_f26df565/g1_protocol_summary.json": "faf61a19f53d6e88d17704b67709a305738d4f3f32d306935423249f634e49ab",
+    "experiments/hardware/week6_20261026_sprint/cli-g1/20261026T075048Z_f26df565/sha256_manifest.json": "b5d381b875256ea6a35481e79ca767ff977881522d0a94fb765575cf4921d933",
+    "experiments/hardware/week6_20261026_sprint/cli-run.json": "2667a2f3a9797f764e65d24cf007d95e440e1b234f6cd133f50b6fc847297139",
+    "experiments/hardware/week6_20261026_sprint/cli-stdout.txt": "602df51c42490992a69a86bc06e6946ca12868bd7d776d1727aa0e31b4fb3c12",
+    "experiments/hardware/week6_20261026_sprint/gui-export-evidence.zip": "028b137084b14791735c9edf5a0de340700000b92c24e24a1048aca8006046f5",
+    "experiments/hardware/week6_20261026_sprint/gui-ready-tree.txt": "391d0aa228c804613fb810c6e2eb256977000ce147e75faab2aa52f123f843be",
+    "experiments/hardware/week6_20261026_sprint/gui-stream-tree.txt": "00b2bdd191190afdb8ff540948c068aad7b29d16e45d19d65cbf6cdef3dfcea4",
+    "experiments/hardware/week6_20261026_sprint/gui-complete-tree.txt": "82c134226bbcdfb2d82ad2ee1fac9f3871e749e3e908f5900d21fd33d09243ec",
+    "experiments/hardware/week6_20261026_sprint/gui-port-release.json": "8042c4638b5cd532dc1a5cac631e694a516214f9bb1de62458fe115f95bcca3c",
+    "experiments/hardware/week6_20261026_sprint/gui-control-accounting.json": "e2ba3c5f07b86e0269484d83d9bc409890482c5d316fdaa4784f8b1468f2648e",
+    "experiments/hardware/week6_20261026_sprint/gui-statefix-ready-tree.txt": "237a16dd9bf7d91672502c0b69811dc5de213bc99324cb7226a60af353d42e4b",
+    "experiments/hardware/week6_20261026_sprint/gui-statefix-disconnected-tree.txt": "9fad1f2d0e6a8adaf74d5578627b6d386eeb3c83f07b5b573eb1d0f534e0d23e",
+    "experiments/hardware/week6_20261026_sprint/gui-statefix-hello-result.json": "cea1cf439efc9788fb646b48b9af43eff38c9aa5348935c17dd5658031106e66",
+    "experiments/hardware/week6_20261026_sprint/final-port-release.json": "a9eb794fb649d81a0f1777006633f708416f40e3a537a6e69d67c7ae08d22784",
+    "experiments/hardware/week6_20261026_sprint/backend-provenance.json": "1d01fc2550164fc3a4d4cca495874ab6679ef5cc89112c4aa2803d9e12f9689b",
+    "experiments/hardware/week6_20261026_sprint/python-full.xml": "2635d7555d77d61911b28f5478230a424d21bd1949081f67016fa2756e9256ab",
+    "experiments/hardware/week6_20261026_sprint/targeted-tests.txt": "ca955042df75b5b4952cc3f418a4304c054805e82a09a9b429b052dcedcaef84"
+  },
+  "warnings": [
+    "Starlette/httpx deprecation",
+    "TorchScript deprecation",
+    "Vite chunk >500 kB",
+    "Rust linker informational output",
+    "PyInstaller optional tensorboard/CUDA/cross-platform hidden-import warnings; core packaged HTTP smoke passed"
+  ]
+}
