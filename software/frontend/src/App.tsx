@@ -231,7 +231,7 @@ export default function App() {
       if (st.filter_preset) setFilterPreset(st.filter_preset);
       if (st.sample_rate_hz) setSampleRate(st.sample_rate_hz);
       if (st.active_source_name) setActiveSourceName(st.active_source_name);
-      if (st.source_type === 'hardware') setSourceType('device');
+      if (st.source_type === 'hardware') setSourceType(st.active_source_name?.startsWith('SOFTWARE SIMULATION:') ? 'synthetic' : 'device');
       else if (st.source_type === 'synthetic_dev') setSourceType('synthetic');
       else if (st.source_type === 'session' || st.source_type === 'realtime_wav') setSourceType('session');
       if (typeof st.is_paused === 'boolean') {
