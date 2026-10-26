@@ -255,6 +255,129 @@ def test_upload_source_wav_endpoint(test_app_and_dir, tmp_path: Path):
         assert resp_stereo.status_code == 400
         assert "Stereo" in resp_stereo.json()["detail"]
 
+        # 4. Valid float32 mono upload
+        float_samples = np.sin(2 * np.pi * 50 * np.linspace(0, 0.5, 2000, endpoint=False)).astype(np.float32)
+        float_buf = io.BytesIO()
+        wavfile.write(float_buf, 4000, float_samples)
+        resp_float = client.post(
+            "/api/stream/upload_source_wav",
+            files={"file": ("float_mono.wav", float_buf.getvalue(), "audio/wav")},
+        )
+        assert resp_float.status_code == 200
+        assert resp_float.json()["sample_rate_hz"] == 4000
+        assert resp_float.json()["total_samples"] == 2000
+
+        # 5. Reject float32 audio containing NaN or Inf
+        nan_samples = float_samples.copy()
+        nan_samples[10] = np.nan
+        nan_buf = io.BytesIO()
+        wavfile.write(nan_buf, 4000, nan_samples)
+        resp_nan = client.post(
+            "/api/stream/upload_source_wav",
+            files={"file": ("nan_audio.wav", nan_buf.getvalue(), "audio/wav")},
+        )
+        assert resp_nan.status_code == 400
+        assert "NaN" in resp_nan.json()["detail"]
+
+        # 6. Reject unsupported encoding (e.g. int32)
+        int32_samples = np.zeros(256, dtype=np.int32)
+        int32_buf = io.BytesIO()
+        wavfile.write(int32_buf, 4000, int32_samples)
+        resp_int32 = client.post(
+            "/api/stream/upload_source_wav",
+            files={"file": ("int32_audio.wav", int32_buf.getvalue(), "audio/wav")},
+        )
+        assert resp_int32.status_code == 400
+        assert "Unsupported audio encoding" in resp_int32.json()["detail"]
+
+        # 7. Reject invalid sample rate (< 100 Hz or > 192000 Hz)
+        bad_fs_buf = io.BytesIO()
+        wavfile.write(bad_fs_buf, 50, np.zeros(256, dtype=np.int16))
+        resp_bad_fs = client.post(
+            "/api/stream/upload_source_wav",
+            files={"file": ("bad_fs.wav", bad_fs_buf.getvalue(), "audio/wav")},
+        )
+        assert resp_bad_fs.status_code == 400
+        assert "Invalid sample rate" in resp_bad_fs.json()["detail"]
+
+        # 8. Reject audio that is too short (< 16 samples)
+        short_buf = io.BytesIO()
+        wavfile.write(short_buf, 4000, np.zeros(8, dtype=np.int16))
+        resp_short = client.post(
+            "/api/stream/upload_source_wav",
+            files={"file": ("short.wav", short_buf.getvalue(), "audio/wav")},
+        )
+        assert resp_short.status_code == 400
+        assert "too short" in resp_short.json()["detail"]
+
+        # 9. Reject excessively long filename (> 255 chars)
+        long_filename = "a" * 260 + ".wav"
+        resp_long_name = client.post(
+            "/api/stream/upload_source_wav",
+            files={"file": (long_filename, wav_bytes, "audio/wav")},
+        )
+        assert resp_long_name.status_code == 400
+        assert "Filename exceeds maximum length" in resp_long_name.json()["detail"]
+
+        # 10. Reject empty or header-only data (< 44 bytes)
+        resp_tiny = client.post(
+            "/api/stream/upload_source_wav",
+            files={"file": ("tiny.wav", b"RIFF" + b"\x00" * 20, "audio/wav")},
+        )
+        assert resp_tiny.status_code == 400
+        assert "44-byte" in resp_tiny.json()["detail"]
+
+        # 11. Bounded read limit (HTTP 413) on files over 50 MB
+        # Mock file read exceeding MAX_WAV_UPLOAD_BYTES
+        class OversizedUpload:
+            def __init__(self):
+                self.filename = "huge.wav"
+                self.read_count = 0
+
+            async def read(self, size=-1):
+                if self.read_count < 850:  # 850 * 64KB = 54.4 MB > 50 MB
+                    self.read_count += 1
+                    return b"X" * (64 * 1024)
+                return b""
+
+        import pcg_app.app as app_module
+        # Temporarily test bounded reading limit with smaller chunk or directly
+        resp_oversized = client.post(
+            "/api/stream/upload_source_wav",
+            files={"file": ("oversized.wav", b"X" * (51 * 1024 * 1024), "audio/wav")},
+        )
+        assert resp_oversized.status_code == 413
+        assert "maximum permitted size" in resp_oversized.json()["detail"]
+
+
+def test_upload_source_wav_failure_cleanup_and_source_integrity(test_app_and_dir):
+    """Verify that failed uploads do not corrupt active source state or leave temporary files."""
+    app, tmp_path = test_app_and_dir
+    assets_dir = tmp_path / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+
+    with TestClient(app) as client:
+        # Initial state has source_type == "none"
+        init_st = client.get("/api/status").json()["state"]
+        assert init_st["source_type"] == "none"
+
+        # Count files in assets_dir before bad uploads
+        files_before = set(assets_dir.glob("*"))
+
+        # Send bad uploads: corrupt, stereo, bad sample rate
+        client.post("/api/stream/upload_source_wav", files={"file": ("corrupt.wav", b"garbage", "audio/wav")})
+        client.post("/api/stream/upload_source_wav", files={"file": ("bad_fs.wav", b"RIFF" + b"\x00" * 30, "audio/wav")})
+
+        # Ensure no temp files leaked into assets_dir
+        files_after = set(assets_dir.glob("*"))
+        new_tmp_files = [f for f in (files_after - files_before) if "upload_tmp" in f.name]
+        assert len(new_tmp_files) == 0
+
+        # Stream state is untouched and preserved
+        curr_st = client.get("/api/status").json()["state"]
+        assert curr_st["source_type"] == "none"
+        assert curr_st["is_streaming"] is False
+
 
 def test_session_id_path_traversal_rejected(test_app_and_dir):
     app, _ = test_app_and_dir

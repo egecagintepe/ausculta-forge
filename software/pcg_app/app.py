@@ -1038,6 +1038,9 @@ def create_app(
         await manager.broadcast(make_stream_state_message(st))
         return st
 
+    MAX_WAV_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB upper bound
+    MAX_FILENAME_LENGTH = 255
+
     @app.post("/api/stream/upload_source_wav")
     async def api_upload_source_wav(file: UploadFile = File(...)) -> dict[str, Any]:
         """Upload a local PCG WAV file and select it as the active realtime_wav replay source.
@@ -1045,49 +1048,130 @@ def create_app(
         Preserves original sampling rate (e.g. 2 kHz, 4 kHz), exact byte content, and SHA-256 hash.
         Connects local audition files to the backend DSP streaming pipeline, live Welch spectrogram,
         and session recording.
+
+        Enforces:
+        - Bounded streaming read up to 50 MB (HTTP 413 if exceeded)
+        - Clean filename sanitization (max 255 chars)
+        - Strict validation of mono PCM16 or Float32 WAV encoding
+        - Sample rate validity (100 Hz <= fs <= 192000 Hz)
+        - Absence of NaN or Infinite values in floating-point audio
+        - Atomic file staging with cleanup of temporary or corrupted files on failure
         """
         if not file.filename:
             raise HTTPException(status_code=400, detail="Filename missing")
 
-        content = await file.read()
-        if not content or len(content) < 44:
-            raise HTTPException(status_code=400, detail="Invalid WAV file: data empty or shorter than 44-byte header")
+        raw_filename = Path(file.filename).name.strip()
+        if not raw_filename:
+            raise HTTPException(status_code=400, detail="Filename cannot be empty")
+        if len(raw_filename) > MAX_FILENAME_LENGTH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Filename exceeds maximum length of {MAX_FILENAME_LENGTH} characters",
+            )
+
+        # Bounded read to avoid memory exhaustion
+        content_buf = bytearray()
+        chunk_size = 64 * 1024  # 64 KB chunks
+        while True:
+            chunk = await file.read(chunk_size)
+            if not chunk:
+                break
+            content_buf.extend(chunk)
+            if len(content_buf) > MAX_WAV_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File exceeds maximum permitted size of {MAX_WAV_UPLOAD_BYTES // (1024 * 1024)} MB",
+                )
+
+        content = bytes(content_buf)
+        if len(content) < 44:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid WAV file: data empty or shorter than standard 44-byte RIFF/WAV header",
+            )
 
         import io
+        import math
         import re
+        import uuid
+        import numpy as np
         from scipy.io import wavfile
+
         try:
             buf = io.BytesIO(content)
             fs, data = wavfile.read(buf)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Corrupt or unsupported WAV format: {e}")
 
-        if fs <= 0:
-            raise HTTPException(status_code=400, detail=f"Invalid sample rate: {fs}")
+        if not (isinstance(fs, (int, float, np.integer, np.floating)) and math.isfinite(float(fs)) and 100 <= fs <= 192000):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid sample rate: {fs} Hz. Supported range is 100 Hz to 192000 Hz.",
+            )
+
+        # Enforce supported data encodings: mono PCM16 or Float32
+        if data.dtype not in (np.int16, np.float32):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported audio encoding: {data.dtype}. Only mono PCM 16-bit (int16) and 32-bit floating-point (float32) WAV files are supported.",
+            )
 
         if data.ndim > 1:
-            if (data.shape[1] if data.ndim >= 2 else 2) > 1:
-                raise HTTPException(status_code=400, detail="Stereo audio is not supported. Please provide a mono WAV file.")
-            data = data.squeeze()
+            if data.ndim == 2 and data.shape[1] == 1:
+                data = data.squeeze(axis=1)
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Stereo or multichannel audio is not supported. Please provide a mono WAV file.",
+                )
+
+        # Floating-point signal sanity check (NaN / Inf)
+        if np.issubdtype(data.dtype, np.floating):
+            if not np.all(np.isfinite(data)):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Audio signal contains invalid NaN or Infinite values.",
+                )
 
         if len(data) < 16:
-            raise HTTPException(status_code=400, detail=f"Audio signal too short: {len(data)} samples (min 16 required)")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Audio signal too short: {len(data)} samples (min 16 required)",
+            )
 
         sha256_hash = hashlib.sha256(content).hexdigest()
-        clean_name = Path(file.filename).name.strip()
-        clean_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", clean_name)
+        clean_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", raw_filename)
         if not clean_name.lower().endswith(".wav"):
             clean_name += ".wav"
 
-        # Save to assets_dir preserving exact bytes unchanged
+        # Staged atomic file write in assets_dir
+        analysis.assets_dir.mkdir(parents=True, exist_ok=True)
         target_path = analysis.assets_dir / f"stream_{sha256_hash[:12]}_{clean_name}"
-        if not target_path.exists():
-            target_path.write_bytes(content)
+        temp_path = analysis.assets_dir / f"upload_tmp_{uuid.uuid4().hex[:12]}_{clean_name}"
+        created_fresh = False
 
-        # Select as realtime_wav
+        if not target_path.exists():
+            try:
+                temp_path.write_bytes(content)
+                temp_path.replace(target_path)
+                created_fresh = True
+            except Exception as e:
+                if temp_path.exists():
+                    try:
+                        temp_path.unlink()
+                    except Exception:
+                        pass
+                raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {e}")
+
+        # Activate realtime_wav in stream manager
         try:
             st = manager.select_source("realtime_wav", path=str(target_path))
         except Exception as e:
+            if created_fresh and target_path.exists():
+                try:
+                    target_path.unlink()
+                except Exception:
+                    pass
             raise HTTPException(status_code=500, detail=f"Failed to activate source: {e}")
 
         await manager.broadcast(make_stream_state_message(st))
@@ -1102,6 +1186,7 @@ def create_app(
             "duration_s": round(float(len(data) / fs), 4),
             "stream_state": st,
         }
+
 
     @app.post("/api/recording/start")
     async def api_start_recording(req: RecordingStartRequest) -> dict[str, Any]:
