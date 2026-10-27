@@ -1,30 +1,24 @@
-# Module A -- Acquisition Hardware and Characterisation
-## Submission Folder -- Week 5
+# Module A - Acquisition Hardware and Characterisation
+## Week 5 submission - Kaan
 
-| Field | Value |
-|---|---|
-| **Owner** | Kaan |
-| **Module** | A -- Acquisition Hardware and Characterisation |
-| **Week** | 5 |
-| **Purpose** | Collect all Week-5 deliverables for Module A |
+**Status: preparation documented; physical experiments PENDING.**
 
-## Naming Convention
+- [Required Week 5 submission](W05_A_breadboard-front-end-bench-test.md)
+- [English technical report](W05_A_acoustic-hardware-preparation-report_v01.pdf) - internal revision 1.1; first repository file version v01.
+- [Inventory](W05_A_material-inventory_v01.md)
+- [Mechanical design](W05_A_mechanical-design_v01.md)
+- [Week 6 preparation](W05_A_week06-test-readiness_v01.md)
 
-All files in this folder must follow the canonical naming pattern:
+All inventory-table items except Kingstate were reported received. Measurements have not been performed. Drawings are conditional engineering proposals requiring actual-part fit checks.
 
-`W05_A_<short-description>_vNN.<ext>`
+The original Week 5 breadboard/shorted-input-noise task remains outstanding. This submission does not declare the hardware milestone passed.
 
-**Examples:**
-- `W05_A_example-task_v01.pdf`
-- `W05_A_example-task_v01.md`
+Student project; phantom-only work; no diagnostic claim.
 
-## Instructions
+## Submission conventions
 
-- Original PDF, DOCX, and XLSX deliverables may be placed in this folder alongside Markdown summaries.
-- **Do not fabricate measurements, results, or component decisions.** Record only what has actually been performed.
-- **Preserve original source files** when uploading (do not replace earlier versions; increment the version suffix instead).
-- Where possible, commit evidence files from your own GitHub account so the contribution history reflects your individual work.
+Versioned deliverables use `W05_A_<short-description>_vNN.<ext>`. Preserve earlier source/report versions and increment the suffix for later replacements. The existing required Markdown template is maintained in place. Original PDF, DOCX and XLSX deliverables may accompany Markdown summaries. Record only actual work; do not fabricate measurements, results or decisions. Use the owner's account for an attributable contribution history.
 
-## Status
+## Repository reconciliation - 27 October 2026
 
-All tasks for Week 5 are initially **NOT STARTED**. Update status fields as work progresses.
+The [shared Week 5 status](../../README.md) records separate Module C/USB G1 evidence from 26 October. That work is not presented as Kaan's experiment. It does not demonstrate real microphone G2 or acoustic characterisation, which remain pending. The report retains its 26 October preparation date and Week 5 reporting period (19-25 October). This documentation delivery does not close the original physical bench milestone.
