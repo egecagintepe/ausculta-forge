@@ -1,4 +1,4 @@
-﻿param(
+param(
     [switch]$Json,
     [string]$Output = ""
 )
@@ -176,7 +176,7 @@ if ($Json) {
 
 $parsed = $jsonOut | ConvertFrom-Json
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "  AuscultaForge — Windows Handoff Preflight (Passive)" -ForegroundColor Cyan
+Write-Host "  AuscultaForge - Windows Handoff Preflight (Passive)" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ("Repo Root    : {0}" -f $parsed.repo_root)
 if (-not $parsed.path_ascii_no_spaces) {

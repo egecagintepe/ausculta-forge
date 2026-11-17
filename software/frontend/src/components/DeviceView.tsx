@@ -34,6 +34,9 @@ import {
   UsbPortDescriptorItem,
   UsbSessionSummary,
   G1EvidenceData,
+  WednesdayLabStatus,
+  WednesdayStageEntry,
+  WednesdayReturnZipSummary,
 } from '../types';
 import { bridgeClient } from '../api/bridgeClient';
 import { AcquisitionStopGate } from '../api/acquisitionStopGate';
@@ -94,8 +97,41 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
   const [g1Evidence, setG1Evidence] = useState<G1EvidenceData | null>(null);
   const [usbActionLoading, setUsbActionLoading] = useState(false);
   const [usbActionError, setUsbActionError] = useState<string | null>(null);
+  const [wednesdayStatus, setWednesdayStatus] = useState<WednesdayLabStatus | null>(null);
+  const [packingReturnZip, setPackingReturnZip] = useState(false);
+  const [returnZipBanner, setReturnZipBanner] = useState<WednesdayReturnZipSummary | null>(null);
+  const [returnZipError, setReturnZipError] = useState<string | null>(null);
   const automaticStopRequested = useRef(false);
   const stopRequestGate = useRef(new AcquisitionStopGate());
+
+  const refreshWednesdayStatus = async () => {
+    const snap = await bridgeClient.getWednesdayLabStatus();
+    if (snap) {
+      setWednesdayStatus(snap);
+      if (snap.latest_return_zip && !returnZipBanner) {
+        setReturnZipBanner(snap.latest_return_zip);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!backendConnected) return;
+    void refreshWednesdayStatus();
+  }, [backendConnected]);
+
+  const handlePackReturnZip = async () => {
+    setPackingReturnZip(true);
+    setReturnZipError(null);
+    try {
+      const summary = await bridgeClient.packWednesdayReturnZip();
+      setReturnZipBanner(summary);
+      await refreshWednesdayStatus();
+    } catch (err: unknown) {
+      setReturnZipError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPackingReturnZip(false);
+    }
+  };
 
   // Polling USB Session
   useEffect(() => {
@@ -1144,6 +1180,92 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
               <strong className="text-[var(--on-surface)]">{deviceStats?.reconnect_count ?? 0}</strong>
             </div>
           </div>
+        </div>
+
+        {/* SECTION 4: WEDNESDAY LAB ORCHESTRATOR (LAB MODE) */}
+        <div
+          className="rounded-xl border p-5 flex flex-col gap-3 shadow-xs"
+          style={{
+            backgroundColor: 'var(--surface-card)',
+            borderColor: 'var(--border-subtle)'
+          }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 font-mono-code text-xs font-bold text-[var(--on-surface)] uppercase">
+              <Terminal size={15} className="text-[var(--accent-oxblood)]" />
+              <span>Wednesday Lab Mode — Orchestrator Status &amp; Return ZIP</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void refreshWednesdayStatus()}
+                disabled={!backendConnected}
+                className="px-2.5 py-1 rounded text-[11px] font-mono-code border border-[var(--border-subtle)] bg-[var(--surface-muted)] hover:opacity-80 disabled:opacity-40 flex items-center gap-1"
+              >
+                <RefreshCw size={12} />
+                Refresh Status
+              </button>
+              <button
+                onClick={() => void handlePackReturnZip()}
+                disabled={!backendConnected || packingReturnZip}
+                className="px-3 py-1 rounded text-[11px] font-mono-code font-bold bg-[var(--accent-oxblood)] text-white hover:opacity-90 disabled:opacity-40"
+              >
+                {packingReturnZip ? 'Packaging ZIP...' : 'Build Return ZIP'}
+              </button>
+            </div>
+          </div>
+
+          <p className="text-xs text-[var(--on-surface-variant)]">
+            Autonomous Wednesday CLI: <code className="font-mono-code text-[var(--on-surface)]">.\.venv\Scripts\python.exe tools/hardware/wednesday_lab.py</code>
+            {wednesdayStatus?.selected_port?.port_name ? (
+              <span className="ml-2">
+                · Port: <strong className="text-[var(--on-surface)]">{wednesdayStatus.selected_port.port_name}</strong>
+              </span>
+            ) : null}
+          </p>
+
+          {wednesdayStatus?.stages ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono-code text-[11px]">
+              {(Object.entries(wednesdayStatus.stages) as [string, WednesdayStageEntry][]).map(([stageKey, stageInfo]) => {
+                const st = stageInfo?.status || 'PENDING';
+                const badgeClass =
+                  st === 'PASSED' || st === 'RESUMED_PASSED'
+                    ? 'text-[var(--status-success)] border-[var(--status-success)]/40 bg-[var(--status-success)]/10'
+                    : st === 'FAILED'
+                    ? 'text-[var(--status-danger)] border-[var(--status-danger)]/40 bg-[var(--status-danger)]/10'
+                    : st === 'WAITING_OPERATOR'
+                    ? 'text-[var(--status-warning)] border-[var(--status-warning)]/40 bg-[var(--status-warning)]/10'
+                    : 'text-[var(--on-surface-variant)] border-[var(--border-subtle)] bg-[var(--surface-muted)]';
+                return (
+                  <div key={stageKey} className={`p-2 rounded border ${badgeClass}`}>
+                    <div className="text-[10px] opacity-80 truncate">{stageKey}</div>
+                    <div className="font-bold">{st}</div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-xs font-mono-code text-[var(--on-surface-variant)]">
+              Orchestrator state not yet initialized on disk. Run <code>wednesday_lab.py</code> or click Build Return ZIP.
+            </div>
+          )}
+
+          {returnZipError && (
+            <div className="p-2.5 rounded border border-[var(--status-danger)]/40 bg-[var(--status-danger)]/10 text-xs font-mono-code text-[var(--status-danger)]">
+              {returnZipError}
+            </div>
+          )}
+
+          {returnZipBanner?.zip_path && (
+            <div className="p-3 rounded border border-[var(--status-success)]/40 bg-[var(--status-success)]/10 font-mono-code text-xs space-y-1">
+              <div className="font-bold text-[var(--status-success)]">
+                SINGLE RETURN ZIP READY ({returnZipBanner.file_count} files, {returnZipBanner.zip_size_bytes} bytes)
+              </div>
+              <div className="break-all text-[var(--on-surface)]">{returnZipBanner.zip_path}</div>
+              <div className="text-[10px] text-[var(--on-surface-variant)] break-all">
+                SHA-256: {returnZipBanner.zip_sha256}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

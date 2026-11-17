@@ -38,6 +38,8 @@ import {
   G1EvidenceData,
   ResearchModelInfo,
   ResearchPredictionResponse,
+  WednesdayLabStatus,
+  WednesdayReturnZipSummary,
 } from '../types';
 
 
@@ -1246,6 +1248,25 @@ class BridgeClient {
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }));
       throw new Error(err.detail || `Research inference failed (${resp.status})`);
+    }
+    return await resp.json();
+  }
+
+  public async getWednesdayLabStatus(): Promise<WednesdayLabStatus | null> {
+    try {
+      const resp = await this.request('/lab/wednesday-status');
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public async packWednesdayReturnZip(): Promise<WednesdayReturnZipSummary> {
+    const resp = await this.request('/lab/pack-return', { method: 'POST' });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }));
+      throw new Error(err.detail || `Return ZIP failed (${resp.status})`);
     }
     return await resp.json();
   }

@@ -50,7 +50,12 @@ def _detect_baseline_commit(root: Path) -> Optional[str]:
     return None
 
 
-def collect_return_entries(root: Path, appdata_logs_dir: Optional[Path] = None, extra_dirs: Optional[list[Path]] = None) -> list[tuple[Path, str]]:
+def collect_return_entries(
+    root: Path,
+    appdata_logs_dir: Optional[Path] = None,
+    extra_dirs: Optional[list[Path]] = None,
+    extra_files: Optional[list[Path]] = None,
+) -> list[tuple[Path, str]]:
     """Discover existing evidence files cleanly without modifying or inventing artifacts."""
     root = root.resolve()
     collected: dict[str, Path] = {}
@@ -64,7 +69,7 @@ def collect_return_entries(root: Path, appdata_logs_dir: Optional[Path] = None, 
         if norm not in collected:
             collected[norm] = src
 
-    # 1. experiments/hardware/** (includes physical_g1 bundles, g2 qualify JSONs, preflight JSONs, photos)
+    # 1. experiments/hardware/** (includes state JSON, G1 bundles, G2 qualify/comparison, preflight JSONs, photos)
     hw_dir = root / "experiments/hardware"
     if hw_dir.is_dir():
         for p in sorted(hw_dir.rglob("*")):
@@ -121,7 +126,7 @@ def collect_return_entries(root: Path, appdata_logs_dir: Optional[Path] = None, 
         for p in log_files:
             add_file(p, f"appdata_logs/{p.name}")
 
-    # 6. Optional extra directories (e.g., lab photos folder outside repo)
+    # 6. Optional extra directories (e.g., lab photos folder outside repo) & extra files
     if extra_dirs:
         for idx, ext in enumerate(extra_dirs):
             ext_resolved = ext.resolve()
@@ -130,17 +135,29 @@ def collect_return_entries(root: Path, appdata_logs_dir: Optional[Path] = None, 
                     if p.is_file():
                         add_file(p, f"extra_evidence_{idx+1}/{p.relative_to(ext_resolved).as_posix()}")
 
+    if extra_files:
+        for ef in extra_files:
+            ef_path = Path(ef).resolve()
+            if ef_path.is_file():
+                if ef_path.is_relative_to(root):
+                    add_file(ef_path, ef_path.relative_to(root).as_posix())
+                else:
+                    add_file(ef_path, f"extra_files/{ef_path.name}")
+
     return [(src, arc) for arc, src in sorted(collected.items())]
 
 
 def _build_gate_evidence_summary(root: Path, entries: list[tuple[Path, str]]) -> dict[str, Any]:
     g1_bundles: list[str] = []
     g2_qualify_files: list[str] = []
+    orchestrator_files: list[str] = []
     recorded_sessions: list[dict[str, Any]] = []
     attestation_present = False
     boot_logs: list[str] = []
 
     for src, arc in entries:
+        if src.name in ("wednesday_20261118_state.json", "wednesday_g2_comparison.json", "wednesday_g2_comparison.md"):
+            orchestrator_files.append(arc)
         if arc.endswith("/acceptance_report.md") and arc.startswith("experiments/hardware/"):
             g1_bundles.append(str(Path(arc).parent.as_posix()))
         elif arc.startswith("experiments/hardware/") and arc.endswith(".json"):
@@ -177,6 +194,7 @@ def _build_gate_evidence_summary(root: Path, entries: list[tuple[Path, str]]) ->
         "h0_g2_attestation_present": attestation_present,
         "g1_acceptance_bundles": sorted(g1_bundles),
         "g2_qualification_jsons": sorted(g2_qualify_files),
+        "orchestrator_files": sorted(orchestrator_files),
         "recorded_sessions": recorded_sessions,
         "boot_logs": sorted(boot_logs),
     }
@@ -189,6 +207,7 @@ def create_lab_return_zip(
     notes: str = "",
     appdata_logs_dir: Optional[Path] = None,
     extra_dirs: Optional[list[Path]] = None,
+    extra_files: Optional[list[Path]] = None,
 ) -> dict[str, Any]:
     """Build a verified SHA-256 return ZIP archive from real lab measurements."""
     root = Path(root).resolve()
@@ -202,7 +221,7 @@ def create_lab_return_zip(
         out_zip = Path(output_path).resolve()
 
     out_zip.parent.mkdir(parents=True, exist_ok=True)
-    entries = collect_return_entries(root, appdata_logs_dir=appdata_logs_dir, extra_dirs=extra_dirs)
+    entries = collect_return_entries(root, appdata_logs_dir=appdata_logs_dir, extra_dirs=extra_dirs, extra_files=extra_files)
 
     file_records: list[dict[str, Any]] = []
     sha_lines: list[str] = []

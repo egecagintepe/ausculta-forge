@@ -574,6 +574,28 @@ def create_app(
         return Response(output.getvalue(),media_type="application/zip",
             headers={"Content-Disposition":'attachment; filename="auscultaforge-g1-evidence.zip"'})
 
+    @app.get("/api/lab/wednesday-status")
+    def api_get_wednesday_status() -> dict[str, Any]:
+        from .wednesday_orchestrator import get_wednesday_status_snapshot
+        from .hardware_workflow import ROOT
+        return get_wednesday_status_snapshot(ROOT)
+
+    @app.post("/api/lab/pack-return")
+    def api_pack_wednesday_return() -> dict[str, Any]:
+        import importlib.util as _ilu
+        from .hardware_workflow import ROOT
+        mod_path = ROOT / "tools/hardware/pack_lab_return.py"
+        spec = _ilu.spec_from_file_location("pack_lab_return", mod_path)
+        if spec is None or spec.loader is None:
+            raise HTTPException(status_code=500, detail="Return packager script unavailable.")
+        mod = _ilu.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.create_lab_return_zip(
+            root=ROOT,
+            operator="Kaan_Ozan_UI",
+            notes="Packaged from Device Center Lab Mode",
+        )
+
     # ML Research Lab Endpoints
     ml_registry = ResearchModelRegistry()
     ml_service = ResearchInferenceService(registry=ml_registry)

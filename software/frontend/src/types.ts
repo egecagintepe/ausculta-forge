@@ -957,3 +957,29 @@ export interface ResearchPredictionResponse {
   warning: string;
 }
 
+export interface WednesdayStageEntry {
+  status: string;
+  updated_utc: string | null;
+  detail?: Record<string, any> | null;
+}
+
+export interface WednesdayReturnZipSummary {
+  status: string;
+  zip_path: string;
+  zip_size_bytes: number;
+  zip_sha256: string;
+  file_count: number;
+}
+
+export interface WednesdayLabStatus {
+  state_file_exists: boolean;
+  state_file_path: string;
+  updated_utc: string | null;
+  selected_port: Record<string, any> | null;
+  device_identity: Record<string, any> | null;
+  stages: Record<string, WednesdayStageEntry>;
+  operator_prompt_checklist?: string;
+  latest_return_zip: WednesdayReturnZipSummary | null;
+  github_evidence_drop?: { status?: string; uploaded?: boolean; reason?: string };
+}
+

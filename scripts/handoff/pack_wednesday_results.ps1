@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$Output = "",
     [string]$Operator = "Kaan_Ozan",
     [string]$Notes = "",
@@ -29,7 +29,7 @@ if ($Notes) { $cliArgs += @("--notes", $Notes) }
 if ($PhotosDir) { $cliArgs += @("--extra-dir", $PhotosDir) }
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "  AuscultaForge — Lab Kanit ve Olcum Teslim Paketi (ZIP)" -ForegroundColor Cyan
+Write-Host "  AuscultaForge - Lab Kanit ve Olcum Teslim Paketi (ZIP)" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 $jsonOut = & $pyExe @pyPrefix @cliArgs
