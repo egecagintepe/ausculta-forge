@@ -290,16 +290,18 @@ class CanonicalSessionEngine:
     def disconnect(self, timeout_s: float = 3.0) -> concurrent.futures.Future[None]:
         """Gracefully terminate session and close transport handle."""
         fut: concurrent.futures.Future[None] = concurrent.futures.Future()
-        if not self.is_running:
-            fut.set_result(None)
-            return fut
+        with self._lock:
+            if not self.is_running or self._stop_event.is_set():
+                fut.set_result(None)
+                return fut
 
-        cmd = EngineCommand(
-            cmd_type=EngineCommandType.DISCONNECT,
-            future=fut,
-            deadline=time.monotonic() + timeout_s,
-        )
-        self._cmd_queue.put(cmd)
+            self._stop_event.set()
+            cmd = EngineCommand(
+                cmd_type=EngineCommandType.DISCONNECT,
+                future=fut,
+                deadline=time.monotonic() + timeout_s,
+            )
+            self._cmd_queue.put(cmd)
         return fut
 
     # =========================================================================
@@ -452,7 +454,10 @@ class CanonicalSessionEngine:
             while not self._cmd_queue.empty():
                 queued = self._cmd_queue.get_nowait()
                 if not queued.future.done():
-                    queued.future.set_exception(ConnectionError("USB worker closed before command completed."))
+                    if queued.cmd_type == EngineCommandType.DISCONNECT:
+                        queued.future.set_result(None)
+                    else:
+                        queued.future.set_exception(ConnectionError("USB worker closed before command completed."))
             self._teardown_transport()
             if disconnect_future is not None and not disconnect_future.done():
                 disconnect_future.set_result(None)

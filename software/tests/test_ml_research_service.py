@@ -104,8 +104,9 @@ class TestResearchModelRegistry:
         (fake_rec / "murmur_mil_cpu.pt").write_bytes(b"CORRUPTED_OR_TAMPERED_MODEL_BYTES")
 
         reg = ResearchModelRegistry(root_dir=tmp_path)
-        m = reg.get_murmur_mil_registration()
-        assert m.status == ModelStatus.CORRUPTED_ARTIFACT
+        with patch.object(reg, "_torch_available", return_value=True):
+            m = reg.get_murmur_mil_registration()
+            assert m.status == ModelStatus.CORRUPTED_ARTIFACT
 
     def test_torch_unavailable_clean_fallback(self):
         """When PyTorch is unavailable, registry truthfully reports DEPENDENCY_MISSING without crashing."""
@@ -223,8 +224,8 @@ class TestAudioSecurityAndResourceBounds:
         make_dummy_wav(big_file, duration_s=1.0)
 
         orig_stat = Path.stat
-        def mock_stat(self):
-            real = orig_stat(self)
+        def mock_stat(self, *args, **kwargs):
+            real = orig_stat(self, *args, **kwargs)
             return os.stat_result((
                 real.st_mode,
                 real.st_ino,

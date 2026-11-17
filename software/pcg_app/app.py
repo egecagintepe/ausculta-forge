@@ -374,10 +374,10 @@ def create_app(
         )
         manager.device_runtime.canonical_engine = engine
 
-        # Authoritative device lifecycle transition: ABSENT -> DETECTED -> OPENING
-        if manager.device_runtime.state == DeviceState.ABSENT:
+        # Authoritative device lifecycle transition: (ABSENT | INTERRUPTED | ERROR) -> DETECTED -> OPENING
+        if manager.device_runtime.state in (DeviceState.ABSENT, DeviceState.INTERRUPTED, DeviceState.ERROR):
             manager.device_runtime.transition_to(DeviceState.DETECTED)
-        if manager.device_runtime.state in (DeviceState.DETECTED, DeviceState.INTERRUPTED, DeviceState.ERROR):
+        if manager.device_runtime.state == DeviceState.DETECTED:
             manager.device_runtime.transition_to(DeviceState.OPENING)
 
         try:
