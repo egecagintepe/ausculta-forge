@@ -12,7 +12,12 @@ from .models import (
     SystemIdConfig,
     SystemIdentificationResult,
 )
-from .signal_quality import compute_signal_quality, assess_signal_quality
+from .signal_quality import (
+    compute_signal_quality,
+    assess_signal_quality,
+    inject_controlled_artifact,
+    evaluate_quality_detection_benchmark,
+)
 from .spectral import compute_welch_psd, resample_analysis_signal
 from .envelopes import (
     compute_hilbert_envelope,
@@ -36,6 +41,8 @@ __all__ = [
     "SystemIdentificationResult",
     "compute_signal_quality",
     "assess_signal_quality",
+    "inject_controlled_artifact",
+    "evaluate_quality_detection_benchmark",
     "compute_welch_psd",
     "resample_analysis_signal",
     "compute_hilbert_envelope",

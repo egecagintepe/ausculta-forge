@@ -7,10 +7,10 @@ import subprocess
 import sys
 import time
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"software"))
+sys.path.insert(0,str(Path(__file__).absolute().parents[2]/"software"))
 try:
     from pcg_app.hardware_workflow import (ROOT, preflight, build_release, validate_release,
-        physical_g1, run, write_json, sdk_python, qualify_recording)
+        authorize_g2_candidate, default_release_manifest_path, physical_g1, run, write_json, sdk_python, qualify_recording)
 except ModuleNotFoundError as exc:
     raise SystemExit(f"MISSING: {exc.name}. Run the project .venv Python: tools/hardware/preflight.py; see WINDOWS_LAPTOP_SETUP.md.") from None
 
@@ -128,14 +128,27 @@ def main():
     qualify=sub.add_parser("qualify")
     qualify.add_argument("--session",type=Path,required=True)
     qualify.add_argument("--output",type=Path,required=True)
+    auth_g2=sub.add_parser("authorize-g2")
+    auth_g2.add_argument("--manifest",type=Path,default=ROOT/"firmware/releases/g2_candidate_20261117/firmware_build_manifest.json")
+    auth_g2.add_argument("--bclk",type=int,required=True)
+    auth_g2.add_argument("--ws",type=int,required=True)
+    auth_g2.add_argument("--din",type=int,required=True)
+    auth_g2.add_argument("--slot",choices=("left","right"),required=True)
+    auth_g2.add_argument("--vdd-volts",type=float,required=True)
+    auth_g2.add_argument("--operator",required=True)
+    auth_g2.add_argument("--multimeter",required=True)
+    pack_ret=sub.add_parser("pack-return")
+    pack_ret.add_argument("--output",type=Path,default=None)
+    pack_ret.add_argument("--operator",default="Kaan_Ozan")
+    pack_ret.add_argument("--notes",default="")
     for action in ("identify","flash","hello","g1"):
         p=sub.add_parser(action)
         p.add_argument("--port",required=True)
         if action=="flash":
-            p.add_argument("--manifest",type=Path,default=ROOT/"firmware/build/release/firmware_build_manifest.json")
+            p.add_argument("--manifest",type=Path,default=default_release_manifest_path())
         if action=="g1":
             p.add_argument("--output",type=Path,default=ROOT/"experiments/hardware")
-            p.add_argument("--manifest",type=Path,default=ROOT/"firmware/build/release/firmware_build_manifest.json")
+            p.add_argument("--manifest",type=Path,default=default_release_manifest_path())
     args=parser.parse_args()
     try:
         if args.action is None:
@@ -156,6 +169,17 @@ def main():
             print(json.dumps(report,indent=2))
         elif args.action=="build":
             print(json.dumps(build_release(),indent=2))
+        elif args.action=="authorize-g2":
+            updated=authorize_g2_candidate(
+                args.manifest,args.bclk,args.ws,args.din,args.slot,
+                args.vdd_volts,args.operator,args.multimeter)
+            print(json.dumps(updated,indent=2))
+        elif args.action=="pack-return":
+            import importlib.util as _ilu
+            spec=_ilu.spec_from_file_location("pack_lab_return",Path(__file__).absolute().parent/"pack_lab_return.py")
+            mod=_ilu.module_from_spec(spec); spec.loader.exec_module(mod)
+            summary=mod.create_lab_return_zip(ROOT,output_path=args.output,operator=args.operator,notes=args.notes)
+            print(json.dumps(summary,indent=2))
         elif args.action=="flash":
             flash(args.port,args.manifest)
         else:

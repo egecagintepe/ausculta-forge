@@ -292,3 +292,175 @@ def compute_signal_quality(
         quality_dimensions=multi_report.to_dict(),
         provenance=provenance,
     )
+
+
+def _validate_artifact_input(signal: np.ndarray, sample_rate_hz: float) -> np.ndarray:
+    if sample_rate_hz <= 0:
+        raise ValueError(f"sample_rate_hz must be strictly positive, got {sample_rate_hz}")
+    arr = np.asarray(signal, dtype=np.float64).flatten()
+    if len(arr) == 0:
+        raise ValueError("Cannot inject artifact into empty signal array (length is 0).")
+    if np.any(np.isnan(arr)) or np.any(np.isinf(arr)):
+        raise ValueError("Input signal contains NaN or infinite values.")
+    return arr
+
+
+def inject_controlled_artifact(
+    signal: np.ndarray,
+    sample_rate_hz: float,
+    artifact_type: str,
+    seed: int = 42,
+    **kwargs: Any,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Inject a controlled synthetic artifact for W10-W12 quality detector testing.
+
+    Supported artifact_type values:
+    - "clipping": multiplies by drive_gain and hard-clips at [-clip_threshold, +clip_threshold].
+    - "contact_loss": attenuates middle segment and adds low-frequency VLF decoupling motion.
+    - "mains_interference": adds 50 Hz fundamental and 100/150 Hz harmonic interference.
+    - "high_frequency_noise": adds highpass-filtered Gaussian noise above highpass_hz (default 700 Hz).
+    """
+    arr = _validate_artifact_input(signal, sample_rate_hz)
+    fs = float(sample_rate_hz)
+    n = len(arr)
+    t = np.arange(n, dtype=np.float64) / fs
+    rng = np.random.default_rng(int(seed))
+    kind = str(artifact_type).strip().lower()
+    params: dict[str, Any] = {}
+
+    if kind == "clipping":
+        clip_threshold = float(kwargs.get("clip_threshold", 0.999))
+        peak_in = float(np.max(np.abs(arr)))
+        raw_gain = kwargs.get("drive_gain")
+        if raw_gain is None:
+            drive_gain = max(2.5, (1.5 * clip_threshold) / max(peak_in, 1e-6))
+        else:
+            drive_gain = float(raw_gain)
+        out = np.clip(arr * drive_gain, -clip_threshold, clip_threshold)
+        params = {"drive_gain": round(drive_gain, 4), "clip_threshold": clip_threshold}
+    elif kind == "contact_loss":
+        start_ratio = float(kwargs.get("start_ratio", 0.3))
+        end_ratio = float(kwargs.get("end_ratio", 0.7))
+        attenuation = float(kwargs.get("attenuation", 0.01))
+        vlf_freq_hz = float(kwargs.get("vlf_freq_hz", 6.0))
+        vlf_amplitude = float(kwargs.get("vlf_amplitude", 0.45))
+        s_idx = max(0, min(n, int(start_ratio * n)))
+        e_idx = max(s_idx, min(n, int(end_ratio * n)))
+        out = arr.copy()
+        out[s_idx:e_idx] *= attenuation
+        env = np.zeros(n, dtype=np.float64)
+        if e_idx > s_idx:
+            env[s_idx:e_idx] = np.hanning(e_idx - s_idx)
+        out += vlf_amplitude * env * np.sin(2.0 * np.pi * vlf_freq_hz * t)
+        params = {
+            "start_ratio": start_ratio,
+            "end_ratio": end_ratio,
+            "attenuation": attenuation,
+            "vlf_freq_hz": vlf_freq_hz,
+            "vlf_amplitude": vlf_amplitude,
+        }
+    elif kind == "mains_interference":
+        amp_50 = float(kwargs.get("amplitude_50hz", 0.35))
+        amp_100 = float(kwargs.get("amplitude_100hz", 0.06))
+        amp_150 = float(kwargs.get("amplitude_150hz", 0.03))
+        hum = (
+            amp_50 * np.sin(2.0 * np.pi * 50.0 * t)
+            + amp_100 * np.sin(2.0 * np.pi * 100.0 * t)
+            + amp_150 * np.sin(2.0 * np.pi * 150.0 * t)
+        )
+        out = arr + hum
+        params = {"amplitude_50hz": amp_50, "amplitude_100hz": amp_100, "amplitude_150hz": amp_150}
+    elif kind == "high_frequency_noise":
+        import scipy.signal
+        highpass_hz = float(kwargs.get("highpass_hz", 700.0))
+        amplitude = float(kwargs.get("amplitude", 0.25))
+        if highpass_hz >= fs / 2.0:
+            raise ValueError(f"highpass_hz ({highpass_hz}) must be below Nyquist ({fs / 2.0} Hz).")
+        sos = scipy.signal.butter(4, highpass_hz, btype="highpass", fs=fs, output="sos")
+        raw_noise = rng.standard_normal(n)
+        hf_noise = scipy.signal.sosfilt(sos, raw_noise)
+        rms_hf = float(np.sqrt(np.mean(hf_noise ** 2)))
+        if rms_hf > 1e-12:
+            hf_noise = hf_noise * (amplitude / rms_hf)
+        out = arr + hf_noise
+        params = {"highpass_hz": highpass_hz, "target_rms_amplitude": amplitude}
+    else:
+        raise ValueError(f"Unsupported artifact_type {artifact_type!r}. Choose from 'clipping', 'contact_loss', 'mains_interference', 'high_frequency_noise'.")
+
+    meta = {
+        "artifact_type": kind,
+        "sample_rate_hz": fs,
+        "sample_count": n,
+        "seed": int(seed),
+        "parameters": params,
+        "provenance": "SOFTWARE_SYNTHETIC_ARTIFACT_INJECTION",
+    }
+    return np.asarray(out, dtype=np.float32), meta
+
+
+def evaluate_quality_detection_benchmark(
+    clean_signal: np.ndarray,
+    sample_rate_hz: float,
+    config: Optional[SignalQualityConfig] = None,
+) -> dict[str, Any]:
+    """Evaluate quality dimension detectors against controlled synthetic artifact injections."""
+    arr = _validate_artifact_input(clean_signal, sample_rate_hz)
+    cfg = config or SignalQualityConfig()
+    clean_report = assess_signal_quality(arr, sample_rate_hz, config=cfg).to_dict()
+
+    clean_flags = {
+        "clipping": bool(clean_report["clipping"]["clipping_detected"]),
+        "contact_loss": bool(clean_report["vlf_motion_evidence"]["vlf_prominent"]),
+        "mains_interference": bool(clean_report["spectral_contamination"]["mains_hum_prominent"]),
+        "high_frequency_noise": bool(clean_report["spectral_contamination"]["high_frequency_fraction_above_600hz"] > 0.10),
+        "packet_drop_discontinuity": bool(clean_report["continuity"]["has_discontinuity"]),
+    }
+
+    cases: dict[str, dict[str, Any]] = {}
+    specs = [
+        ("clipping", "clipping", lambda r: bool(r["clipping"]["clipping_detected"])),
+        ("contact_loss", "contact_loss", lambda r: bool(r["vlf_motion_evidence"]["vlf_prominent"])),
+        ("mains_interference", "mains_interference", lambda r: bool(r["spectral_contamination"]["mains_hum_prominent"])),
+        ("high_frequency_noise", "high_frequency_noise", lambda r: bool(r["spectral_contamination"]["high_frequency_fraction_above_600hz"] > 0.10)),
+    ]
+
+    tp = 0
+    for case_name, art_type, predicate in specs:
+        extra_kwargs = {"clip_threshold": cfg.clipping_threshold} if art_type == "clipping" else {}
+        corrupted, art_meta = inject_controlled_artifact(arr, sample_rate_hz, art_type, **extra_kwargs)
+        rep = assess_signal_quality(corrupted, sample_rate_hz, config=cfg).to_dict()
+        detected = bool(predicate(rep))
+        if detected:
+            tp += 1
+        cases[case_name] = {
+            "detected": detected,
+            "injection": art_meta,
+            "quality_report": rep,
+        }
+
+    drop_rep = assess_signal_quality(
+        arr, sample_rate_hz, config=cfg, stream_stats={"sequence_gaps": 2, "dropped_blocks": 2}
+    ).to_dict()
+    drop_detected = bool(drop_rep["continuity"]["has_discontinuity"])
+    if drop_detected:
+        tp += 1
+    cases["packet_drop_discontinuity"] = {
+        "detected": drop_detected,
+        "injection": {"artifact_type": "packet_drop_discontinuity", "sequence_gaps": 2, "dropped_blocks": 2},
+        "quality_report": drop_rep,
+    }
+
+    total_cases = len(cases)
+    clean_fp = sum(1 for v in clean_flags.values() if v)
+    return {
+        "clean_baseline_flags": clean_flags,
+        "clean_false_positive_count": clean_fp,
+        "cases": cases,
+        "true_positive_count": tp,
+        "total_injected_cases": total_cases,
+        "detection_rate_pct": round(100.0 * tp / total_cases, 2) if total_cases else 0.0,
+        "provenance": {
+            "mode": "SOFTWARE_CONTROLLED_ARTIFACT_BENCHMARK",
+            "physical_phantom_execution": "NOT_EXECUTED",
+        },
+    }

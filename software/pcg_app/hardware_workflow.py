@@ -18,7 +18,7 @@ from .canonical.transport import UsbCdcAcmAdapter
 from .diagnostics.flight_recorder import get_flight_recorder
 from .diagnostics.usb_doctor import UsbDiscoveryDoctor
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).absolute().parents[2]
 PINNED_IDF = "5.5.1"
 
 
@@ -32,7 +32,12 @@ def sdk_python():
 
 
 def idf_command(idf, *arguments):
-    # On Windows idf.py may resolve to Espressif's PE launcher, not a Python script.
+    # On Windows idf.py may resolve to Espressif's PE launcher, which breaks quoted paths. Prefer direct Python script when available.
+    idf_path = os.environ.get("IDF_PATH")
+    if idf_path and Path(str(idf)).exists():
+        script = Path(idf_path) / "tools/idf.py"
+        if script.exists():
+            return [sdk_python(), str(script)] + list(arguments)
     return ([idf] if str(idf).lower().endswith(".exe") else [sdk_python(),idf]) + list(arguments)
 
 
@@ -54,16 +59,47 @@ def run(command, **kwargs):
                           encoding="utf-8", errors="replace", **kwargs)
 
 
+def default_release_manifest_path(root=ROOT):
+    """Prefer a local release build if present, falling back to the staged G1 release or immutable rollback."""
+    for rel in (
+        "firmware/build/release/firmware_build_manifest.json",
+        "firmware/releases/g1_release_20261117/firmware_build_manifest.json",
+        "firmware/g1_rollback_backup/firmware_build_manifest.json",
+    ):
+        candidate = root / rel
+        if candidate.is_file():
+            return candidate
+    return root / "firmware/build/release/firmware_build_manifest.json"
+
+
+def _zip_baseline_commit(root=ROOT):
+    for rel in (
+        "docs/handoff/HANDOFF_VERSION.json",
+        "firmware/releases/g1_release_20261117/firmware_build_manifest.json",
+    ):
+        candidate = root / rel
+        if candidate.is_file():
+            try:
+                data = json.loads(candidate.read_text(encoding="utf-8"))
+                if data.get("commit"):
+                    return data["commit"]
+            except (OSError, json.JSONDecodeError):
+                pass
+    return None
+
+
 def git_info(root=ROOT):
+    fallback_commit = _zip_baseline_commit(root)
     if not shutil.which("git"):
-        return {"commit":None,"state":"GIT_UNAVAILABLE"}
+        return {"commit": fallback_commit, "state": "DOWNLOAD_ZIP_NO_GIT" if fallback_commit else "GIT_UNAVAILABLE"}
     try:
         commit = run(["git","rev-parse","HEAD"],cwd=root)
-        return {"commit":commit.stdout.strip() if not commit.returncode else None,
-                "state":run(["git","status","--short","--branch"],cwd=root).stdout.strip()
-                    if not commit.returncode else "NOT_A_GIT_CHECKOUT"}
+        if commit.returncode:
+            return {"commit": fallback_commit, "state": "DOWNLOAD_ZIP_NO_GIT" if fallback_commit else "NOT_A_GIT_CHECKOUT"}
+        return {"commit": commit.stdout.strip(),
+                "state": run(["git","status","--short","--branch"],cwd=root).stdout.strip()}
     except (OSError,subprocess.SubprocessError):
-        return {"commit":None,"state":"UNAVAILABLE"}
+        return {"commit": fallback_commit, "state": "UNAVAILABLE"}
 
 
 def preflight(root=ROOT):
@@ -107,7 +143,7 @@ def preflight(root=ROOT):
         "MSVC_WebView2_drivers_cable":"MANUAL_ACTION_REQUIRED",
         "optional_ML":"MANUAL_ACTION_REQUIRED (not required for USB/DSP)"})
     try:
-        validate_release(root/"firmware/build/release/firmware_build_manifest.json")
+        validate_release(default_release_manifest_path(root))
         checks["release_artifacts"]="READY"
     except (OSError,ValueError,KeyError,TypeError):
         checks["release_artifacts"]="MISSING"
@@ -142,7 +178,8 @@ def build_release(root=ROOT):
     build.mkdir(parents=True,exist_ok=True)
     cache = build/"CMakeCache.txt"
     actions = ["reconfigure","build"] if cache.exists() else ["set-target","esp32s3","build"]
-    command = idf_command(idf,"-B",str(build),*actions)
+    build_dir_arg = str(build.relative_to(firmware)) if build.is_relative_to(firmware) else str(build)
+    command = idf_command(idf,"--no-ccache","-B",build_dir_arg,*actions)
     log_path = firmware/"build/release-build-output.txt"
     with log_path.open("w",encoding="utf-8") as log:
         completed = subprocess.run(command,cwd=firmware,stdout=log,stderr=subprocess.STDOUT,timeout=1200)
@@ -218,19 +255,100 @@ def qualify_recording(session_dir):
         "next_action":"Compare quiet/control captures and UART DMA/drop telemetry. Zero/constant data: inspect VDD, ground, slot, WS/BCLK/SD. No clinical or ML inference."}
 
 
+def _is_safe_i2s_pin(pin):
+    return (1 <= pin <= 18 and pin != 3) or pin == 21 or (39 <= pin <= 42)
+
+
+def _resolve_and_verify_manifest_artifacts(manifest_file, manifest):
+    raw_base = Path(manifest["build_directory"])
+    if not raw_base.is_absolute():
+        base = (ROOT / raw_base).resolve()
+    elif raw_base.exists():
+        base = raw_base.resolve()
+    else:
+        base = manifest_file.parent.resolve()
+    manifest["build_directory"] = str(base)
+    config = base / "sdkconfig"
+    if not config.is_file() or sha256(config) != manifest.get("sdkconfig_sha256"):
+        raise ValueError("Missing/changed release sdkconfig. Rebuild with the current bringup tool before flashing.")
+    config_text = config.read_text(encoding="utf-8")
+    check_build_config(config_text)
+    for name, expected in manifest["binary_sha256"].items():
+        path = (base / name).resolve()
+        if not path.is_relative_to(base) or not path.is_file() or sha256(path) != expected:
+            raise ValueError(f"Firmware artifact changed or escapes build directory: {name}")
+    return base, config_text
+
+
 def validate_release(manifest_path):
-    manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    manifest_file = Path(manifest_path).resolve()
+    if "g2_compile_check" in manifest_file.parts:
+        raise ValueError("g2_compile_check is a compile-only verification directory and is forbidden for flashing.")
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    if manifest.get("status") == "PREPARED_NOT_AUTHORIZED_FOR_FLASH":
+        raise ValueError("Manifest status is PREPARED_NOT_AUTHORIZED_FOR_FLASH: physical pin, 3.3V supply, and continuity confirmation required before flashing (use bringup.py authorize-g2 or rebuild with confirmed pins).")
     if manifest.get("status") != "COMPILED_BUT_NOT_FLASHED" or manifest.get("target") != "esp32s3" or manifest.get("idf_version") != PINNED_IDF:
         raise ValueError("No compatible successful build manifest. Build before flashing.")
-    base = Path(manifest["build_directory"]).resolve()
-    config=base/"sdkconfig"
-    if not config.is_file() or sha256(config)!=manifest.get("sdkconfig_sha256"):
-        raise ValueError("Missing/changed release sdkconfig. Rebuild with the current bringup tool before flashing.")
-    check_build_config(config.read_text(encoding="utf-8"))
-    for name, expected in manifest["binary_sha256"].items():
-        path = (base/name).resolve()
-        if not path.is_relative_to(base) or sha256(path) != expected:
-            raise ValueError(f"Firmware artifact changed or escapes build directory: {name}")
+    _resolve_and_verify_manifest_artifacts(manifest_file, manifest)
+    return manifest
+
+
+def authorize_g2_candidate(manifest_path, bclk_gpio, ws_gpio, din_gpio, slot, vdd_volts, operator, multimeter_id, prompt=input):
+    """Attest physical 3.3V supply, continuity, and I2S pins to promote a staged G2 candidate manifest."""
+    manifest_file = Path(manifest_path).resolve()
+    if "g2_compile_check" in manifest_file.parts or "g1_rollback_backup" in manifest_file.parts:
+        raise ValueError("Refusing to modify immutable or compile-check directory manifest.")
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    if manifest.get("status") != "PREPARED_NOT_AUTHORIZED_FOR_FLASH":
+        raise ValueError(f"Manifest status must be PREPARED_NOT_AUTHORIZED_FOR_FLASH, got {manifest.get('status')!r}.")
+    if manifest.get("target") != "esp32s3" or manifest.get("idf_version") != PINNED_IDF:
+        raise ValueError("Incompatible manifest target or ESP-IDF version.")
+    base, config_text = _resolve_and_verify_manifest_artifacts(manifest_file, manifest)
+
+    vdd = float(vdd_volts)
+    if not (3.15 <= vdd <= 3.45):
+        raise ValueError(f"Measured VDD {vdd} V is outside safe 3.3V range [3.15, 3.45] V. Never connect 5V/VBUS.")
+    pins = (int(bclk_gpio), int(ws_gpio), int(din_gpio))
+    if len(set(pins)) != 3 or not all(_is_safe_i2s_pin(p) for p in pins):
+        raise ValueError(f"Unsafe or duplicate GPIO assignment {pins}. Avoid USB (19/20), Flash/PSRAM (26..37), straps (0/3/45/46), UART0 (43/44).")
+    slot_norm = str(slot).strip().lower()
+    if slot_norm not in ("left", "right"):
+        raise ValueError("slot must be 'left' (L/R tied to GND) or 'right' (L/R tied to 3.3V).")
+
+    settings = set(config_text.splitlines())
+    expected_lines = {
+        "CONFIG_AF_I2S_CONFIRMED_PROFILE=y",
+        f"CONFIG_AF_I2S_BCLK={pins[0]}",
+        f"CONFIG_AF_I2S_WS={pins[1]}",
+        f"CONFIG_AF_I2S_DIN={pins[2]}",
+    }
+    if not expected_lines.issubset(settings):
+        raise ValueError("Confirmed physical pins differ from staged candidate sdkconfig; run idf.py menuconfig and bringup.py build to compile for actual pins.")
+    if slot_norm == "right" and "CONFIG_AF_I2S_RIGHT_SLOT=y" not in settings:
+        raise ValueError("Confirmed physical pins differ from staged candidate sdkconfig; run idf.py menuconfig and bringup.py build to compile for actual pins.")
+    if slot_norm == "left" and "CONFIG_AF_I2S_RIGHT_SLOT=y" in settings:
+        raise ValueError("Confirmed physical pins differ from staged candidate sdkconfig; run idf.py menuconfig and bringup.py build to compile for actual pins.")
+
+    expected_phrase = f"AUTHORIZE G2 BCLK{pins[0]} WS{pins[1]} DIN{pins[2]} {slot_norm.upper()} 3V3"
+    if prompt(f"Confirm unpowered continuity check and 3.3V measurement ({vdd} V). Type '{expected_phrase}' to authorize: ").strip() != expected_phrase:
+        raise RuntimeError("G2 candidate authorization aborted by operator.")
+
+    attestation = {
+        "attested_utc": utc_now(),
+        "operator": str(operator).strip(),
+        "multimeter_id": str(multimeter_id).strip(),
+        "measured_vdd_volts": vdd,
+        "bclk_gpio": pins[0],
+        "ws_gpio": pins[1],
+        "din_gpio": pins[2],
+        "slot": slot_norm,
+        "binary_sha256": manifest["binary_sha256"],
+        "sdkconfig_sha256": manifest["sdkconfig_sha256"],
+    }
+    write_json(base / "g2_physical_attestation.json", attestation)
+    manifest["status"] = "COMPILED_BUT_NOT_FLASHED"
+    manifest["physical_attestation"] = attestation
+    write_json(manifest_file, manifest)
     return manifest
 
 

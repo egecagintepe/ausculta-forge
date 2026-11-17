@@ -17,6 +17,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "pyserial>=3.5",
     "PyWavelets>=1.5.0",
+    "esptool>=4.7.0",
 ]
 
 [project.optional-dependencies]

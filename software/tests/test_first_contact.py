@@ -222,3 +222,164 @@ def test_production_engine_saves_failed_evidence_for_stop_timeout_and_ingestion(
             assert engine.last_g1_evidence["gates"]["stop_ack"]=="FAIL"
     finally:
         engine.disconnect().result(timeout=3)
+
+
+def test_portable_validate_release_on_g1_rollback_backup():
+    manifest_path = workflow.ROOT / "firmware/g1_rollback_backup/firmware_build_manifest.json"
+    manifest = workflow.validate_release(manifest_path)
+    assert manifest["firmware_version"] == "1.1.0"
+    assert Path(manifest["build_directory"]).resolve() == manifest_path.parent.resolve()
+
+
+def test_validate_release_rejects_g2_compile_check_and_unauthorized_g2(tmp_path):
+    cc_dir = tmp_path / "g2_compile_check"
+    cc_dir.mkdir()
+    cc_manifest = cc_dir / "firmware_build_manifest.json"
+    cc_manifest.write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="forbidden for flashing"):
+        workflow.validate_release(cc_manifest)
+
+    staged = tmp_path / "g2_candidate"
+    staged.mkdir()
+    unauth = staged / "firmware_build_manifest.json"
+    unauth.write_text(json.dumps({
+        "status": "PREPARED_NOT_AUTHORIZED_FOR_FLASH",
+        "target": "esp32s3",
+        "idf_version": "5.5.1",
+    }), encoding="utf-8")
+    with pytest.raises(ValueError, match="PREPARED_NOT_AUTHORIZED_FOR_FLASH"):
+        workflow.validate_release(unauth)
+
+
+def test_authorize_g2_candidate_gates_and_promotion(tmp_path):
+    base = tmp_path / "g2_candidate_test"
+    (base / "bootloader").mkdir(parents=True)
+    (base / "partition_table").mkdir(parents=True)
+    files = {
+        "bootloader/bootloader.bin": b"boot",
+        "partition_table/partition-table.bin": b"part",
+        "auscultaforge_g1.bin": b"appg2",
+    }
+    hashes = {}
+    for rel, content in files.items():
+        p = base / rel
+        p.write_bytes(content)
+        hashes[rel] = workflow.sha256(p)
+
+    defaults = (workflow.ROOT / "firmware/sdkconfig.defaults").read_text(encoding="utf-8")
+    g2_cfg_text = (
+        defaults
+        + "\nCONFIG_AF_I2S_CONFIRMED_PROFILE=y\n"
+        + "CONFIG_AF_I2S_BCLK=4\n"
+        + "CONFIG_AF_I2S_WS=5\n"
+        + "CONFIG_AF_I2S_DIN=6\n"
+        + "# CONFIG_AF_I2S_RIGHT_SLOT is not set\n"
+    )
+    cfg_path = base / "sdkconfig"
+    cfg_path.write_text(g2_cfg_text, encoding="utf-8")
+
+    manifest_path = base / "firmware_build_manifest.json"
+    manifest = {
+        "status": "PREPARED_NOT_AUTHORIZED_FOR_FLASH",
+        "target": "esp32s3",
+        "idf_version": "5.5.1",
+        "firmware_version": "1.1.0",
+        "build_directory": str(base),
+        "sdkconfig_sha256": workflow.sha256(cfg_path),
+        "binary_sha256": hashes,
+    }
+    workflow.write_json(manifest_path, manifest)
+
+    # 5V must be rejected
+    with pytest.raises(ValueError, match="3.3V"):
+        workflow.authorize_g2_candidate(
+            manifest_path, 4, 5, 6, "left", 5.0, "Kaan", "Fluke-1", prompt=lambda _: "AUTHORIZE G2 BCLK4 WS5 DIN6 LEFT 3V3"
+        )
+
+    # Pin mismatch with staged sdkconfig must be rejected
+    with pytest.raises(ValueError, match="Confirmed physical pins differ"):
+        workflow.authorize_g2_candidate(
+            manifest_path, 7, 5, 6, "left", 3.31, "Kaan", "Fluke-1", prompt=lambda _: "AUTHORIZE G2 BCLK7 WS5 DIN6 LEFT 3V3"
+        )
+
+    # Wrong confirmation phrase aborts
+    with pytest.raises(RuntimeError, match="aborted"):
+        workflow.authorize_g2_candidate(
+            manifest_path, 4, 5, 6, "left", 3.31, "Kaan", "Fluke-1", prompt=lambda _: "NO"
+        )
+
+    # Valid confirmation promotes manifest and passes validate_release
+    promoted = workflow.authorize_g2_candidate(
+        manifest_path, 4, 5, 6, "left", 3.31, "Kaan", "Fluke-1",
+        prompt=lambda _: "AUTHORIZE G2 BCLK4 WS5 DIN6 LEFT 3V3",
+    )
+    assert promoted["status"] == "COMPILED_BUT_NOT_FLASHED"
+    assert (base / "g2_physical_attestation.json").is_file()
+    validated = workflow.validate_release(manifest_path)
+    assert validated["physical_attestation"]["measured_vdd_volts"] == 3.31
+
+
+def test_download_zip_fallback_without_git_or_local_build(monkeypatch, tmp_path):
+    staged = tmp_path / "firmware/releases/g1_release_20261117/firmware_build_manifest.json"
+    staged.parent.mkdir(parents=True)
+    staged.write_text(json.dumps({"commit": "abc1234zip"}), encoding="utf-8")
+    selected = workflow.default_release_manifest_path(tmp_path)
+    assert selected == staged
+
+    monkeypatch.setattr(workflow.shutil, "which", lambda name: None)
+    info = workflow.git_info(tmp_path)
+    assert info["commit"] == "abc1234zip"
+    assert info["state"] == "DOWNLOAD_ZIP_NO_GIT"
+
+
+def test_pack_lab_return_creates_verified_zip_without_mutating_sources(tmp_path):
+    import zipfile
+    spec = importlib.util.spec_from_file_location("pack_lab_return", workflow.ROOT / "tools/hardware/pack_lab_return.py")
+    packer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(packer)
+
+    bundle = tmp_path / "experiments/hardware/20261118T090000Z_deadbeef"
+    bundle.mkdir(parents=True)
+    (bundle / "acceptance_report.md").write_text("# PASS\n", encoding="utf-8")
+    (tmp_path / "experiments/hardware/g2-quiet.json").write_text('{"kind": "RAW_RECORDING_SCREEN_ONLY", "constant_zero": false}\n', encoding="utf-8")
+
+    sess = tmp_path / "experiments/sessions/session_20261118_090500_0001"
+    sess.mkdir(parents=True)
+    (sess / "raw.wav").write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
+    (sess / "session.json").write_text(json.dumps({
+        "session_id": sess.name,
+        "source": "physical_i2s_mic",
+        "total_samples": 480000,
+        "duration_s": 10.0,
+        "raw_wav_sha256": "deadbeef",
+    }), encoding="utf-8")
+
+    att = tmp_path / "firmware/releases/g2_candidate_20261117/g2_physical_attestation.json"
+    att.parent.mkdir(parents=True)
+    att.write_text('{"measured_vdd_volts": 3.31}\n', encoding="utf-8")
+    (att.parent / "firmware_build_manifest.json").write_text('{"commit": "mainsha"}\n', encoding="utf-8")
+
+    out_zip = tmp_path / "return_bundle.zip"
+    mock_appdata = tmp_path / "mock_appdata_logs"
+    mock_appdata.mkdir()
+    (mock_appdata / "flight_recorder.jsonl").write_text('{"event":"TEST"}\n', encoding="utf-8")
+    summary = packer.create_lab_return_zip(
+        root=tmp_path,
+        output_path=out_zip,
+        operator="Kaan_Ozan",
+        notes="Wed run",
+        appdata_logs_dir=mock_appdata,
+    )
+    assert out_zip.is_file()
+    assert summary["file_count"] == 7
+    assert summary["gate_evidence_summary"]["h0_g2_attestation_present"] is True
+    assert len(summary["gate_evidence_summary"]["recorded_sessions"]) == 1
+
+    with zipfile.ZipFile(out_zip, "r") as zf:
+        names = set(zf.namelist())
+        assert "RETURN_PACKAGE_MANIFEST.json" in names
+        assert "SHA256SUMS.txt" in names
+        assert "experiments/sessions/session_20261118_090500_0001/raw.wav" in names
+        manifest = json.loads(zf.read("RETURN_PACKAGE_MANIFEST.json").decode("utf-8"))
+        assert manifest["operator"] == "Kaan_Ozan"
+        assert manifest["gate_evidence_summary"]["g2_qualification_jsons"] == ["experiments/hardware/g2-quiet.json"]

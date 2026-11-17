@@ -1,0 +1,36 @@
+{
+  "status": "COMPILED_BUT_NOT_FLASHED",
+  "created_utc": "2026-11-17T07:24:24.693647+00:00",
+  "commit": "319fcc59be0177bf45d5266025344d31e4e9a9c2",
+  "firmware_version": "1.1.0",
+  "idf_version": "5.5.1",
+  "esp_tinyusb": "2.2.0",
+  "tinyusb": "0.19.0~3",
+  "target": "esp32s3",
+  "flash_mb": 16,
+  "psram_mb": 8,
+  "profile": 2,
+  "encoding": 1,
+  "memory_origin": "CONFIGURED_TARGET_NOT_PHYSICALLY_VERIFIED",
+  "source_modes": [
+    1
+  ],
+  "microphone_required_for_boot": false,
+  "physical_boot": "NOT_EXECUTED",
+  "build_directory": "firmware/releases/g1_release_20261117",
+  "binary_sha256": {
+    "bootloader/bootloader.bin": "52db976aa3d20ab4c1f112832f1c74fa5c591fc1d887c6498a236aaa4f6d5dfd",
+    "auscultaforge_g1.bin": "bd48630874e531f2d761ed0e39f27c90d5d7271223a6566acbf1bc620b919837",
+    "partition_table/partition-table.bin": "73c0b5c3e5fcba3a151cc70c453c93dd5f4798899e7f2f8cca76da1f32ffc501"
+  },
+  "application_bytes": 268112,
+  "build_exit_code": 0,
+  "sdkconfig_sha256": "5c137ae2416c5e356a5c6e0488c5b41ae9a194b77a9f4f0bd233054bd364332b",
+  "dependencies_lock_sha256": "618443a9d9b1ffd85d4920b41211b6712d1c16887c7c93ed807e9127acbfb330",
+  "partition_layout": "# Name, Type, SubType, Offset, Size\nnvs, data, nvs, 0x9000, 0x6000\nphy_init, data, phy, 0xf000, 0x1000\nfactory, app, factory, 0x10000, 0x300000\n",
+  "flash_files": {
+    "0x0": "bootloader/bootloader.bin",
+    "0x10000": "auscultaforge_g1.bin",
+    "0x8000": "partition_table/partition-table.bin"
+  }
+}

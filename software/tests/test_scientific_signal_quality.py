@@ -18,7 +18,12 @@ import numpy as np
 import pytest
 
 from pcg_core.scientific.models import SignalQualityConfig, SignalCharacterizationResult
-from pcg_core.scientific.signal_quality import compute_signal_quality
+from pcg_core.scientific.signal_quality import (
+    compute_signal_quality,
+    inject_controlled_artifact,
+    evaluate_quality_detection_benchmark,
+)
+from pcg_core.sources import MockPCGSource
 
 
 class TestScientificSignalQuality:
@@ -160,3 +165,23 @@ class TestScientificSignalQuality:
         assert isinstance(d["digital_saturation_count"], int)
         assert isinstance(d["rms"], float)
         assert not math.isnan(d["crest_factor"])
+
+    def test_controlled_artifact_injection_variants(self):
+        src = MockPCGSource(sample_rate_hz=4000, duration_s=4.0)
+        clean = np.concatenate([b.samples for b in src.blocks()]) * 0.4
+        for kind in ("clipping", "contact_loss", "mains_interference", "high_frequency_noise"):
+            corrupted, meta = inject_controlled_artifact(clean, 4000.0, kind)
+            assert len(corrupted) == len(clean)
+            assert corrupted.dtype == np.float32
+            assert meta["provenance"] == "SOFTWARE_SYNTHETIC_ARTIFACT_INJECTION"
+        with pytest.raises(ValueError, match="Unsupported artifact_type"):
+            inject_controlled_artifact(clean, 4000.0, "unknown_mode")
+
+    def test_quality_detection_benchmark_detects_all_injected_artifacts(self):
+        src = MockPCGSource(sample_rate_hz=4000, duration_s=6.0)
+        clean = np.concatenate([b.samples for b in src.blocks()]) * 0.4
+        report = evaluate_quality_detection_benchmark(clean, 4000.0)
+        assert report["clean_false_positive_count"] == 0
+        assert report["true_positive_count"] == report["total_injected_cases"] == 5
+        assert report["detection_rate_pct"] == 100.0
+        assert report["provenance"]["physical_phantom_execution"] == "NOT_EXECUTED"
