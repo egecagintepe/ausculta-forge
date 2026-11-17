@@ -38,6 +38,9 @@ def _print_banner(result: dict) -> None:
     if result.get("status") == "WAITING_OPERATOR":
         print("\n" + (result.get("reason") or ""))
         print("\n" + OPERATOR_CHECKLIST_TR)
+    elif result.get("status") == "INCONCLUSIVE":
+        print(f"\n[INCONCLUSIVE / BELİRSİZ UYARAN AYRIMI] {result.get('reason') or ''}")
+        print("Mikrofon alt deligi acikligini, hoparlor/uyaran ses seviyesini ve mesafesini kontrol edip tekrar deneyin.")
     if result.get("error"):
         print(f"\n[HATA / DURMA NEDENI] {result['error']}")
     if zip_info.get("zip_path"):
@@ -120,7 +123,12 @@ def main(argv: list[str] | None = None) -> int:
         confirm_operator_ready=_audio_cue,
     )
     _print_banner(result)
-    return 1 if result.get("status") == "FAILED" else 0
+    status = result.get("status")
+    if status == "FAILED":
+        return 1
+    if status == "INCONCLUSIVE":
+        return 2
+    return 0
 
 
 if __name__ == "__main__":

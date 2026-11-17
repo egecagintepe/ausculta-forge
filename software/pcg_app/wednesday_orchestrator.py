@@ -48,6 +48,7 @@ from .hardware_workflow import (
     physical_g1,
     preflight,
     qualify_recording,
+    sha256,
     utc_now,
     validate_release,
     write_json,
@@ -55,6 +56,10 @@ from .hardware_workflow import (
 
 SCHEMA_VERSION = "1.0.0"
 G2_CAPTURE_TARGET_SAMPLES = 480000
+MIN_STIMULUS_VS_QUIET_SNR_20_500HZ_DB = 6.0
+MIN_STIMULUS_TO_QUIET_RMS_RATIO = 1.8
+MIN_STIMULUS_TO_QUIET_PEAK_RATIO = 1.5
+MAX_STIMULUS_SATURATION_FRACTION = 0.01
 DEFAULT_STATE_REL = Path("experiments/hardware/wednesday_20261118_state.json")
 DEFAULT_ROLLBACK_MANIFEST_REL = Path("firmware/g1_rollback_backup/firmware_build_manifest.json")
 DEFAULT_G1_MANIFEST_REL = Path("firmware/releases/g1_release_20261117/firmware_build_manifest.json")
@@ -562,12 +567,93 @@ def record_g2_session(
     return summary
 
 
+def evaluate_g2_stimulus_separation(
+    quiet_summary: Optional[dict[str, Any]],
+    stimulus_summary: Optional[dict[str, Any]],
+    snr_20_500_db: Optional[float],
+) -> dict[str, Any]:
+    """Verify controlled G2 stimulus is meaningfully separable from quiet room noise.
+
+    Returns verdict='PASSED' only when all acoustic separation criteria pass;
+    otherwise returns verdict='INCONCLUSIVE' with explicit unmet thresholds.
+    """
+    thresholds = {
+        "min_snr_20_500hz_db": MIN_STIMULUS_VS_QUIET_SNR_20_500HZ_DB,
+        "min_fullband_rms_ratio": MIN_STIMULUS_TO_QUIET_RMS_RATIO,
+        "min_peak_ratio": MIN_STIMULUS_TO_QUIET_PEAK_RATIO,
+        "max_stimulus_saturation_fraction": MAX_STIMULUS_SATURATION_FRACTION,
+    }
+    if not quiet_summary or not stimulus_summary:
+        return {
+            "verdict": "INCONCLUSIVE",
+            "thresholds": thresholds,
+            "observed": {},
+            "criteria": {},
+            "reasons": ["Missing quiet or stimulus G2 capture summary."],
+        }
+
+    q_rms = float(quiet_summary.get("rms_fs") or 0.0)
+    s_rms = float(stimulus_summary.get("rms_fs") or 0.0)
+    q_peak = float(quiet_summary.get("peak_fs") or 0.0)
+    s_peak = float(stimulus_summary.get("peak_fs") or 0.0)
+    sat = float(stimulus_summary.get("saturation_fraction") or 0.0)
+
+    rms_ratio = (s_rms / q_rms) if q_rms > 1e-12 else (float("inf") if s_rms > 1e-12 else 0.0)
+    peak_ratio = (s_peak / q_peak) if q_peak > 1e-12 else (float("inf") if s_peak > 1e-12 else 0.0)
+
+    criteria = {
+        "distinct_wav_sha256": stimulus_summary.get("raw_wav_sha256") != quiet_summary.get("raw_wav_sha256"),
+        "snr_20_500hz_db_min_6db": (snr_20_500_db is not None) and (float(snr_20_500_db) >= MIN_STIMULUS_VS_QUIET_SNR_20_500HZ_DB),
+        "fullband_rms_ratio_min_1_8x": rms_ratio >= MIN_STIMULUS_TO_QUIET_RMS_RATIO,
+        "peak_ratio_min_1_5x": peak_ratio >= MIN_STIMULUS_TO_QUIET_PEAK_RATIO,
+        "no_excessive_saturation": sat <= MAX_STIMULUS_SATURATION_FRACTION,
+    }
+
+    reasons: list[str] = []
+    if not criteria["distinct_wav_sha256"]:
+        reasons.append("Quiet and stimulus WAV SHA-256 digests are identical.")
+    if not criteria["snr_20_500hz_db_min_6db"]:
+        reasons.append(
+            f"20-500 Hz stimulus-to-quiet SNR {snr_20_500_db} dB < {MIN_STIMULUS_VS_QUIET_SNR_20_500HZ_DB:.1f} dB minimum."
+        )
+    if not criteria["fullband_rms_ratio_min_1_8x"]:
+        reasons.append(
+            f"Wideband RMS ratio {rms_ratio:.3f}x < {MIN_STIMULUS_TO_QUIET_RMS_RATIO:.1f}x minimum."
+        )
+    if not criteria["peak_ratio_min_1_5x"]:
+        reasons.append(
+            f"Peak amplitude ratio {peak_ratio:.3f}x < {MIN_STIMULUS_TO_QUIET_PEAK_RATIO:.1f}x minimum."
+        )
+    if not criteria["no_excessive_saturation"]:
+        reasons.append(
+            f"Stimulus digital saturation fraction {sat:.4f} exceeds {MAX_STIMULUS_SATURATION_FRACTION:.4f} limit."
+        )
+
+    verdict = "PASSED" if all(criteria.values()) else "INCONCLUSIVE"
+    return {
+        "verdict": verdict,
+        "thresholds": thresholds,
+        "observed": {
+            "snr_20_500hz_db": snr_20_500_db,
+            "quiet_rms_fs": round(q_rms, 6),
+            "stimulus_rms_fs": round(s_rms, 6),
+            "fullband_rms_ratio": round(rms_ratio, 4) if np.isfinite(rms_ratio) else None,
+            "quiet_peak_fs": round(q_peak, 6),
+            "stimulus_peak_fs": round(s_peak, 6),
+            "peak_ratio": round(peak_ratio, 4) if np.isfinite(peak_ratio) else None,
+            "stimulus_saturation_fraction": round(sat, 6),
+        },
+        "criteria": criteria,
+        "reasons": reasons,
+    }
+
+
 def write_g2_comparison(
     hw_dir: Path,
     g1_detail: Optional[dict[str, Any]],
     quiet_summary: Optional[dict[str, Any]],
     stimulus_summary: Optional[dict[str, Any]],
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path, dict[str, Any]]:
     """Compare G2 quiet vs controlled stimulus against G1 determinism provenance."""
     hw_dir.mkdir(parents=True, exist_ok=True)
     snr_20_500_db: Optional[float] = None
@@ -589,6 +675,8 @@ def write_g2_comparison(
             snr_20_500_db = float(res.active_to_quiescent_ratio_db)
             snr_detail = asdict(res)
 
+    acceptance_eval = evaluate_g2_stimulus_separation(quiet_summary, stimulus_summary, snr_20_500_db)
+
     comp = {
         "schema_version": SCHEMA_VERSION,
         "created_utc": utc_now(),
@@ -603,6 +691,7 @@ def write_g2_comparison(
         "g2_stimulus_capture": stimulus_summary,
         "stimulus_vs_quiet_snr_20_500hz_db": snr_20_500_db,
         "snr_measurement_detail": snr_detail,
+        "acceptance_evaluation": acceptance_eval,
     }
     json_path = hw_dir / "wednesday_g2_comparison.json"
     md_path = hw_dir / "wednesday_g2_comparison.md"
@@ -613,6 +702,7 @@ def write_g2_comparison(
         "",
         f"- **Generated UTC:** `{comp['created_utc']}`",
         f"- **20–500 Hz Stimulus-to-Quiet SNR (dB):** `{snr_20_500_db}`",
+        f"- **Stimulus Separation Verdict:** **`{acceptance_eval['verdict']}`**",
         "",
         "| Capture Role | `source_mode` | Provenance | Samples | Duration (s) | RMS (FS) | Peak (FS) | Clipping | Drops / CRC | SHA-256 (Raw WAV) |",
         "| --- | :---: | --- | ---: | ---: | ---: | ---: | :---: | :---: | --- |",
@@ -625,8 +715,13 @@ def write_g2_comparison(
                 f"{cap['rms_fs']:.6f} | {cap['peak_fs']:.6f} | `{cap['clipping_detected']}` | "
                 f"{fw_drop} / {cap['crc_failures']} | `{cap['raw_wav_sha256'][:16]}...` |"
             )
+    if acceptance_eval.get("reasons"):
+        lines.append("")
+        lines.append("## Unmet Acceptance Criteria")
+        for r in acceptance_eval["reasons"]:
+            lines.append(f"- {r}")
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return json_path, md_path
+    return json_path, md_path, acceptance_eval
 
 
 def upload_team_evidence_to_github(
@@ -790,26 +885,57 @@ def run_wednesday_orchestrator(
             overall_status = "FAILED"
             return {"status": overall_status, "error": str(exc), "state": state}
 
-        # 4. Deterministic G1 Regression (Resumable on same device UID + FW version unless --force-g1)
+        # 4. Deterministic G1 Regression (NEVER reuses pre-G2-flash G1 state once G2 flash is active)
         prior_g1 = state["stages"]["g1_regression"]
+        prior_detail = prior_g1.get("detail") if isinstance(prior_g1.get("detail"), dict) else {}
+        first_flash_file = g2_manifest_p.parent / "first-flash.txt"
+        flash_evidence_sha256 = sha256(first_flash_file) if first_flash_file.is_file() else None
+        g2_flash_active = bool(assume_g2_flashed or first_flash_file.is_file())
+        g2_raw = json.loads(g2_manifest_p.read_text(encoding="utf-8"))
+        g2_is_authorized = (
+            g2_raw.get("status") == "COMPILED_BUT_NOT_FLASHED"
+            and bool(g2_raw.get("physical_attestation") or (g2_manifest_p.parent / "g2_physical_attestation.json").is_file())
+        )
+        active_manifest_p = g2_manifest_p if (g2_flash_active and g2_is_authorized) else g1_manifest_p
+        active_g1_manifest = validate_release(active_manifest_p)
+        manifest_role = "g2_post_flash" if active_manifest_p == g2_manifest_p else "g1_baseline"
+        post_g2_flash_verified = (manifest_role == "g2_post_flash")
+
+        # Never allow an un-authorized manifest to masquerade as post-flash verified G1
+        if g2_flash_active and not g2_is_authorized and prior_g1.get("status") in ("PASSED", "RESUMED_PASSED"):
+            state["pre_g2_flash_g1_regression"] = dict(prior_detail)
+
         same_board = (
             prior_g1.get("status") in ("PASSED", "RESUMED_PASSED")
-            and isinstance(prior_g1.get("detail"), dict)
-            and prior_g1["detail"].get("device_uid_low") == caps["device_uid_low"]
-            and prior_g1["detail"].get("firmware_version") == caps["firmware_version"]
+            and prior_detail.get("device_uid_low") == caps["device_uid_low"]
+            and prior_detail.get("firmware_version") == caps["firmware_version"]
+            and prior_detail.get("post_g2_flash_verified") is True and post_g2_flash_verified is True
+            and prior_detail.get("manifest_sdkconfig_sha256") == active_g1_manifest.get("sdkconfig_sha256")
+            and prior_detail.get("flash_evidence_sha256") == flash_evidence_sha256
         )
+        # Allow baseline pre-flash G1 resume ONLY when NOT post-G2-flash and matching baseline sdkconfig
+        if not post_g2_flash_verified and not g2_flash_active:
+            same_board = (
+                prior_g1.get("status") in ("PASSED", "RESUMED_PASSED")
+                and prior_detail.get("device_uid_low") == caps["device_uid_low"]
+                and prior_detail.get("firmware_version") == caps["firmware_version"]
+                and prior_detail.get("post_g2_flash_verified") is False
+                and prior_detail.get("manifest_sdkconfig_sha256") == active_g1_manifest.get("sdkconfig_sha256")
+            )
+
         if same_board and not force_g1:
-            g1_detail = dict(prior_g1["detail"])
+            g1_detail = dict(prior_detail)
             _set_stage(resolved_state, state, "g1_regression", "RESUMED_PASSED", g1_detail)
         else:
+            if post_g2_flash_verified and prior_g1.get("status") in ("PASSED", "RESUMED_PASSED") and not prior_detail.get("post_g2_flash_verified"):
+                state["pre_g2_flash_g1_regression"] = dict(prior_detail)
             try:
-                g1_manifest = validate_release(g1_manifest_p)
                 if physical_g1_runner is not None:
-                    g1_ev, g1_dir = physical_g1_runner(selected_port, hw_dir, None, g1_manifest)
+                    g1_ev, g1_dir = physical_g1_runner(selected_port, hw_dir, None, active_g1_manifest)
                 elif engine_factory is not CanonicalSessionEngine:
-                    g1_ev, g1_dir = _run_g1_via_custom_engine(engine_factory, selected_port, hw_dir, None, g1_manifest)
+                    g1_ev, g1_dir = _run_g1_via_custom_engine(engine_factory, selected_port, hw_dir, None, active_g1_manifest)
                 else:
-                    g1_ev, g1_dir = physical_g1(selected_port, hw_dir, None, g1_manifest)
+                    g1_ev, g1_dir = physical_g1(selected_port, hw_dir, None, active_g1_manifest)
 
                 g1_detail = {
                     "conclusion": g1_ev.get("conclusion"),
@@ -822,6 +948,11 @@ def run_wednesday_orchestrator(
                     "bundle_dir": str(g1_dir),
                     "device_uid_low": caps["device_uid_low"],
                     "firmware_version": caps["firmware_version"],
+                    "manifest_role": manifest_role,
+                    "manifest_path": str(active_manifest_p),
+                    "manifest_sdkconfig_sha256": active_g1_manifest.get("sdkconfig_sha256"),
+                    "flash_evidence_sha256": flash_evidence_sha256,
+                    "post_g2_flash_verified": post_g2_flash_verified,
                     "failure_reasons": g1_ev.get("failure_reasons", []),
                 }
                 if g1_ev.get("conclusion") != "PHYSICAL_G1_PASSED":
@@ -830,7 +961,7 @@ def run_wednesday_orchestrator(
                     return {"status": overall_status, "error": "G1 failed; H0/G2 halted.", "state": state}
                 _set_stage(resolved_state, state, "g1_regression", "PASSED", g1_detail)
             except Exception as exc:
-                _set_stage(resolved_state, state, "g1_regression", "FAILED", {"port": selected_port, "error": str(exc)})
+                _set_stage(resolved_state, state, "g1_regression", "FAILED", {"port": selected_port, "manifest_role": manifest_role, "error": str(exc)})
                 overall_status = "FAILED"
                 return {"status": overall_status, "error": str(exc), "state": state}
 
@@ -942,8 +1073,20 @@ def run_wednesday_orchestrator(
                 overall_status = "FAILED"
                 return {"status": overall_status, "error": str(exc), "state": state}
 
-        comparison_json, comparison_md = write_g2_comparison(hw_dir, state["stages"]["g1_regression"]["detail"], quiet_summary, stimulus_summary)
+        comparison_json, comparison_md, acceptance_eval = write_g2_comparison(
+            hw_dir, state["stages"]["g1_regression"]["detail"], quiet_summary, stimulus_summary
+        )
         state["g2_comparison_paths"] = {"json": str(comparison_json), "markdown": str(comparison_md)}
+        state["g2_acceptance_evaluation"] = acceptance_eval
+        if acceptance_eval["verdict"] != "PASSED":
+            stim_detail = dict(stimulus_summary)
+            stim_detail["acceptance_evaluation"] = acceptance_eval
+            _set_stage(resolved_state, state, "g2_stimulus_capture", "INCONCLUSIVE", stim_detail)
+            save_state(resolved_state, state)
+            overall_status = "INCONCLUSIVE"
+            reason = "; ".join(acceptance_eval.get("reasons") or ["Stimulus recording did not separate meaningfully from quiet capture."])
+            return {"status": overall_status, "reason": reason, "state": state}
+
         save_state(resolved_state, state)
         overall_status = "PASSED"
         return {"status": overall_status, "state": state}

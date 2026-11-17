@@ -178,8 +178,9 @@ class _FakeG2Engine:
             t = (np.arange(256, dtype=np.float64) + seq * 256) / float(sample_rate_hz)
             if mode == "zero":
                 pcm = np.zeros(256, dtype=np.int32)
-            elif mode == "quiet":
-                rng = np.random.default_rng(100 + seq)
+            elif mode in ("quiet", "quiet_2"):
+                seed_base = 100 if mode == "quiet" else 900
+                rng = np.random.default_rng(seed_base + seq)
                 pcm = (rng.normal(0.0, 0.002, size=256) * float(1 << 23)).astype(np.int32)
             else:  # stimulus
                 sig = 0.25 * np.sin(2.0 * np.pi * 120.0 * t) + 0.10 * np.sin(2.0 * np.pi * 240.0 * t)
@@ -540,3 +541,158 @@ def test_lab_mode_fastapi_endpoints():
         assert pack_data["file_count"] > 0
     finally:
         zip_p.unlink(missing_ok=True)
+
+
+def test_post_g2_flash_forces_fresh_physical_g1_and_never_reuses_pre_flash_g1_state(tmp_path):
+    """After G2 firmware is flashed, orchestrator MUST run physical G1 again against G2 manifest."""
+    repo = _stage_minimal_repo(tmp_path / "zip_repo")
+    state_file = repo / "experiments/hardware/wednesday_20261118_state.json"
+
+    g1_calls = {"count": 0, "manifests": [], "fail_on_call": None}
+
+    def _g1_runner(port, out, bi, mf):
+        g1_calls["count"] += 1
+        g1_calls["manifests"].append(mf["sdkconfig_sha256"])
+        if g1_calls["fail_on_call"] == g1_calls["count"]:
+            return (
+                {
+                    "conclusion": "PHYSICAL_G1_FAILED",
+                    "verification_result": "FAIL",
+                    "host_samples_accepted": 480000,
+                    "host_sample_value_errors": 3,
+                    "firmware_samples_dropped": 0,
+                    "sha256_hash": "badsha",
+                    "failure_reasons": ["sample_integrity_failed"],
+                },
+                out / f"g1_bundle_{g1_calls['count']}",
+            )
+        return (
+            {
+                "conclusion": "PHYSICAL_G1_PASSED",
+                "verification_result": "PASS",
+                "host_samples_accepted": 480000,
+                "host_sample_value_errors": 0,
+                "firmware_samples_dropped": 0,
+                "sha256_hash": f"g1sha_{g1_calls['count']}",
+                "failure_reasons": [],
+            },
+            out / f"g1_bundle_{g1_calls['count']}",
+        )
+
+    # 1. Baseline G1 before H0/G2 flash
+    res1 = run_wednesday_orchestrator(
+        root=repo,
+        state_path=state_file,
+        run_g2_captures=False,
+        scanner_factory=lambda: _FakeScanner([_espressif_port("COM14")]),
+        engine_factory=lambda **kw: _FakeG2Engine([], **kw),
+        physical_g1_runner=_g1_runner,
+        return_zip_path=tmp_path / "pre_flash.zip",
+    )
+    assert res1["status"] == "WAITING_OPERATOR"
+    assert g1_calls["count"] == 1
+    assert res1["state"]["stages"]["g1_regression"]["status"] == "PASSED"
+    assert res1["state"]["stages"]["g1_regression"]["detail"]["post_g2_flash_verified"] is False
+    assert res1["state"]["stages"]["g1_regression"]["detail"]["manifest_role"] == "g1_baseline"
+
+    # 2. Authorize & simulate G2 flash (first-flash.txt written); old G1 PASSED state MUST NOT be reused
+    g2_manifest_p = _authorize_temp_g2(repo)
+    (g2_manifest_p.parent / "first-flash.txt").write_text("esptool flash verified on COM15\n", encoding="utf-8")
+
+    # First check: if post-flash G1 fails, orchestration stops with FAILED before G2 quiet capture
+    g1_calls["fail_on_call"] = 2
+    res_fail = run_wednesday_orchestrator(
+        root=repo,
+        state_path=state_file,
+        scanner_factory=lambda: _FakeScanner([_espressif_port("COM14")]),
+        engine_factory=lambda **kw: _FakeG2Engine(["quiet", "stimulus"], **kw),
+        physical_g1_runner=_g1_runner,
+        return_zip_path=tmp_path / "post_flash_fail.zip",
+    )
+    assert res_fail["status"] == "FAILED"
+    assert g1_calls["count"] == 2
+    assert res_fail["state"]["stages"]["g1_regression"]["status"] == "FAILED"
+    assert res_fail["state"]["stages"]["g2_quiet_capture"]["status"] == "PENDING"
+    assert res_fail["state"]["pre_g2_flash_g1_regression"]["manifest_role"] == "g1_baseline"
+
+    # Second check: once post-flash G1 passes cleanly, both G1 (post-flash) and G2 captures pass
+    g1_calls["fail_on_call"] = None
+    modes_pass = ["quiet", "stimulus"]
+    res_pass = run_wednesday_orchestrator(
+        root=repo,
+        state_path=state_file,
+        g2_target_samples=2048,
+        scanner_factory=lambda: _FakeScanner([_espressif_port("COM14")]),
+        engine_factory=lambda **kw: _FakeG2Engine(modes_pass, **kw),
+        physical_g1_runner=_g1_runner,
+        return_zip_path=tmp_path / "post_flash_pass.zip",
+    )
+    assert res_pass["status"] == "PASSED"
+    assert g1_calls["count"] == 3
+    assert g1_calls["manifests"][0] != g1_calls["manifests"][2]
+    assert res_pass["state"]["stages"]["g1_regression"]["status"] == "PASSED"
+    assert res_pass["state"]["stages"]["g1_regression"]["detail"]["post_g2_flash_verified"] is True
+    assert res_pass["state"]["stages"]["g1_regression"]["detail"]["manifest_role"] == "g2_post_flash"
+
+
+def test_g2_stimulus_not_meaningfully_different_from_quiet_returns_inconclusive(tmp_path):
+    """If G2 stimulus capture fails SNR/RMS/peak separation from quiet, return INCONCLUSIVE cleanly."""
+    repo = _stage_minimal_repo(tmp_path / "zip_repo")
+    _authorize_temp_g2(repo)
+    state_file = repo / "experiments/hardware/wednesday_20261118_state.json"
+
+    res_inc = run_wednesday_orchestrator(
+        root=repo,
+        state_path=state_file,
+        assume_g2_flashed=True,
+        g2_target_samples=2048,
+        scanner_factory=lambda: _FakeScanner([_espressif_port("COM14")]),
+        engine_factory=lambda **kw: _FakeG2Engine(["quiet", "quiet_2"], **kw),
+        physical_g1_runner=lambda port, out, bi, mf: (
+            {
+                "conclusion": "PHYSICAL_G1_PASSED",
+                "verification_result": "PASS",
+                "host_samples_accepted": 480000,
+                "host_sample_value_errors": 0,
+                "firmware_samples_dropped": 0,
+                "sha256_hash": "g1sha",
+                "failure_reasons": [],
+            },
+            out / "g1_bundle",
+        ),
+        return_zip_path=tmp_path / "inconclusive.zip",
+    )
+    assert res_inc["status"] == "INCONCLUSIVE"
+    assert res_inc["state"]["stages"]["g2_quiet_capture"]["status"] == "PASSED"
+    assert res_inc["state"]["stages"]["g2_stimulus_capture"]["status"] == "INCONCLUSIVE"
+    eval_inc = res_inc["state"]["g2_acceptance_evaluation"]
+    assert eval_inc["verdict"] == "INCONCLUSIVE"
+    assert eval_inc["criteria"]["snr_20_500hz_db_min_6db"] is False
+    assert (tmp_path / "inconclusive.zip").is_file()
+
+    # Re-running with genuine stimulus re-executes g2_stimulus_capture (does NOT skip INCONCLUSIVE)
+    res_ok = run_wednesday_orchestrator(
+        root=repo,
+        state_path=state_file,
+        assume_g2_flashed=True,
+        g2_target_samples=2048,
+        scanner_factory=lambda: _FakeScanner([_espressif_port("COM14")]),
+        engine_factory=lambda **kw: _FakeG2Engine(["stimulus"], **kw),
+        physical_g1_runner=lambda port, out, bi, mf: (
+            {
+                "conclusion": "PHYSICAL_G1_PASSED",
+                "verification_result": "PASS",
+                "host_samples_accepted": 480000,
+                "host_sample_value_errors": 0,
+                "firmware_samples_dropped": 0,
+                "sha256_hash": "g1sha",
+                "failure_reasons": [],
+            },
+            out / "g1_bundle",
+        ),
+        return_zip_path=tmp_path / "resolved.zip",
+    )
+    assert res_ok["status"] == "PASSED"
+    assert res_ok["state"]["stages"]["g2_quiet_capture"]["status"] == "RESUMED_PASSED"
+    assert res_ok["state"]["stages"]["g2_stimulus_capture"]["status"] == "PASSED"
+    assert res_ok["state"]["g2_acceptance_evaluation"]["verdict"] == "PASSED"

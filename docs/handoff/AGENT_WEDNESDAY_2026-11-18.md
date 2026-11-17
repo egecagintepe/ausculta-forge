@@ -104,17 +104,20 @@ Proceed **only** after Phase 2 (photos + 3.3V + continuity verified) AND Phase 3
 
 ---
 
-## Phase 5 — Autonomous Live INMP441 (`source_mode=0`) Quiet & Stimulus Acquisition (Gate G2)
+## Phase 5 — Autonomous Post-Flash G1 + Live INMP441 (`source_mode=0`) Quiet & Stimulus Acquisition (Gate G2)
 
 1. Confirm CLI is the sole owner of `<COM_CDC>` (stop `uvicorn` / close Device Center first). Run the autonomous G2 capture stage:
    ```powershell
    .\.venv\Scripts\python.exe tools/hardware/wednesday_lab.py --assume-g2-flashed
    ```
-   *(Add `--force-g1` after flashing G2 firmware to verify deterministic `source_mode=1` G1 still passes on the new image, and optionally `--push-evidence` ONLY if GitHub credentials are already signed in and operators ask to upload JSON/MD summaries under `experiments/hardware/team_2026-11-18/`.)*
+   - **Mandatory Post-Flash G1 Rule:** `wednesday_lab.py` **never reuses pre-G2-flash G1 `PASSED` state**. When G2 flash is active (`first-flash.txt` present or `--assume-g2-flashed`), it automatically archives the pre-flash baseline under `pre_g2_flash_g1_regression` and **executes a fresh physical `source_mode=1` G1 verification** against the G2 manifest first; if that post-flash G1 check fails, G2 capture is halted (`FAILED`).
+   - *(Optionally pass `--push-evidence` ONLY if GitHub credentials are already signed in and operators ask to upload JSON/MD summaries under `experiments/hardware/team_2026-11-18/`.)*
 2. Guide Kaan & Ozan briefly when prompted:
    - **Capture 1 (`quiet`, 10 s / `480,000` samples):** Keep room quiet and do not touch the breakout/cable.
    - **Capture 2 (`stimulus`, 10 s / `480,000` samples):** Apply controlled acoustic test stimulus (clap / 100 Hz tone at ~10–15 cm from the bottom acoustic port).
-3. Verify `wednesday_lab.py` generated `experiments/hardware/wednesday_g2_comparison.json` and `.md` plus the return `.zip`. Inspect `constant_zero == false`, `rms_fs` / SNR delta (`stimulus > quiet`), `saturation_fraction == 0.0`, `crc_failures == 0`, and `dropped_frames == 0`.
+3. **Explicit G2 Acceptance & `INCONCLUSIVE` Verdict:** Verify `wednesday_lab.py` generated `experiments/hardware/wednesday_g2_comparison.json` and `.md` plus the return `.zip`.
+   - `constant_zero == true` or `constant_signal == true` or `crc_failures > 0` or `dropped_samples > 0` -> strictly **`FAILED`** (never fake PASS).
+   - Meaningful stimulus separation (`acceptance_evaluation`): requires distinct SHA-256 WAVs, `20–500 Hz` stimulus-to-quiet `SNR >= 6.0 dB`, fullband `RMS ratio >= 1.8x`, `peak ratio >= 1.5x`, and `saturation <= 0.01`. If recordings are valid I²S audio but stimulus separation does not meet these thresholds, `wednesday_lab.py` marks `g2_stimulus_capture = INCONCLUSIVE` (exit code `2`) instead of `PASS`; re-running after adjusting acoustic excitation preserves `quiet` and re-captures `stimulus`.
 4. **Optional Live Inspection UI:** Once CLI finishes, operators may launch `.\scripts\dev.ps1` (`http://127.0.0.1:3000`) to view live waveforms, Device Center, and the **Wednesday Lab Mode** card (`Build Return ZIP`).
 5. **Failure / Rollback Rule:** If `DIGITAL_SILENCE_OR_CONSTANT_SIGNAL` (`constant_zero == true`) persists after checking VDD/GND/slot/SCK/WS/SD, keep the failure state JSON and generated return ZIP intact, STOP testing, and execute the human-gated G1 rollback in [HARDWARE_GATES_AND_ROLLBACK.md](HARDWARE_GATES_AND_ROLLBACK.md#6-zorunlu-g1-geri-dönüş-rollback-prosedürü).
 

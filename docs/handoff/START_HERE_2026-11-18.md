@@ -112,9 +112,9 @@ Artık preflight, USB keşfi, `HELLO`, G1 (`480.000` örnek), H0/G2 kapı deneti
    ```powershell
    .\.venv\Scripts\python.exe tools/hardware/bringup.py flash --port <COM_ROM> --manifest firmware/releases/g2_candidate_20261117/firmware_build_manifest.json
    ```
-6. **G2 Sonrası Otonom G1 + 10 sn Sessiz + 10 sn Uyaranlı G2 Kaydı ve Karşılaştırma:**
+6. **G2 Sonrası Zorunlu Fiziksel G1 Tekrarı + 10 sn Sessiz + 10 sn Uyaranlı G2 Kaydı ve Karşılaştırma:**
    - Flash bitince `RESET` butonuna basın, yeni `<COM_CDC>` portunu bulun (gerekirse `--port <COM_CDC>` verin).
-   - Aşağıdaki tek komutu çalıştırın; tamamlanmış G1 aşamasını algılayıp **10 s sessiz ortam (`g2_quiet_capture`)** ve **10 s test uyaranı (`g2_stimulus_capture`)** `source_mode=0` WAV kayıtlarını otomatik alır, dijital sıfır/sessizlik varsa sahte PASS vermez, `wednesday_g2_comparison.json` / `.md` üretir ve tek teslim `.zip` dosyasını çıkarır:
+   - Aşağıdaki tek komutu çalıştırın; **G2 flash sonrası eski G1 `PASSED` kaydını asla yeniden kullanmaz — önce yeni G2 yazılımı üzerinde zorunlu fiziksel G1 testini (`480.000` örnek) baştan doğrular**, ardından **10 s sessiz ortam (`g2_quiet_capture`)** ve **10 s test uyaranı (`g2_stimulus_capture`)** `source_mode=0` WAV kayıtlarını otomatik alır. Dijital sıfır/sessizlik varsa `FAILED`, uyaran sessiz ortamdan anlamlı ayrışmadıysa (`20–500 Hz` SNR < `6.0 dB` veya RMS < `1.8x` veya Peak < `1.5x`) dürüstçe **`INCONCLUSIVE`** gösterir; `wednesday_g2_comparison.json` / `.md` üretir ve tek teslim `.zip` dosyasını çıkarır:
    ```powershell
    .\.venv\Scripts\python.exe tools/hardware/wednesday_lab.py --assume-g2-flashed
    ```

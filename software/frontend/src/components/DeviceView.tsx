@@ -1232,7 +1232,7 @@ export const DeviceView: React.FC<DeviceViewProps> = ({
                     ? 'text-[var(--status-success)] border-[var(--status-success)]/40 bg-[var(--status-success)]/10'
                     : st === 'FAILED'
                     ? 'text-[var(--status-danger)] border-[var(--status-danger)]/40 bg-[var(--status-danger)]/10'
-                    : st === 'WAITING_OPERATOR'
+                    : st === 'WAITING_OPERATOR' || st === 'INCONCLUSIVE'
                     ? 'text-[var(--status-warning)] border-[var(--status-warning)]/40 bg-[var(--status-warning)]/10'
                     : 'text-[var(--on-surface-variant)] border-[var(--border-subtle)] bg-[var(--surface-muted)]';
                 return (
