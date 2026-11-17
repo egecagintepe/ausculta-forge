@@ -27,4 +27,4 @@ All files in this folder must follow the canonical naming pattern:
 
 ## Status
 
-All tasks for Week 9 are initially **NOT STARTED**. Update status fields as work progresses.
+**2026-11-17:** [W09_C_source-capture-comparison.md](W09_C_source-capture-comparison.md) updated — **SOFTWARE FRAMEWORK READY / 2026-11-16 G1 WAV VERIFIED / PHYSICAL G2 FEASIBILITY PENDING** (see [`laptop_20261116_g1_and_wav_summary.json`](../../../../../firmware/evidence/laptop_20261116_g1_and_wav_summary.json) and [`RELEASE_AND_EVIDENCE_INDEX_2026-11-17.md`](../../../../handoff/RELEASE_AND_EVIDENCE_INDEX_2026-11-17.md)).

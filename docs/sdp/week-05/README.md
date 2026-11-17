@@ -1,6 +1,7 @@
 # EEE495 — Week 5 — First Hardware Bench and Synthetic Tests
 
 **Reconciled:** 2026-10-26 against `main` at `106d3e0`. This is a documentation review date, not a test execution date. No tests were rerun for this update.
+**Academic Calendar Attribution Note:** Per [`SDP4_WEEK01_06_DRAFT_PROGRESS_REPORT.md`](../SDP4_WEEK01_06_DRAFT_PROGRESS_REPORT.md), the physical 2026-10-26 ESP32-S3 G1 run falls chronologically in **Week 6 (26 Oct – 1 Nov 2026)** ([week-06/README.md](../week-06/README.md)); software synthetic streaming & simulation passed inside Week 5 (19–25 Oct).
 **Overall status:** PARTIAL CLOSEOUT.
 
 | Submission folder | Owner | Current boundary |

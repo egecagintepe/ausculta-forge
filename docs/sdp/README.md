@@ -4,6 +4,9 @@
 **Project:** Smart Digital Stethoscope: Heart Sound Acquisition, Signal Processing and Quality Assessment  
 **Repository:** [egecagintepe/ausculta-forge](https://github.com/egecagintepe/ausculta-forge)
 
+- **Latest As-Of Progress Report (2026-11-17):** [PROGRESS_ASOF_2026-11-17.md](PROGRESS_ASOF_2026-11-17.md)
+- **Wednesday Physical Lab Handoff (2026-11-18):** [../handoff/README.md](../handoff/README.md)
+
 ## Team Working Allocation
 
 | Module | Scope | Owner |

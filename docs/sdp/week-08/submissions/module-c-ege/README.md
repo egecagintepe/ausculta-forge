@@ -27,4 +27,4 @@ All files in this folder must follow the canonical naming pattern:
 
 ## Status
 
-All tasks for Week 8 are initially **NOT STARTED**. Update status fields as work progresses.
+**2026-11-17:** [W08_C_automated-measurement-script.md](W08_C_automated-measurement-script.md) updated — **SOFTWARE PIPELINE VERIFIED / PHYSICAL BENCH MEASUREMENTS PENDING** (`pcg_core.metrology` CLI/workflows, `phantom.py`, `bringup.py qualify`, and 10 s / `480,000`-sample firmware target bound documented).

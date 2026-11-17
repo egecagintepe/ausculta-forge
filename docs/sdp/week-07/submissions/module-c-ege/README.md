@@ -27,4 +27,4 @@ All files in this folder must follow the canonical naming pattern:
 
 ## Status
 
-All tasks for Week 7 are initially **NOT STARTED**. Update status fields as work progresses.
+**2026-11-17:** [W07_C_dataset-playback-path.md](W07_C_dataset-playback-path.md) updated — `WavSource`, `RealtimeWavSource`, `StimulusRecord`, `upload_source_wav`, and host FSM reconnect handling verified in software (`587` tests PASS in `software/tests`). Physical acoustic phantom playback remains `PENDING`.
