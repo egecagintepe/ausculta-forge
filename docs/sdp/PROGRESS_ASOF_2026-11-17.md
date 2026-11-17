@@ -50,6 +50,6 @@
 
 ## 16–17 Kasım Somut Mühendislik Kazanımları (Özet Kanıt)
 
-1. **Windows Üretim Ortamı ve Testler:** `662` Python/Protocol/Firmware-C testi PASS (`587` backend/bilimsel + `59` protocol lab + `16` GCC firmware host), Frontend `9` TS suite + lint + Vite build PASS (`3.93 s`).
+1. **Windows Üretim Ortamı ve Testler:** `670` Python/Protocol/Firmware-C testi PASS (`595` backend/bilimsel/orchestration + `59` protocol lab + `16` GCC firmware host), Frontend `9` TS suite + `tsc --noEmit` lint + Vite build PASS (`4.31 s`).
 2. **Gerçek ESP32 G1 Uçtan Uca Kanıtı (16 Kasım — Tarihsel Kanıt):** COM10 (`UID: 0xb1aa7cc4`) ile hem `bringup.py g1` (`480,000` örnek) hem de FastAPI/React Device Center üzerinden canlı `raw.wav` kaydı (`194,304` örnek, `4.048 s`, `48 kHz`, 0 kayıp, strictly `physical_deterministic_g1`) doğrulandı — özet kanıt: [`laptop_20261116_g1_and_wav_summary.json`](../../firmware/evidence/laptop_20261116_g1_and_wav_summary.json).
 3. **Git'siz Çarşamba Devir ve Dönüş Paketi (17 Kasım):** GitHub Download ZIP (`GITHUB_DOWNLOAD_ZIP`) modunu destekleyen [`scripts/handoff/`](../../scripts/handoff/), tek tık sonuç paketleyici [`pack_wednesday_results.ps1`](../../scripts/handoff/pack_wednesday_results.ps1) / [`pack_lab_return.py`](../../tools/hardware/pack_lab_return.py), emniyet kilitli [`authorize-g2`](../../tools/hardware/bringup.py), staged [`firmware/releases/`](../../firmware/releases/g2_candidate_20261117/README.md) ve [`docs/handoff/`](../handoff/README.md) eksiksiz üretildi.

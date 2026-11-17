@@ -28,14 +28,14 @@
 
 | Suite / Command | Result | Exact Counts / Notes |
 | :--- | :---: | :--- |
-| `.\.venv\Scripts\python.exe -m pytest firmware/tests -v` | **PASS** | **16 passed** (`13.41 s`) — compiles C (`bridge.c`, `g1.c`, `acquisition.c`, `packet_framing.c`) via WinLibs GCC `16.2.0` into `g1.dll`. Covers G1 FSM, I²S 24-in-32 sign extension, overflow counters, stop races. |
-| `.\.venv\Scripts\python.exe -m pytest tools/protocol_lab/python -v` | **PASS** | **59 passed, 1 skipped** (`9.81 s`) — skip is `test_c_executable_to_python_decoder_parity` (`g1_sim_runner.exe` not precompiled in `tools/protocol_lab/c/`). |
-| `.\.venv\Scripts\python.exe -m pytest software/tests -q` | **PASS** | **587 passed, 4 skipped** (`63.87 s`) — skips are optional gitignored datasets (`data/external`, `AUSCULTA_PCG_MANIFEST`) and `golden_generator.exe`. Includes `authorize-g2` gate tests, `GITHUB_DOWNLOAD_ZIP` fallback tests, and controlled artifact benchmark (`100%` / `5/5`). |
-| `Push-Location software/frontend; npm.cmd run lint; npm.cmd test; npm.cmd run build; Pop-Location` | **PASS** | TypeScript `tsc --noEmit`: `0` errors; **9 `tsx` test suites passed**; `vite build` succeeded (`3.93 s`). |
+| `.\.venv\Scripts\python.exe -m pytest firmware/tests -v` | **PASS** | **16 passed** (`13.78 s`) — compiles C (`bridge.c`, `g1.c`, `acquisition.c`, `packet_framing.c`) via WinLibs GCC `16.2.0` into `g1.dll`. Covers G1 FSM, I²S 24-in-32 sign extension, overflow counters, stop races. |
+| `.\.venv\Scripts\python.exe -m pytest tools/protocol_lab/python -v` | **PASS** | **59 passed, 1 skipped** (`9.58 s`) — skip is `test_c_executable_to_python_decoder_parity` (`g1_sim_runner.exe` not precompiled in `tools/protocol_lab/c/`). |
+| `.\.venv\Scripts\python.exe -m pytest software/tests -q` | **PASS** | **595 passed, 4 skipped** (`100.36 s`) — skips are optional gitignored datasets (`data/external`, `AUSCULTA_PCG_MANIFEST`) and `golden_generator.exe`. Includes `authorize-g2` gate tests, `GITHUB_DOWNLOAD_ZIP` fallback tests, `5/5` controlled artifact benchmark, and 8 fault-injection tests for `wednesday_lab.py` & `windows_setup.ps1`. |
+| `Push-Location software/frontend; npm.cmd run lint; npm.cmd test; npm.cmd run build; Pop-Location` | **PASS** | TypeScript `tsc --noEmit`: `0` errors; **9 `tsx` test suites passed**; `vite build` succeeded (`4.31 s`, includes Device Center `Wednesday Lab Mode`). |
 | ESP-IDF v5.5.1 G1 Release Build (`C:\pcg_starter`) | **PASS** | Exit code `0`, `268,112 B` app binary, manifest verified. |
 | ESP-IDF v5.5.1 Separate G2 Compile-Check Build | **PASS** | Exit code `0` (`-B build/g2_compile_check`), `firmware/sdkconfig` cleanly restored to G1 afterward. |
-| `.\scripts\handoff\windows_preflight.ps1` | **PASS** | Verified Python `3.11.9` `.venv`, `esptool 5.6.0`, `Node v24.15.0`, WinLibs GCC `16.2.0`, `GIT_CLONE`/`GITHUB_DOWNLOAD_ZIP` detection, and SHA-256 of all 3 manifests. |
-| [`pack_wednesday_results.ps1`](../../scripts/handoff/pack_wednesday_results.ps1) / [`pack_lab_return.py`](../../tools/hardware/pack_lab_return.py) | **PASS** | Dry-run smoke check packaged `120` files (`3,022,607` bytes, SHA-256 `a7b545b8bd997f86f69b2c93c30a72d59d5685792ae6b442d6c5dd57cf89330a`) read-only without Git. |
+| `.\scripts\handoff\windows_preflight.ps1` | **PASS** | Pure ASCII PowerShell 5.1 compatible; verified Python `3.11.9` `.venv`, `esptool 5.6.0`, `Node v24.15.0`, WinLibs GCC `16.2.0`, `GIT_CLONE`/`GITHUB_DOWNLOAD_ZIP` detection, and SHA-256 of all 3 manifests. |
+| [`wednesday_lab.py`](../../tools/hardware/wednesday_lab.py) & [`pack_wednesday_results.ps1`](../../scripts/handoff/pack_wednesday_results.ps1) | **PASS** | Unplugged smoke run verified `preflight_and_hashes=PASSED`, stopped safely at `usb_discovery=WAITING_OPERATOR`, and generated a `121`-file read-only return ZIP (`3,034,457` bytes, SHA-256 `96e0fcb78e4c184970d7b500bbaec9bb721ac192ffb074bec1c5afcb23327e98`). |
 
 ### B. Historical vs. Today's Physical Hardware Status
 

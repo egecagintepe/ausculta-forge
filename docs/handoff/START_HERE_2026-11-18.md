@@ -21,7 +21,7 @@
 
 Bilgisayarınızda Antigravity'yi açın ve ajana tam olarak şu komutu verin:
 
-> `docs/handoff/AGENT_WEDNESDAY_2026-11-18.md dosyasını baştan sona oku ve oradaki H0 -> G1 -> G2 adımlarını sırayla uygula. Bizden istediğin tüm fotoğraf ve multimetre ölçümlerini tek seferde iste; fiziksel onaysız flash/reset/BOOT yapma.`
+> `docs/handoff/AGENT_WEDNESDAY_2026-11-18.md dosyasını baştan sona oku ve kurulum ile Çarşamba lab akışını tools/hardware/wednesday_lab.py üzerinden sırayla yönet. Fiziksel fotoğraf ve multimetre ölçümlerini bizden tek seferde iste; insan onayı olmadan kesinlikle flash/reset/BOOT yapma.`
 
 ---
 
@@ -76,20 +76,16 @@ Mikrofonu kablolamadan ve flash atmadan önce Kaan şu ölçümleri yapar:
 
 ---
 
-## ADIM 3 — Mevcut G1 Regresyon Kanıtı (Firmware Değiştirmeden)
+## ADIM 3 — Tek Komutluk Otonom Lab Çalıştırma (`wednesday_lab.py`)
 
-Karttaki mevcut G1 firmware'inin bilgisayarınızda hatasız çalıştığını doğrulayın (`<COM_CDC>` yerine kendi portunuzu yazın):
+Artık preflight, USB keşfi, `HELLO`, G1 (`480.000` örnek), H0/G2 kapı denetimi ve teslim ZIP oluşturma **tek komutla** yürür ve durumu `experiments/hardware/wednesday_20261118_state.json` dosyasına kaydeder (`<COM_CDC>` boş bırakılırsa yalnızca tek Espressif portu varsa otomatik seçer):
 
 ```powershell
-# 1. El sıkışma (HELLO):
-.\.venv\Scripts\python.exe tools/hardware/bringup.py hello --port <COM_CDC>
-
-# 2. Tam G1 480.000 örnek testi (Staged G1 manifest ile):
-.\.venv\Scripts\python.exe tools/hardware/bringup.py g1 --port <COM_CDC> --manifest firmware/releases/g1_release_20261117/firmware_build_manifest.json
+# 1. Aşama: Preflight + USB keşfi + HELLO + G1 testi + H0/G2 kapısı + Kanıt ZIP'i
+.\.venv\Scripts\python.exe tools/hardware/wednesday_lab.py --skip-g2-captures
 ```
-*(Port sorulursa güvenlik onayı için `<COM_CDC>` yazıp Enter'a basın.)*
 
-**Başarı Kriteri:** Ekranda **`PHYSICAL_G1_PASSED`** çıktısı ve `0 dropped_samples`, `480000` örnek.
+**Başarı Kriteri:** `g1_regression` için **`PASSED`** (ve `480000` örnek, `0` kayıp), ardından `g2_physical_gate` adımında fotoğraf/multimetre onay kapısı ve ekranda hazır **teslim `.zip` dosya yolu**. *(Manuel tekil kontrol gerekirse `bringup.py hello` / `bringup.py g1` de kullanılabilir.)*
 
 ---
 
@@ -116,16 +112,13 @@ Karttaki mevcut G1 firmware'inin bilgisayarınızda hatasız çalıştığını 
    ```powershell
    .\.venv\Scripts\python.exe tools/hardware/bringup.py flash --port <COM_ROM> --manifest firmware/releases/g2_candidate_20261117/firmware_build_manifest.json
    ```
-6. **G2 Sonrası Kontrol ve İlk Kayıt:**
-   - Flash bitince `RESET` butonuna basın, yeni `<COM_CDC>` portunu bulun.
-   - Önce G1 regresyonunun hâlâ geçtiğini doğrulayın: `bringup.py g1 --port <COM_CDC> --manifest firmware/releases/g2_candidate_20261117/firmware_build_manifest.json`.
-   - Ardından uygulamayı açın: `.\scripts\dev.ps1` $\to$ Tarayıcıda `http://127.0.0.1:3000`.
-   - **Device Center:** `<COM_CDC>` seç $\to$ **Connect & HELLO** $\to$ **Live microphone (Mode 0)** seç $\to$ **Start Acquisition** $\to$ Live Workspace'de **Record** ile 10 saniye **sessiz oda** kaydı, ardından yeni bir 10 saniye **kontrollü test sesi (alkış/ton)** kaydı alın.
-   - İki WAV oturumunu da doğrulayın:
+6. **G2 Sonrası Otonom G1 + 10 sn Sessiz + 10 sn Uyaranlı G2 Kaydı ve Karşılaştırma:**
+   - Flash bitince `RESET` butonuna basın, yeni `<COM_CDC>` portunu bulun (gerekirse `--port <COM_CDC>` verin).
+   - Aşağıdaki tek komutu çalıştırın; tamamlanmış G1 aşamasını algılayıp **10 s sessiz ortam (`g2_quiet_capture`)** ve **10 s test uyaranı (`g2_stimulus_capture`)** `source_mode=0` WAV kayıtlarını otomatik alır, dijital sıfır/sessizlik varsa sahte PASS vermez, `wednesday_g2_comparison.json` / `.md` üretir ve tek teslim `.zip` dosyasını çıkarır:
    ```powershell
-   .\.venv\Scripts\python.exe tools/hardware/bringup.py qualify --session experiments/sessions/<SESSION_ID> --output experiments/hardware/g2-quiet.json
+   .\.venv\Scripts\python.exe tools/hardware/wednesday_lab.py --assume-g2-flashed
    ```
-   *(Sorun çıkarsa panik yapmayın: [HARDWARE_GATES_AND_ROLLBACK.md](HARDWARE_GATES_AND_ROLLBACK.md#6-zorunlu-g1-geri-dönüş-rollback-prosedürü) ile 2 dakikada G1'e dönülür.)*
+   *(İsterseniz tarayıcıda canlı dalga/spektrogram ve `Wednesday Lab Mode` kartı için `.\scripts\dev.ps1` $\to$ `http://127.0.0.1:3000` açıp Device Center üzerinden **Build Return ZIP** de kullanabilirsiniz; CLI çalışırken tarayıcı bağlantısını kapalı tutun.)*
 
 ---
 

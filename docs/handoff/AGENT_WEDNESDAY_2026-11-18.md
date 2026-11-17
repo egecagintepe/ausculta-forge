@@ -62,17 +62,16 @@ Do **NOT** approve G2 wiring or flashing until the photos clearly show clean sol
 
 ---
 
-## Phase 3 — Verify Existing G1 on Team Laptop (Gate G1)
+## Phase 3 — Verify Existing G1 via Single-Command Orchestrator (`wednesday_lab.py`)
 
-With the microphone still disconnected (or safe if not wired yet) and only **one** owner opening `<COM_CDC>`:
+With the microphone still disconnected (or safe if unpowered/unwired) and only **one** owner opening `<COM_CDC>`:
 
-1. Run HELLO & G1 regression against the staged G1 manifest (do **NOT** flash yet — test the firmware already on the chip first):
+1. Run the resumable single-command orchestrator through Gate G1 and H0 check:
    ```powershell
-   .\.venv\Scripts\python.exe tools/hardware/bringup.py hello --port <COM_CDC>
-   .\.venv\Scripts\python.exe tools/hardware/bringup.py g1 --port <COM_CDC> --manifest firmware/releases/g1_release_20261117/firmware_build_manifest.json
+   .\.venv\Scripts\python.exe tools/hardware/wednesday_lab.py --skip-g2-captures
    ```
-   *(If the chip firmware matches `v1.1.0`, this executes without writing flash. Note that `physical_g1` checks `reported == firmware_version`; if the board has an earlier G1 or fails HELLO, inspect the error before touching flash.)*
-2. Confirm output prints `PHYSICAL_G1_PASSED` and saves a new bundle under `experiments/hardware/<timestamp>_<id>/`. Inspect `acceptance_report.md` and `g1_protocol_summary.json` to confirm `480000` samples, `0` dropped samples, `0` CRC errors.
+   *(Pass `--port <COM_CDC>` if more than one Espressif CDC port appears.)*
+2. Verify `experiments/hardware/wednesday_20261118_state.json` records `g1_regression: "PASSED"` (`480000` samples, `0` dropped samples, `0` CRC errors) and `g2_physical_gate: "WAITING_OPERATOR"`. Wait for Kaan & Ozan to return the Phase 2 photo + multimeter bundle before authorizing G2.
 
 ---
 
@@ -105,29 +104,19 @@ Proceed **only** after Phase 2 (photos + 3.3V + continuity verified) AND Phase 3
 
 ---
 
-## Phase 5 — Live INMP441 (`source_mode=0`) Acquisition & Qualification (Gate G2)
+## Phase 5 — Autonomous Live INMP441 (`source_mode=0`) Quiet & Stimulus Acquisition (Gate G2)
 
-1. Confirm CLI is completely finished (COM port is closed). Launch desktop app:
+1. Confirm CLI is the sole owner of `<COM_CDC>` (stop `uvicorn` / close Device Center first). Run the autonomous G2 capture stage:
    ```powershell
-   .\scripts\dev.ps1
+   .\.venv\Scripts\python.exe tools/hardware/wednesday_lab.py --assume-g2-flashed
    ```
-2. Open `http://127.0.0.1:3000` in browser $\to$ **Device Center**:
-   - Click `Scan USB` $\to$ select `<COM_CDC>` $\to$ click `Connect & HELLO`.
-   - Switch Mode to **`Live microphone (Mode 0)`**.
-   - Click `Start Acquisition`. Immediately switch to **Live Workspace** and click **Record** for **10 seconds** in **quiet room background** (`g2-quiet`), then click **Stop** (note the saved `session_id`).
-   - Run a second fresh **10-second** session (`g2-stimulus`) while producing a clear controlled sound near the INMP441 acoustic port (e.g., hand clap at 20 cm or phone 100 Hz tone).
-   - Disconnect cleanly in Device Center before touching CLI tools.
-3. Run offline mathematical qualification on both recorded WAVs:
-   ```powershell
-   .\.venv\Scripts\python.exe tools/hardware/bringup.py qualify --session experiments/sessions/<QUIET_SESSION_ID> --output experiments/hardware/g2-quiet-qualify.json
-   .\.venv\Scripts\python.exe tools/hardware/bringup.py qualify --session experiments/sessions/<STIM_SESSION_ID> --output experiments/hardware/g2-stimulus-qualify.json
-   ```
-4. **Acceptance Audit (strictly compare outputs):**
-   - Check `constant_zero == false` and `constant_signal == false` on both sessions.
-   - Check `rms_fs` and `peak_fs` of `g2-stimulus-qualify.json` are clearly higher than `g2-quiet-qualify.json`.
-   - Check `saturation_fraction == 0.0` (no clipping) or adjust speaker/mic distance if clipping occurs.
-   - Check Device Center telemetry / Flight Recorder logs for `0` DMA overflows and `0` ring overflows.
-   - **Failure / Rollback Rule:** If `constant_zero == true` after checking wiring/slot/3.3V, or if `source_mode=0` crashes USB/ESP32, record the failure JSON/logs in `experiments/hardware/`, stop testing, and if a clean G1 state is required execute the rollback command from [HARDWARE_GATES_AND_ROLLBACK.md](HARDWARE_GATES_AND_ROLLBACK.md#6-zorunlu-g1-geri-dönüş-rollback-prosedürü).
+   *(Add `--force-g1` after flashing G2 firmware to verify deterministic `source_mode=1` G1 still passes on the new image, and optionally `--push-evidence` ONLY if GitHub credentials are already signed in and operators ask to upload JSON/MD summaries under `experiments/hardware/team_2026-11-18/`.)*
+2. Guide Kaan & Ozan briefly when prompted:
+   - **Capture 1 (`quiet`, 10 s / `480,000` samples):** Keep room quiet and do not touch the breakout/cable.
+   - **Capture 2 (`stimulus`, 10 s / `480,000` samples):** Apply controlled acoustic test stimulus (clap / 100 Hz tone at ~10–15 cm from the bottom acoustic port).
+3. Verify `wednesday_lab.py` generated `experiments/hardware/wednesday_g2_comparison.json` and `.md` plus the return `.zip`. Inspect `constant_zero == false`, `rms_fs` / SNR delta (`stimulus > quiet`), `saturation_fraction == 0.0`, `crc_failures == 0`, and `dropped_frames == 0`.
+4. **Optional Live Inspection UI:** Once CLI finishes, operators may launch `.\scripts\dev.ps1` (`http://127.0.0.1:3000`) to view live waveforms, Device Center, and the **Wednesday Lab Mode** card (`Build Return ZIP`).
+5. **Failure / Rollback Rule:** If `DIGITAL_SILENCE_OR_CONSTANT_SIGNAL` (`constant_zero == true`) persists after checking VDD/GND/slot/SCK/WS/SD, keep the failure state JSON and generated return ZIP intact, STOP testing, and execute the human-gated G1 rollback in [HARDWARE_GATES_AND_ROLLBACK.md](HARDWARE_GATES_AND_ROLLBACK.md#6-zorunlu-g1-geri-dönüş-rollback-prosedürü).
 
 ---
 

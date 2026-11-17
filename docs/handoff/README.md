@@ -13,7 +13,8 @@ Bu klasör, 18 Kasım 2026 Çarşamba günü **Kaan** (Modül A — Donanım) ve
 
 ## İlgili Araçlar ve Sürüm Paketleri
 
-- **Windows Otomasyon & Teslim Betikleri (Git Gerekmez):** [`scripts/handoff/windows_setup.ps1`](../../scripts/handoff/windows_setup.ps1) | [`scripts/handoff/windows_preflight.ps1`](../../scripts/handoff/windows_preflight.ps1) | [`scripts/handoff/pack_wednesday_results.ps1`](../../scripts/handoff/pack_wednesday_results.ps1) | [`tools/hardware/bringup.py`](../../tools/hardware/bringup.py) | [`tools/hardware/pack_lab_return.py`](../../tools/hardware/pack_lab_return.py)
+- **Tek Komut Çarşamba Otonom Orchestrator:** [`tools/hardware/wednesday_lab.py`](../../tools/hardware/wednesday_lab.py) *(preflight, USB keşfi, HELLO, devam edilebilir G1, H0/G2 kapısı, sessiz/uyaranlı G2 WAV kaydı, qualify karşılaştırma, kanıt ZIP'i ve opsiyonel GitHub yüklemesi; Device Center içinde de `Wednesday Lab Mode` kartı vardır)*
+- **Windows Otomasyon & Teslim Betikleri (Git Gerekmez):** [`scripts/handoff/windows_setup.ps1`](../../scripts/handoff/windows_setup.ps1) *(Python/Node yoksa kullanıcı kapsamlı kurar; G2 adayı varsa ESP-IDF indirmez)* | [`scripts/handoff/windows_preflight.ps1`](../../scripts/handoff/windows_preflight.ps1) | [`scripts/handoff/pack_wednesday_results.ps1`](../../scripts/handoff/pack_wednesday_results.ps1) | [`tools/hardware/bringup.py`](../../tools/hardware/bringup.py) | [`tools/hardware/pack_lab_return.py`](../../tools/hardware/pack_lab_return.py)
 - **Hazırlanan Binary Paketleri:**
   - G1 Rollback (Değiştirilemez): [`firmware/g1_rollback_backup/firmware_build_manifest.json`](../../firmware/g1_rollback_backup/firmware_build_manifest.json)
   - G1 Staged Release (2026-11-17): [`firmware/releases/g1_release_20261117/firmware_build_manifest.json`](../../firmware/releases/g1_release_20261117/firmware_build_manifest.json)

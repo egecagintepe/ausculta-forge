@@ -1,287 +1,160 @@
-# Smart Digital Stethoscope
+# AuscultaForge — Smart Digital Stethoscope (`EEE495 / EEE496`)
 
 **Heart Sound Acquisition, Signal Processing and Quality Assessment**
 
-EEE495 / EEE496 Senior Design Project
-Department of Electrical and Electronics Engineering
-Repository / Software Codename: `AuscultaForge`
-
----
-
-## Project Overview
-
-This repository contains the implementation developed for the EEE495/EEE496 Senior Design Project titled **"Smart Digital Stethoscope: Heart Sound Acquisition, Signal Processing and Quality Assessment"** in the Department of Electrical and Electronics Engineering.
-
-The project investigates a complete digital stethoscope acquisition chain—from the acoustic chestpiece and transducer front-end, through embedded microcontroller acquisition and streaming, to a host computer application—supported by repeatable acoustic phantom characterisation and recording-quality assessment.
-
-The internal repository and software platform codename is **AuscultaForge**.
+Department of Electrical and Electronics Engineering — Senior Design Project (`SDP4`)
+Authoritative Showcase Branch: `main`
 
 > [!NOTE]
-> **Engineering Prototype Notice:**
-> This project is an undergraduate engineering capstone prototype and experimental research platform. It is **not** a certified medical device, does **not** provide clinical diagnostic interpretations, and does **not** involve human-subject clinical trials. All physical acoustic characterisation is performed on bench acoustic phantoms.
+> **Engineering Prototype & Non-Clinical Notice:**
+> AuscultaForge is an undergraduate engineering instrumentation platform focused on phonocardiographic (**PCG**, `20–500 Hz`) acquisition, deterministic embedded transport, and signal-quality metrology. It is **not** a certified medical device, makes **no** diagnostic claims, excludes lung sounds and human clinical trials, and separates **verified software / G1 hardware evidence** from **pending physical microphone / phantom measurements**.
 
 ---
 
-## Formal Project Scope & Boundaries
+## 1. Project Scope & Purpose
 
-The project scope is strictly governed by the official EEE495/EEE496 design requirements:
+AuscultaForge investigates a complete, reproducible digital stethoscope pipeline from physical acoustic transduction to quantitative quality control:
 
-### Core Scope
-- **Acoustic Modality:** Cardiac phonocardiography (PCG / heart sounds) only.
-- **Acquisition Hardware:** Team-designed acoustic chestpiece coupling, microphone transducer selection, and analogue signal conditioning.
-- **Embedded Acquisition & Data Path:** Microcontroller audio sampling (nominal 48 kHz continuous acquisition baseline), DMA buffering, sample continuity tracking, and wired transport to host.
-- **Host Computer Application:** Real-time waveform display, spectrogram, session recording with technical metadata sidecars, device status tracking, and recording-quality assessment.
-- **Acoustic Phantom:** Repeatable physical bench test fixture (audio exciter, power amplifier, compliant silicone/gel tissue layer, and rigid mounting frame).
-- **Engineering Characterisation:** Formal measurement of frequency response, signal-to-noise ratio, repeatability, mains interference, end-to-end latency, and stream continuity.
-- **Automated Workflow:** Script-driven, reproducible measurement and verification pipeline.
-
-### Fixed Boundaries & Academic Constraints
-- **No Human Subjects:** All physical acoustic verification is conducted strictly on laboratory acoustic phantoms.
-- **No Diagnostic Claims:** The platform assesses technical signal quality and physical transmission fidelity, not medical pathology.
-- **No Lung Sound Scope:** Lung sounds are strictly out of scope; focused entirely on phonocardiographic cardiac acoustics ($20\text{--}500\text{ Hz}$).
-- **Machine Learning is Optional:** Diagnostic machine learning or automated classification is not a primary course success criterion.
-- **Photoplethysmography (PPG) is an Optional Extension:** PPG is an optional Semester-II extension outside the assessed core scope. It is not required for project success and is not a current core deliverable.
-- **Custom PCB is Optional:** Initial development uses breadboard and dev-board setups. A soldered prototype (e.g., perfboard / stripboard) is entirely sufficient for course completion unless experimental measurements justify a custom PCB spin.
+- **Acoustic Modality:** Cardiac phonocardiography (**PCG**) centered on `20–500 Hz` characterization (`20–600 Hz` extended development filter preset).
+- **Embedded Acquisition (`ESP32-S3-N16R8`):** Native **USB CDC-ACM** binary Profile B streaming (`48 kHz`, mono, signed 24-bit in 32-bit PCM slot, `CRC-32`, monotonic sample index, 72-byte firmware telemetry) with both deterministic **G1 (`source_mode=1`)** and live **I²S INMP441 (`source_mode=0`)** paths.
+- **Windows Host & Desktop App:** Single-owner bidirectional USB engine (`CanonicalSessionEngine`), peak-preserving 25 Hz display decimation (`DisplayAggregator`), causal stateful SOS Butterworth DSP (`StreamingBandpass`), Welch PSD spectrogram, float32 WAV + SHA-256 sidecar persistence (`SessionRecorder`), `pcg_core.metrology` automation, and **Wednesday Lab Mode** orchestration.
+- **Physical Testing Philosophy:** All acoustic characterization uses controlled laboratory stimuli and an acoustic phantom (exciter + amplifier + compliant coupling + rigid frame), never patient subjects.
 
 ---
 
-## Module Ownership
+## 2. End-to-End Architecture (`ESP32-S3 + INMP441 + USB CDC + Windows`)
 
-The advisor-defined structural rule requires one primary student owner per Module (A, B, C) for a three-student team to enable individual assessment, Git contribution tracking, and capstone defense. The table below reflects the **current team working allocation (pending formal advisor confirmation)**:
+```mermaid
+flowchart LR
+  subgraph Physical["Physical & Acoustic Layer"]
+    PH["Acoustic Phantom / Room Stimulus"] --> MIC["INMP441 Digital MEMS Mic (I2S: BCLK=4, WS=5, DIN=6, L/R=GND)"]
+    G1SRC["Deterministic G1 Generator (source_mode=1)"]
+  end
 
-| Module | Scope | Working Allocation (Pending Advisor Confirmation) | Key Responsibilities |
-|---|---|---|---|
-| **Module A** | Acquisition Hardware & Characterisation | **Kaan** | Transducer evaluation (electret vs MEMS), acoustic chestpiece coupling, analogue front-end conditioning, acoustic phantom design, physical test setup, and experimental characterisation. |
-| **Module B** | Embedded Acquisition & Data Path | **Ozan** | Microcontroller hardware integration, audio sampling, DMA ping-pong buffering, monotonic sample continuity counter, Native USB data transport, error telemetry, and Turkish local component sourcing (BOM). |
-| **Module C** | Computer Application & Quality Assessment | **Ege** | Host PC desktop application (React/TypeScript), FastAPI bridge service, streaming DSP pipeline, recording library with JSON metadata sidecars, recording-quality assessment, and automated test suite. |
+  subgraph MCU["Embedded Unit: YD-ESP32-23 / ESP32-S3-N16R8"]
+    I2S["I2S DMA Driver (48 kHz, 24-in-32)"] --> ACQ["Acquisition Seam (source_mode 0 or 1)"]
+    G1SRC --> ACQ
+    ACQ --> FRM["Profile B Packetizer (256 samples/frame, CRC-32, Seq)"]
+    FRM --> USB["TinyUSB Native USB CDC-ACM (VID 0x303A / PID 0x4001)"]
+  end
 
-*Team members support each other across module boundaries during integration, but each module has one clear primary owner responsible for its engineering rigor and oral defense.*
-
----
-
-## Expected Course Outputs & Current Status
-
-| Expected Output | Status | Evidence / Repository Location |
-|---|---|---|
-| **Working digital-stethoscope prototype** | IN PROGRESS | Breadboard / bench hardware assembly underway (Target: Week 5). |
-| **Team-designed acquisition electronics** | IN PROGRESS | Analogue front-end and transducer evaluation underway (`hardware/`). |
-| **Embedded firmware & ingestion path** | IN PROGRESS | ESP32-S3 Native USB data-path architecture designed (`firmware/`). Experimental reference in `tools/esp32_bench_example/` remains UNVERIFIED on real hardware pending physical delivery and Module B sign-off. |
-| **Documented device-to-computer protocol** | CONCEPTUAL DRAFT COMPLETE / JOINT FREEZE OPEN | [Week-02 B-to-C requirements](docs/sdp/week-02/bc-interface-requirements.md) plus [Week-03 Module B frame draft](docs/sdp/week-03/submissions/module-b-ozan/W03_B_device-to-host-frame-draft.md). Exact sample packing, USB class, CRC policy and acquisition settings remain open for Week-04 agreement. Wire framing in tools remains an unapproved proposal. |
-| **PC Application — Live Waveform Display** | DONE | Bounded peak-preserving decimation pipeline: `software/pcg_app/display_pipeline.py`. |
-| **PC Application — Spectrogram Display** | DONE | Time-frequency STFT visualization in frontend and analysis engine (`software/pcg_core/analysis.py`). |
-| **PC Application — Session Recording & Metadata** | DONE | Dual persistence (raw audio WAV + JSON sidecar): `software/pcg_core/recording.py`. |
-| **PC Application — Device Control & Status** | SOFTWARE FOUNDATION DONE / HARDWARE INTEGRATION PENDING | Host lifecycle state machine / handshake architecture implemented (`software/pcg_app/device_runtime.py`); physical ESP32 device integration pending. |
-| **PC Application — Recording-Quality Feedback** | SOFTWARE FOUNDATION DONE / HARDWARE INTEGRATION PENDING | Real-time & offline metric framework implemented (`software/pcg_core/scientific/signal_quality.py`); thresholds & controlled-artefact validation require physical phantom data. |
-| **Repeatable acoustic phantom** | PLANNED | Phantom electro-acoustic requirements drafted (Exciter + Amp + Silicone + Frame). |
-| **Automated test suite** | DONE | Central test suite with 394 automated tests (pytest suite across 37 modules), 4 frontend unit tests, and portable C golden-vector verification: `software/tests/`. |
-| **Characterisation measurement report** | PLANNED | Protocols and measurement matrix formalized: [`docs/sdp/week-02/measurement-quality-plan.md`](docs/sdp/week-02/measurement-quality-plan.md). |
-| **Comparison of $\ge 2$ transducer candidates** | PLANNED | Technical selection criteria drafted for Week-3 evaluation (Electret vs MEMS). |
-| **Comparison of $\ge 2$ prototyping approaches** | PLANNED | Breadboard vs soldered prototype comparison planned for Semester I / II. |
-| **Quality check against controlled artefacts** | PLANNED | Physical friction, rubbing, and movement artefact testing scheduled for late Semester I. |
-| **Reproducible repository & documentation** | IN PROGRESS / FOUNDATIONS CONSOLIDATED | Foundational architecture and engineering knowledge base consolidated through Sprint 10; comprehensive engineering intelligence and defense system currently being authored; reproducible experiment CLI runners operational. |
-
----
-
-## Mandatory Engineering Measurements
-
-The course advisor mandates **six primary final physical measurements** to characterize the digital stethoscope prototype. These physical measurements cannot be replaced by software simulations or machine learning metrics:
-
-1. **Phantom Frequency Response ($20\text{--}500\text{ Hz}$):** End-to-end magnitude response $|H_1(f)|$ and coherence $\gamma_{xy}^2(f)$ estimated via the SISO best-linear estimator (`software/pcg_core/scientific/system_id.py`).
-2. **Signal-to-Noise Ratio (SNR):** Band-limited ($20\text{--}500\text{ Hz}$) ratio of active phantom PCG acoustic stimulus power to quiescent noise floor in relative dB.
-3. **Measurement Repeatability ($\ge 10$ Runs):** Statistical dispersion (mean, standard deviation, coefficient of variation, and min/max spread) across at least 10 identical, independent phantom measurements.
-4. **Mains Interference Level:** High-resolution spectral quantification of 50 Hz fundamental and harmonic pickup ($100, 150, 200, 250\text{ Hz}$) in dBFS under varied shielding and grounding arrangements.
-5. **End-to-End Latency:** Propagation delay from electrical/acoustic excitation at the phantom exciter to sample buffer ingestion on the host PC.
-6. **Dropped-Packet Rate:** Verification of 100% sample continuity via the monotonic sequence counter during prolonged streaming (including the advisor-mandated $\ge 30$-minute continuous acquisition test in Week 8).
-
-> [!IMPORTANT]
-> All physical measurements are currently marked **NOT YET MEASURED**. No numerical thresholds or fabricated values are applied prior to physical bench experiments.
-
----
-
-## Academic Roadmap & Semester Milestones
-
-```text
-Semester I (EEE495) — Foundation & Feasibility
-├── Week 02 (Current): Technical research, requirements draft, Turkish sourcing BOM v0.1.
-├── Week 03: Candidate/interface review, conceptual frame draft and BOM v1.0 review; item-level purchase blockers remain in Week-03 decisions.
-├── Week 04 GATE: Requirements specification frozen, components ordered, lab tools secured.
-├── Week 05 GATE: Bench setup operational, known test signal captured end-to-end.
-├── Week 08: 30-minute continuous streaming stability test.
-├── Week 09 FEASIBILITY GATE: Phantom PCG capture with recognisable S1/S2 acoustic structure.
-│                           (If unrecognisable: revise transducer/coupling before adding features).
-└── Week 13: Baseline device works end-to-end (Phantom -> HW -> MCU -> PC App),
-             initial characterisation complete, interim report submitted.
-
-Semester II (EEE496) — Hardening, Characterisation & Defense
-├── Hardware hardening onto a soldered prototype (where justified by bench measurements).
-├── Recording-quality evaluation validated against controlled physical artefacts.
-├── Full characterisation campaign across all six mandatory measurements.
-├── Microcontroller power consumption and host processing-load profiling.
-└── Final engineering report, project demonstration, and capstone oral defense.
+  subgraph Host["Windows Host & AuscultaForge App"]
+    USB --> ENG["CanonicalSessionEngine (Single-Owner USB Worker)"]
+    ENG --> API["FastAPI REST + WebSocket Bridge (:8000)"]
+    ENG --> CLI["wednesday_lab.py / bringup.py (CLI + Return ZIP)"]
+    API --> DSP["SampleBlock DSP (StreamingBandpass, Welch PSD, SignalQuality)"]
+    DSP --> REC["Float32 raw.wav + session.json + SHA-256"]
+    API --> UI["React + Vite Desktop UI (:3000, Device Center + Lab Mode)"]
+  end
 ```
 
 ---
 
-## Advanced Existing Work (Supporting Research)
+## 3. Team Members, Official Modules & Verifiable Contributions
 
-The repository contains advanced software and signal-processing implementations developed during early prototyping:
+Per EEE495 module structure (`A`, `B`, `C`), official responsibility and verifiable repository activity as of **2026-11-17** are recorded transparently:
 
-- **Springer LR-HSMM Heart-Sound Segmentation:** Machine-learning-assisted segmentation (`software/pcg_core/segmentation/`) predicting cardiac states ($S_1$, systole, $S_2$, diastole) via duration-dependent Hidden Semi-Markov Models.
-- **CirCor Real-PCG Validation Infrastructure:** Automated benchmarking suite (`software/pcg_core/segmentation/validation/`) evaluating segmentation tolerance on open-access pediatric PCG records.
-- **Envelope Extraction Lab:** Stage-A analytical Hilbert, moving RMS, and Teager-Kaiser Energy Operator (TKEO) extractors (`software/pcg_core/scientific/envelopes.py`).
-- **SISO System Identification Workbench:** Cross-spectral transfer function and coherence estimation tools (`software/pcg_core/scientific/system_id.py`).
+| Module | Official Owner | Official Course Scope | Verifiable Repository Status (2026-11-17) |
+| :--- | :--- | :--- | :--- |
+| **Module A** | **Kaan** | Transducer selection (`INMP441`, `KECG2740PBJ`), analog front-end, chestpiece, phantom assembly & physical lab measurements | Literature reviews, candidate selection, procurement receipt inventory (`W05`), and mechanical draft complete (`7a99ff4`). **Multimeter 3.3V, continuity/short, noise-floor, and phantom physical measurements are `PENDING` (Wednesday 2026-11-18).** |
+| **Module B** | **Ozan** | Embedded acquisition, DMA buffering, timestamps, device–PC protocol specs & throughput/latency | Specification documents and BOM revisions (`REV01`–`REV03`) complete. **Actual ESP-IDF C/FreeRTOS firmware, TinyUSB CDC, `i2s_source.c`, G1/G2 builds, and hardware regression verification were authored and executed by Ege**; Ozan physical hardware execution is scheduled for Wednesday 2026-11-18. |
+| **Module C** | **Ege Çağın Tepe** | Windows/Python host backend, React UI, DSP, recording library, quality assessment, automated test suites & integration orchestration | FastAPI bridge, React UI, Welch PSD, CirCor/CinC2016 playback, `pcg_core.metrology`, controlled artifact benchmark, G1 hardware runs, C firmware + host tests, and Git-free Wednesday orchestrator verified. |
 
-> [!NOTE]
-> **Academic Scope Distinction:**
-> These capabilities represent **ADVANCED / SUPPORTING RESEARCH**. They provide valuable scientific insight and offline verification tools, but they do **NOT** fulfill or substitute for the mandatory physical acquisition hardware, acoustic phantom experiments, and hardware characterisation required by the course.
+> Full branch audit confirming zero unmerged changes across all 49 remote branches: [`docs/engineering/BRANCH_CONSOLIDATION_AUDIT.md`](docs/engineering/BRANCH_CONSOLIDATION_AUDIT.md).
 
 ---
 
-## High-Level System Architecture
+## 4. Verified Evidence vs. Pending Physical Experiments
 
-The AuscultaForge software pipeline enforces strict layer separation. Input acquisition is abstracted behind a common `SampleBlock` container, allowing identical DSP algorithms, filtering, and downstream analysis to run seamlessly on physical hardware streams, offline WAV files, or synthetic mock sources.
+AuscultaForge strictly separates reproducible **software & G1 hardware evidence** from **unexecuted physical microphone/phantom experiments**:
 
-```text
-[ Acoustic Phantom / Test Exciter ]
-                │
-                ▼
-[ Stethoscope Chestpiece & Microphone ]
-  (Electret Condenser or MEMS Transducer)
-                │  (Analogue / I2S Interface)
-                ▼
-[ Microcontroller Acquisition Unit ]
-  (ESP32-S3: Sampling, DMA Double-Buffering, Continuity Counter)
-                │  (Wired Native USB Stream)
-                ▼
-      [ Host PC Ingestion ]
-                │
-                ▼
-           SampleBlock  ───────────► Common Streaming Interface
-                │                    (sequence, timestamp, fs, samples)
-                ▼
-          DSP Pipeline
-       (Stateful Bandpass)
-                │
-        ┌───────┴────────────────────────┐
-        ▼                                ▼
-   Live Metrics                 Display Pipeline
-(RMS, Peak, Crest)            (Peak-Preserving Decimation)
-        │                                │
-        ▼                                ▼
-Session Recording Sidecar          React Desktop UI
- (WAV + JSON Metadata)         (Waveform & Spectrogram)
+| Category / Experiment | Status | Observed Evidence & Provenance |
+| :--- | :---: | :--- |
+| **Physical ESP32-S3 USB G1 (`source_mode=1`)** | **PASS** *(2026-10-26 & 2026-11-16)* | Native USB CDC (`COM10`, `VID:303A PID:4001`, UID `0xb1aa7cc4`): `480,000` samples, `1,875` frames, `0` dropped samples, `0` CRC errors. Also verified end-to-end via FastAPI/React Device Center (`raw.wav`: `194,304` samples, `4.048 s`, `48 kHz`, strictly `physical_deterministic_g1`). Evidence: [`laptop_20261116_g1_and_wav_summary.json`](firmware/evidence/laptop_20261116_g1_and_wav_summary.json). |
+| **ESP-IDF v5.5.1 G1 & Staged G2 Builds** | **PASS (Build Verified)** | Separate clean `esp32s3` builds: [`g1_release_20261117`](firmware/releases/g1_release_20261117/README.md) (`COMPILED_BUT_NOT_FLASHED`) and [`g2_candidate_20261117`](firmware/releases/g2_candidate_20261117/README.md) (`PREPARED_NOT_AUTHORIZED_FOR_FLASH`). Immutable 2026-10-23 rollback intact in [`g1_rollback_backup`](firmware/g1_rollback_backup/README.md). |
+| **Firmware Host C Unit Suite (`firmware/tests`)** | **PASS** | Compiles real C sources (`g1.c`, `acquisition.c`, `packet_framing.c`, `bridge.c`) via WinLibs GCC `16.2.0` into `g1.dll` — `16 passed`. |
+| **Protocol Laboratory (`tools/protocol_lab/python`)** | **PASS** | Profile A/B wire codecs, CRC-32, defragmentation, RFC-3550 sequence gates — `59 passed, 1 skipped` (`g1_sim_runner.exe` optional). |
+| **Backend, DSP, Metrology & Orchestration (`software/tests`)** | **PASS** | FastAPI routes, WAV/sidecar integrity, Welch PSD, Springer/CirCor tools, controlled artifact benchmark (`5/5`), 8 fault-injection tests for `wednesday_lab.py` & `windows_setup.ps1` — **`595 passed, 4 skipped`** (`670` total across Python/Protocol/C suites). |
+| **Desktop Frontend (`software/frontend`)** | **PASS** | TypeScript `tsc --noEmit` (`0` errors) + `9` `tsx` suites + production Vite bundle (`dist/`, `4.31 s`, includes Device Center `Wednesday Lab Mode`). |
+| **Physical INMP441 G2 (`source_mode=0`)** | **`PENDING / NOT_EXECUTED`** | Microphone not yet soldered/wired; gated behind Wednesday `2026-11-18` H0 inspection (`3.3V` `[3.15, 3.45] V`, continuity, photos) and explicit `authorize-g2`. |
+| **Phantom FRF, 50 Hz Mains, Repeatability (≥10), 30-Min Stress** | **`NOT_EXECUTED`** | Physical phantom/exciter fixture pending Module A/B completion. Note: current firmware caps per-session runs at `G1_TARGET_SAMPLES=480000U` (`10.0 s` @ `48 kHz`) and `40 s` hard timer (`g1.h` / `g1.c`). |
+
+---
+
+## 5. Software Setup & Running on Windows (Git Clone or GitHub Download ZIP)
+
+You do **not** need Git installed or an ESP-IDF download to run the Windows desktop app or the pre-built G1/G2 hardware workflow:
+
+### Quick Setup (One Command)
+Open PowerShell inside the extracted project folder (spaces/Turkish paths work for Python/staged flows; use `C:\pcg_starter` if planning ESP-IDF firmware rebuilds):
+
+```powershell
+# Automatically detects or installs user-scope Python 3.11+ & Node LTS (if missing),
+# creates .venv, installs Python/frontend packages, and skips ESP-IDF download when staged binaries exist:
+.\scripts\handoff\windows_setup.ps1
+
+# Passive environment + SHA-256 manifest verification (works offline & without .git):
+.\scripts\handoff\windows_preflight.ps1
 ```
 
----
+### Launch AuscultaForge Desktop App (Backend `:8000` + React UI `:3000`)
+```powershell
+.\scripts\dev.ps1
+```
+Then open `http://127.0.0.1:3000` in your browser (**Device Center** includes USB Discovery, live G1/G2 mode control, **Lab Mode**, and **Build Return ZIP**).
 
-## Repository Structure
-
-```text
-ausculta-forge/
-├── software/
-│   ├── pcg_app/            # FastAPI desktop bridge, device runtime, and display decimation
-│   │   ├── app.py          # REST & WebSocket server
-│   │   ├── device_runtime.py # Authoritative hardware lifecycle state machine
-│   │   ├── display_pipeline.py # Peak-preserving UI decimation (<= 600 points)
-│   │   ├── protocol.py     # Local WebSocket bridge protocol
-│   │   └── state.py        # StreamManager and client session management
-│   ├── pcg_core/           # Core signal processing, streaming, and scientific engines
-│   │   ├── models.py       # SampleBlock container dataclass
-│   │   ├── sources.py      # MockPCGSource, WavSource, RealtimeWavSource
-│   │   ├── dsp.py          # Stateful StreamingBandpass filter (sosfilt)
-│   │   ├── buffers.py      # RollingBuffer circular FIFO window
-│   │   ├── streaming.py    # StreamQualityMonitor continuity tracking
-│   │   ├── recording.py    # Dual persistence (raw WAV + JSON sidecar)
-│   │   ├── scientific/     # Full-rate spectral, envelope, and system ID engines
-│   │   └── segmentation/   # Advanced research: Springer LR-HSMM & CirCor validation
-│   ├── frontend/           # React / TypeScript / Vite local desktop UI
-│   ├── tests/              # Automated pytest suite (394 tests across 37 test modules)
-│   ├── pyproject.toml      # Packaging metadata for editable install
-│   └── requirements.txt    # Python dependencies (numpy, scipy, fastapi, pytest)
-├── firmware/               # Microcontroller firmware and USB transport drivers
-├── hardware/               # Analogue schematics, CAD, component evaluation, and BOM
-├── experiments/            # Reproducible experiment configurations and runner scripts
-│   ├── configs/            # Tracked configuration files (e.g. baseline.json)
-│   └── output/             # (Ignored by git) Local measurement outputs and reports
-├── docs/                   # Engineering documentation and course deliverables
-│   ├── sdp/week-02/        # Official Week-02 project-management pack
-│   │   ├── module-c-status.md
-│   │   ├── bc-interface-requirements.md
-│   │   ├── measurement-quality-plan.md
-│   │   └── meeting-brief.md
-│   ├── architecture/       # System design specifications
-│   ├── knowledge-base/     # Comprehensive engineering knowledge base
-│   ├── protocol/           # Wire-level MCU-to-PC protocol specifications
-│   └── research/           # Literature registry (R001–R008) and scientific conventions
-├── data/                   # Dataset documentation & guidelines
-│   ├── raw/                # (Ignored by git) Local raw audio recordings
-│   └── processed/          # (Ignored by git) Local processed datasets
-├── .gitignore              # Ignores venvs, cache, audio data, and build artifacts
-├── pytest.ini              # Pytest configuration
-└── README.md               # Main project overview (this document)
+### Run Automated Verification Suites
+```powershell
+.\.venv\Scripts\python.exe -m pytest firmware/tests -v
+.\.venv\Scripts\python.exe -m pytest tools/protocol_lab/python -v
+.\.venv\Scripts\python.exe -m pytest software/tests -q
+Push-Location software/frontend; npm.cmd run lint; npm.cmd test; npm.cmd run build; Pop-Location
 ```
 
 ---
 
-## First physical laboratory session
+## 6. Wednesday `2026-11-18` Physical Lab Handoff (Zero-Git Workflow)
 
-Start with [Yarın buradan başla — Turkish quickstart](docs/engineering/hardware/START_HERE_TOMORROW.md).
-See [Morning release evidence](docs/engineering/release/MORNING_RELEASE_REPORT.md).
-Physical hardware acceptance is pending; compilation/simulation do not establish it.
+For **Kaan** (Module A) and **Ozan** (Module B) running physical bench integration without Ege:
 
-## Software Setup & Verification
+1. **Human Quickstart (Turkish):** [`docs/handoff/START_HERE_2026-11-18.md`](docs/handoff/START_HERE_2026-11-18.md)
+2. **Agent Autonomous Runbook:** [`docs/handoff/AGENT_WEDNESDAY_2026-11-18.md`](docs/handoff/AGENT_WEDNESDAY_2026-11-18.md)
+3. **Electrical Safety & G1 Rollback:** [`docs/handoff/HARDWARE_GATES_AND_ROLLBACK.md`](docs/handoff/HARDWARE_GATES_AND_ROLLBACK.md)
+4. **Release Hashes & Test Evidence Index:** [`docs/handoff/RELEASE_AND_EVIDENCE_INDEX_2026-11-17.md`](docs/handoff/RELEASE_AND_EVIDENCE_INDEX_2026-11-17.md)
 
-### Prerequisites
-- Python 3.11+ (Python 3.11–3.13 tested)
-- Node.js ^20.19.0 or >=22.12.0 (frontend plugin requirement)
-- Git
+**Single Autonomous Lab Command:**
+```powershell
+# Runs preflight -> hash check -> USB discovery -> HELLO -> resumable G1 -> H0/G2 gates -> return ZIP:
+.\.venv\Scripts\python.exe tools/hardware/wednesday_lab.py --skip-g2-captures
 
-### 1. Environment Setup
-```bash
-# Clone the repository
-git clone https://github.com/egecagintepe/ausculta-forge.git
-cd ausculta-forge
+# After H0 photos/3.3V verified, authorize-g2 + human-confirmed ROM flash complete:
+.\.venv\Scripts\python.exe tools/hardware/wednesday_lab.py --assume-g2-flashed
 
-# Create and activate virtual environment
-python -m venv .venv
-# On Windows:
-.venv\Scripts\activate
-# On Linux/macOS:
-source .venv/bin/activate
-
-# Install Python dependencies and package in editable mode
-pip install -r software/requirements.txt
-pip install -e ./software
-```
-
-### 2. Run Automated Tests
-```bash
-# Execute central test suite from repository root
-pytest
-```
-
-### 3. Run Demonstration & Simulation CLIs
-```bash
-# Run synthetic PCG streaming pipeline demonstration
-python -m pcg_core.demo
-
-# Run offline analysis on a real PCG WAV file
-python -m pcg_core.analyze data/raw/sample.wav
-
-# Simulate live paced streaming playback
-python -m pcg_core.stream_demo data/raw/sample.wav
-
-# Run reproducible experiment and generate JSON report
-python -m pcg_core.experiment --input data/raw/sample.wav --config experiments/configs/baseline.json
-
-# Run reference-vs-capture alignment validation
-python -m pcg_core.validate_capture --reference data/raw/ref.wav --simulate --delay-ms 45 --save-report
+# Standalone one-click ZIP delivery to Ege (no Git required):
+.\scripts\handoff\pack_wednesday_results.ps1 -Operator "Kaan_Ozan"
 ```
 
 ---
 
-## References & Documentation Links
-- **Week-02 Project Planning Pack:** [`docs/sdp/week-02/`](docs/sdp/week-02/)
-- **Engineering Knowledge Base:** [`docs/knowledge-base/README.md`](docs/knowledge-base/README.md)
-- **Literature & Research Governance:** [`docs/research/README.md`](docs/research/README.md)
-- **System Architecture:** [`docs/architecture/README.md`](docs/architecture/README.md)
+## 7. Weekly Academic Progress Reports & Tracked Evidence
+
+| Deliverable | Scope & Period | Direct Link |
+| :--- | :--- | :--- |
+| **Advisor Progress Report (Weeks 1–6)** | Post-midterm update (`21 Sep – 1 Nov` core period, `17 Nov` note, blank `18 Nov` lab table) | [`docs/sdp/SDP4_WEEK01_06_DRAFT_PROGRESS_REPORT.md`](docs/sdp/SDP4_WEEK01_06_DRAFT_PROGRESS_REPORT.md) |
+| **Overall Semester Matrix (As-Of 2026-11-17)** | Module A/B/C status across Weeks 1–14 + 16–17 Nov verification | [`docs/sdp/PROGRESS_ASOF_2026-11-17.md`](docs/sdp/PROGRESS_ASOF_2026-11-17.md) |
+| **Weeks 02–06 (Pre-Midterm)** | Team setup, requirements freeze, procurement ledgers, Week 6 G1 & audio acceptance | [`week-02`](docs/sdp/week-02/) · [`week-03`](docs/sdp/week-03/README.md) · [`week-04`](docs/sdp/week-04/README.md) · [`week-05`](docs/sdp/week-05/README.md) · [`week-06`](docs/sdp/week-06/README.md) |
+| **Weeks 07–09 (Midterm Break & Active Gate)** | Software playback, metrology CLI, 16 Nov G1 WAV & Wednesday integration prep (`PARTIAL`) | [`week-07`](docs/sdp/week-07/README.md) · [`week-08`](docs/sdp/week-08/README.md) · [`week-09`](docs/sdp/week-09/README.md) |
+| **Weeks 10–14 (`PLANNED`)** | Multi-transducer, repeatability, 50 Hz mains, interim report & final integration (`NOT_EXECUTED`) | [`week-10`](docs/sdp/week-10/README.md) · [`week-11`](docs/sdp/week-11/README.md) · [`week-12`](docs/sdp/week-12/README.md) · [`week-13`](docs/sdp/week-13/README.md) · [`week-14`](docs/sdp/week-14/README.md) |
+| **Tracked COM10 G1 & WAV Summary** | SHA-256 verified 2026-11-16 COM10 G1 + Device Center WAV session metadata | [`firmware/evidence/laptop_20261116_g1_and_wav_summary.json`](firmware/evidence/laptop_20261116_g1_and_wav_summary.json) |
+
+---
+
+## 8. Firmware Releases, Repository Layout & Technical Index
+
+- **Firmware Overview & Pinned Toolchain (`ESP-IDF v5.5.1`):** [`firmware/README.md`](firmware/README.md)
+- **Immutable G1 Rollback Backup (`2026-10-23`):** [`firmware/g1_rollback_backup/README.md`](firmware/g1_rollback_backup/README.md)
+- **Staged G1 Release (`2026-11-17`):** [`firmware/releases/g1_release_20261117/README.md`](firmware/releases/g1_release_20261117/README.md)
+- **Staged G2 Candidate (`2026-11-17`, Provisional `BCLK=4, WS=5, DIN=6, L/R=GND`):** [`firmware/releases/g2_candidate_20261117/README.md`](firmware/releases/g2_candidate_20261117/README.md)
+- **Hardware Engineering Checklists:** [`docs/hardware/`](docs/hardware/) · [`docs/engineering/hardware/`](docs/engineering/hardware/WINDOWS_LAPTOP_SETUP.md)
+- **Wire Protocol & System Architecture:** [`docs/protocol/`](docs/protocol/) · [`docs/architecture/`](docs/architecture/) · [`docs/knowledge-base/`](docs/knowledge-base/)
+- **Branch Consolidation Audit (All 49 Remote Refs):** [`docs/engineering/BRANCH_CONSOLIDATION_AUDIT.md`](docs/engineering/BRANCH_CONSOLIDATION_AUDIT.md)

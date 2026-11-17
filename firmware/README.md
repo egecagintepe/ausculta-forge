@@ -4,9 +4,11 @@ Ownership: Ege and the AuscultaForge team. This is an ESP-IDF application for th
 purchased ESP32-S3-WROOM-1-N16R8, not an Arduino/UART demonstration. Read the
 [wire audit](PROTOCOL_AUDIT.md) before changing protocol code.
 
-**Current delivery: SOFTWARE VERIFIED; COMPILED BUT NOT FLASHED; HARDWARE NOT TESTED.**
-**PHYSICAL G1 PASSED: PENDING.** See [First Contact release](../docs/engineering/hardware/FIRST_CONTACT_RELEASE.md).
-The earlier [G1 evidence](EVIDENCE.md) is the historical 2026-10-22 host-only baseline.
+**Current status (as of 2026-11-17):**
+- **PHYSICAL G1 (`source_mode=1`):** **PASSED** (`2026-10-26` and re-verified `2026-11-16` on COM10, `480,000` samples, `1,875` frames, `0` drops; tracked evidence in [`evidence/laptop_20261116_g1_and_wav_summary.json`](evidence/laptop_20261116_g1_and_wav_summary.json)).
+- **G1 Staged Release & Immutable Rollback:** [`releases/g1_release_20261117/`](releases/g1_release_20261117/README.md) (`COMPILED_BUT_NOT_FLASHED`) and [`g1_rollback_backup/`](g1_rollback_backup/README.md).
+- **PHYSICAL G2 (`source_mode=0`, INMP441):** **PENDING** Wednesday `2026-11-18` lab integration ([`releases/g2_candidate_20261117/`](releases/g2_candidate_20261117/README.md) is `PREPARED_NOT_AUTHORIZED_FOR_FLASH` pending H0 physical checks & `authorize-g2`).
+- **Handoff & Automation:** See [`docs/handoff/START_HERE_2026-11-18.md`](../docs/handoff/START_HERE_2026-11-18.md) and [`tools/hardware/wednesday_lab.py`](../tools/hardware/wednesday_lab.py).
 
 ## Pinned build inputs
 

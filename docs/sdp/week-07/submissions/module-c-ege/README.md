@@ -27,4 +27,4 @@ All files in this folder must follow the canonical naming pattern:
 
 ## Status
 
-**2026-11-17:** [W07_C_dataset-playback-path.md](W07_C_dataset-playback-path.md) updated — `WavSource`, `RealtimeWavSource`, `StimulusRecord`, `upload_source_wav`, and host FSM reconnect handling verified in software (`587` tests PASS in `software/tests`). Physical acoustic phantom playback remains `PENDING`.
+**2026-11-17:** [W07_C_dataset-playback-path.md](W07_C_dataset-playback-path.md) updated — `WavSource`, `RealtimeWavSource`, `StimulusRecord`, `upload_source_wav`, and host FSM reconnect handling verified in software (`595 passed, 4 skipped` across full `software/tests` suite). Physical acoustic phantom playback remains `PENDING`.
