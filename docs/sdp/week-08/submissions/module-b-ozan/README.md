@@ -5,26 +5,16 @@
 |---|---|
 | **Owner** | Ozan |
 | **Module** | B -- Embedded Acquisition and Data Path |
-| **Week** | 8 |
-| **Purpose** | Collect all Week-8 deliverables for Module B |
+| **Week** | 8 (9–15 November 2026) |
+| **Task** | End-to-End Latency and 30-Minute Continuous Acquisition |
+| **Status** | **NOT EXECUTED (FIRMWARE SESSION BOUNDED / BENCH RUN PENDING)** |
 
-## Naming Convention
+## Submissions
 
-All files in this folder must follow the canonical naming pattern:
+- [W08_B_latency-continuous-run.md](W08_B_latency-continuous-run.md) — Architectural analysis of firmware session bounds, software latency workflows, and documented status of 30-minute endurance run.
 
-`W08_B_<short-description>_vNN.<ext>`
+## Status Summary
 
-**Examples:**
-- `W08_B_example-task_v01.pdf`
-- `W08_B_example-task_v01.md`
-
-## Instructions
-
-- Original PDF, DOCX, and XLSX deliverables may be placed in this folder alongside Markdown summaries.
-- **Do not fabricate measurements, results, or component decisions.** Record only what has actually been performed.
-- **Preserve original source files** when uploading (do not replace earlier versions; increment the version suffix instead).
-- Where possible, commit evidence files from your own GitHub account so the contribution history reflects your individual work.
-
-## Status
-
-All tasks for Week 8 are initially **NOT STARTED**. Update status fields as work progresses.
+- Week 8 coincided with the university midterm examination recess.
+- Architectural analysis identified that firmware `G1_TARGET_SAMPLES` (10.0 s @ 48 kHz) and 40 s watchdog timeout cap prevent a 30-minute run without an intentional firmware update.
+- On 18 November 2026 (Week 9), Ozan executed two 10-second physical streaming sessions (1,920,000 samples, 0 dropped frames) on COM3 (`W09_B_continuity-clipping-verification.md`). Continuous 30-minute endurance testing remains pending.

@@ -5,26 +5,16 @@
 |---|---|
 | **Owner** | Kaan |
 | **Module** | A -- Acquisition Hardware and Characterisation |
-| **Week** | 8 |
-| **Purpose** | Collect all Week-8 deliverables for Module A |
+| **Week** | 8 (9–15 November 2026) |
+| **Task** | Phantom Frequency Response Measurement |
+| **Status** | **NOT EXECUTED (DEPENDENT ON W07 PHYSICAL PHANTOM BUILD)** |
 
-## Naming Convention
+## Submissions
 
-All files in this folder must follow the canonical naming pattern:
+- [W08_A_phantom-frequency-response.md](W08_A_phantom-frequency-response.md) — Documented status of Week 8 phantom swept-sine task, midterm pause, and 18 November follow-up.
 
-`W08_A_<short-description>_vNN.<ext>`
+## Status Summary
 
-**Examples:**
-- `W08_A_example-task_v01.pdf`
-- `W08_A_example-task_v01.md`
-
-## Instructions
-
-- Original PDF, DOCX, and XLSX deliverables may be placed in this folder alongside Markdown summaries.
-- **Do not fabricate measurements, results, or component decisions.** Record only what has actually been performed.
-- **Preserve original source files** when uploading (do not replace earlier versions; increment the version suffix instead).
-- Where possible, commit evidence files from your own GitHub account so the contribution history reflects your individual work.
-
-## Status
-
-All tasks for Week 8 are initially **NOT STARTED**. Update status fields as work progresses.
+- Week 8 coincided with the university midterm examination recess.
+- Physical phantom frequency response measurement was not executed because the physical acoustic phantom (Week 7 dependency) had not been assembled.
+- On 18 November 2026 (Week 9), Kaan participated in testing standalone microphone acoustic responsiveness in air (`W09_A_feasibility-test.md`), confirming 23.2 dB passband power ratio between stimulus and quiet. Physical phantom frequency response remains pending physical assembly.

@@ -28,6 +28,8 @@
 
 ## Weeks 7–9 Feasibility Gate Preparation & Phantom Artifacts
 
+- [Weeks 7–9 Academic Progress Brief](../../sdp/reports/EEE495_AuscultaForge_Weeks07-09_Progress_Brief_2026-11-18.md) — 18 Nov instructor meeting brief covering Weeks 7, 8, and 9 progress matrix.
+- [Next Lab Inventory Confirmation & Experiment Backlog](../../engineering/hardware/NEXT_LAB_INVENTORY_CONFIRMATION.md) — Physical YES/NO checklist, approved alternatives, electrical safety, and prioritized backlog.
 - [Weeks 7–9 Physical Feasibility Readiness Audit](../../engineering/hardware/W07_W09_READINESS_AUDIT.md) — Comprehensive component audit, safe PAM8403 BTL wiring rules, and firmware 10s/40s limit analysis.
 - [Acoustic Phantom BOM & Wiring Checklist](../../engineering/hardware/PHANTOM_BOM_AND_WIRING_CHECKLIST.md) — Mechanical/electrical BOM, pin-by-pin connections, and BTL ground isolation checks.
 - [Week 9 Physical PCG Feasibility Runbook](../../engineering/hardware/W09_PHYSICAL_PCG_FEASIBILITY_RUNBOOK.md) — Role-based lab protocol for Kaan, Ozan, and Ege with explicit STOP criteria.
