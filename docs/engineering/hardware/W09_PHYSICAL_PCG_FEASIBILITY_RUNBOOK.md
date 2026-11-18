@@ -34,20 +34,28 @@ To maintain strict academic traceability and experimental safety:
 
 ## 2. Phase-by-Phase Execution Runbook
 
-### Phase 0: Cold Electrical Preflight & Safety Inspection
+### Phase 0: Cold Electrical Preflight & Inventory Verification
 
 **Responsible:** Ozan (Verified by Kaan)  
 **Tools:** Digital Multimeter (DMM), safety checklist from `PHANTOM_BOM_AND_WIRING_CHECKLIST.md`.
 
-1. **Unpowered Continuity & Short-Circuit Check:**
+1. **Physical Inventory Bench Reconfirmation:**
+   - Locate the 30 mm 12 Ω vibration exciter, PAM8403 amplifier module, and 3.5 mm AUX cable from the lab delivery package.
+   - Visually confirm the components are undamaged and match ordered part specifications before assembling.
+2. **Dynamic USB CDC Port Discovery:**
+   - Connect PC USB cable to ESP32-S3 (Right connector, Native USB).
+   - Discover the dynamically assigned USB CDC COM port (e.g. `COM3` on 18 Nov, do NOT assume a static port number across machines):
+     ```powershell
+     python tools/hardware/bringup.py preflight
+     ```
+3. **Unpowered Continuity & Short-Circuit Check:**
    - Disconnect all USB cables and the PAM8403 5 V power supply.
    - Set DMM to Continuity / Resistance (Ω).
    - Check PAM8403 `OUT_L+` to `GND`: Confirm **OPEN / > 100 kΩ**.
    - Check PAM8403 `OUT_L-` to `GND`: Confirm **OPEN / > 100 kΩ**.
    - Check INMP441 `VDD` to `GND`: Confirm **No Short-Circuit (> 1 MΩ)**.
    - Check INMP441 `L/R` pin: Confirm **Connected to GND (0 Ω, Left channel)**.
-2. **Powered Voltage Verification (Without Audio Drive):**
-   - Connect PC USB cable to ESP32-S3 (Right connector, Native USB).
+4. **Powered Voltage Verification (Without Audio Drive):**
    - Measure ESP32-S3 `3V3` to `GND` rail: Confirm **3.15 V to 3.45 V** (target: 3.28 V).
    - Turn on the independent 5 V supply to the PAM8403: Measure `+5V` to `GND`: Confirm **4.8 V to 5.25 V**.
    - Verify neither the ESP32-S3 nor the PAM8403 exhibits abnormal heating.
@@ -95,11 +103,13 @@ To maintain strict academic traceability and experimental safety:
    # Activate Python environment
    .\.venv\Scripts\Activate.ps1
 
-   # Run automated phantom experiment
+   # Run automated phantom experiment with dynamic port, quiet baseline, and routing verification
    python tools/hardware/run_phantom_pcg_experiment.py `
-       --port COM8 `
+       --port <DISCOVERED_CDC_COM> `
        --reference data/raw/week6_real_pcg_20261026/circor/40058_AV.wav `
+       --quiet-session experiments/hardware/team_2026-11-18/session_quiet_9e6baa63.json `
        --play-audio `
+       --verify-audio-routing `
        --operator "Kaan_Ozan_Ege" `
        --notes "Trial 01 - CirCor 40058_AV through acoustic phantom with ultrasound gel"
    ```

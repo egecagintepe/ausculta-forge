@@ -122,11 +122,14 @@ To ensure robust testability and CI support:
 
 ## 5. Automated Acceptance Rules (The Week 9 Gate)
 
-| Metric | Threshold / Target | Rule Enforcement |
+| Metric | Threshold / Target | Rule Enforcement & Safeguards |
 |---|---|---|
-| **USB Data Integrity** | `dropped_samples == 0`, `crc_failures == 0` | Mandatory PASS. Any dropped sample aborts the run. |
-| **Clipping Fraction** | `near_clipping_fraction < 0.05%` (|x| > 0.98 FS) | Mandatory PASS. Prevents distorted measurements. |
-| **Acoustic Transduction SNR** | `steady_state_snr_20_500hz >= 12.0 dB` | Confirms sound transmission through phantom above ambient noise. |
-| **Normalized Cross-Correlation** | `NCC >= 0.35` (target >= 0.45) | Confirms waveform fidelity through phantom channel. |
-| **S1/S2 Heart Sound Peaks** | Identifiable alternating S1/S2 peak intervals (~0.6–1.0 s) | Confirms clinical auscultatory feature preservation. |
-| **Overall Week 9 Gate** | **ALL OF THE ABOVE SATISFIED ON PHYSICAL HARDWARE** | Official Milestone Status: **PASSED**. |
+| **WAV Ingest & Provenance** | Strict session `raw_wav_path`, SHA-256 integrity match, `source_mode == 0` | Mandatory. Rejects fallback globs, prevents stimulus-as-capture confusion, marks unverified WAVs as `OFFLINE_UNVERIFIED`. |
+| **USB Data Integrity** | `in_stream_dropped_samples == 0`, `crc_failures == 0` | Mandatory PASS. Reads exact telemetry (`dropped_frames`, `crc_failures`). Differentiates post-target DMA drain (e.g. 256 samples) from in-stream drop. |
+| **Clipping Fraction** | `near_clipping_fraction < 0.05%` (|x| > 0.98 FS) | Mandatory PASS. Prevents amplifier distortion or acoustic clipping. |
+| **Acoustic Transduction SNR** | `steady_state_snr_20_500hz >= 12.0 dB` (requires `--quiet-session`) | Mandatory for physical confirmation. If quiet baseline session is missing, reports `INCONCLUSIVE_NO_QUIET_BASELINE` without fabricating numbers. |
+| **Normalized Cross-Correlation** | `NCC >= 0.35` (target >= 0.45) | Confirms waveform and phase preservation across acoustic phantom. |
+| **Magnitude-Squared Coherence** | Mean coherence in 20–250 Hz $\ge 0.40$ | Verifies linear acoustic channel response across fundamental PCG frequencies. |
+| **S1/S2 Morphological Match** | Envelope contrast $\ge 2.0$, peak ratio $0.5$–$1.8$, match fraction $\ge 70\%$ within $80\text{ ms}$, mean jitter $\le 45\text{ ms}$ | Rejects flat noise and arbitrary signals. Confirms true temporal alignment to source cardiac rhythm. |
+| **Audio Playback Synchronization** | 10.0 s structured timeline (0.5 s lead-in, 8.5 s PCG, 1.0 s tail), `--verify-audio-routing` | Enforces active playback monitoring (`PlaybackController`). Playback failure immediately fails the physical gate. |
+| **Overall Week 9 Gate** | **ALL OF THE ABOVE SATISFIED ON PHYSICAL HARDWARE** | Official Milestone Status: **PHYSICAL_VERIFIED** (otherwise `INCONCLUSIVE` or `PENDING`). |

@@ -11,7 +11,7 @@
 
 ## 1. Executive Summary & Gate Status
 
-The AuscultaForge project has finalized the academic progress report for Weeks 1–6 and completed the physical verification of the primary digital transducer chain on 18 November 2026. The 18 November lab session confirmed that the ESP32-S3 (N16R8) and the INMP441 MEMS microphone communicate deterministically over I²S and stream loss-free 24-bit audio at 48 kHz over native USB CDC (`COM8`), producing a 23.2 dB spectral power difference under acoustic stimulation.
+The AuscultaForge project has finalized the academic progress report for Weeks 1–6 and completed the physical verification of the primary digital transducer chain on 18 November 2026. The 18 November lab session confirmed that the ESP32-S3 (N16R8) and the INMP441 MEMS microphone communicate deterministically over I²S and stream loss-free 24-bit audio at 48 kHz over native USB CDC (`COM3` on the lab laptop; port numbers are dynamically assigned by Windows and must always be discovered dynamically rather than assumed static across machines), producing a 23.2 dB spectral power difference under acoustic stimulation.
 
 However, in accordance with the official project specification (`SDP4_Digital_Stethoscope_Plan_EN.docx`) and the departmental evaluation rules (`SDP_Assessment_Criteria_for_Students.docx`):
 
@@ -34,16 +34,16 @@ Based on the verified order register (`docs/sdp/week-04/W04_B_actual-orders_2026
 
 | Component | Part / Model | Quantity | Procurement / Stock Status | Physical Readiness in Lab | Action Required |
 |---|---|---|---|---|---|
-| **Microcontroller Board** | ESP32-S3-WROOM-1-N16R8 (DSTK22852) | 2 units | Purchased (Direnc.net) | **VERIFIED WORKING** (Board #1 running candidate G2 firmware, USB CDC `COM8` operational) | Ready for phantom experiment. Spare board available. |
+| **Microcontroller Board** | ESP32-S3-WROOM-1-N16R8 (DSTK22852) | 2 units | Purchased (Direnc.net) | **VERIFIED WORKING** (Board #1 running candidate G2 firmware, USB CDC `COM3` verified on 18 Nov; port must be dynamically discovered) | Ready for phantom experiment. Spare board available. |
 | **Digital MEMS Microphone** | SZYTF INMP441 circular breakout | 3 units | Purchased (Direnc.net) | **VERIFIED WORKING** (Unit #1 wired on breadboard, 3.28 V measured, I²S active) | Unit #1 ready; 2 spare units unmounted. Keep acoustic port unobstructed. |
-| **Vibration Exciter** | 30 mm 12 Ω vibration/resonance speaker | 2 units | Purchased (Motorobit) | **IN LAB INVENTORY** (Not yet wired or mechanically mounted) | Characterize electrical DC resistance, solder leads, prepare mechanical coupling interface. |
-| **Audio Power Amplifier** | PAM8403 2×3 W Class-D mini module | 4 units | Purchased (Motorobit) | **IN LAB INVENTORY** (Unopened, no headers soldered) | Solder input/power pins. Enforce strict Bridge-Tied Load (BTL) wiring rules (see Section 3). |
-| **Analog Audio Cable** | Juo 3.5 mm TRS AUX cable (1 m) | 1 unit | Purchased (Amazon.com.tr) | **IN LAB INVENTORY** | Strip/breakout one end or connect via 3.5 mm TRS breakout jack to feed PAM8403 line input. |
+| **Vibration Exciter** | 30 mm 12 Ω vibration/resonance speaker | 2 units | Ordered (Motorobit) | **ORDERED / PHYSICAL INVENTORY NOT RECONFIRMED** | Documented in order ledger; physical presence at lab bench requires operator confirmation before assembly. |
+| **Audio Power Amplifier** | PAM8403 2×3 W Class-D mini module | 4 units | Ordered (Motorobit) | **ORDERED / PHYSICAL INVENTORY NOT RECONFIRMED** | Documented in order ledger; physical presence at lab bench requires operator confirmation before assembly. Solder headers and enforce BTL isolation. |
+| **Analog Audio Cable** | Juo 3.5 mm TRS AUX cable (1 m) | 1 unit | Ordered (Amazon.com.tr) | **ORDERED / PHYSICAL INVENTORY NOT RECONFIRMED** | Documented in order ledger; physical presence at lab bench requires operator confirmation before assembly. |
 | **Acoustic Stethoscope Chestpiece** | Dual-head acoustic stethoscope (bell + diaphragm) | 0 units | **NOT ORDERED / MISSING** | **ABSENT** | Procure donor stethoscope chestpiece (medical supply/pharmacy or department stock) or use temporary machined/3D-printed acoustic cup. |
 | **Acoustic Phantom Medium** | Silicone block (Ecoflex 00-30 / DragonSkin) or Ballistic Gelatin | 0 units | **NOT ORDERED / MISSING** | **ABSENT** | Prepare tissue-mimicking phantom (standard 10% Knox/bovine ballistic gelatin block or platinum-cure silicone pad). |
 | **Acoustic Coupling Gel** | Medical ultrasound / acoustic transmission gel | 0 units | **NOT ORDERED / MISSING** | **ABSENT** | Procure standard ultrasound transmission gel (Aquasonic or generic 250 ml bottle, ~50 TL) to eliminate air gaps. |
 | **Phantom Mechanical Clamp/Frame** | Rigid fixture to maintain stable coupling pressure | 0 units | **NOT ORDERED / MISSING** | **ABSENT** | Construct rigid laboratory clamp or weighted collar (~1.5–2.0 N / ~200 g) to hold chestpiece firmly against phantom. |
-| **Dedicated 5 V Power Supply** | Clean 5 V USB power bank or regulated bench PSU | Department | Available in lab | **AVAILABLE** | Dedicate an isolated 5 V supply for the PAM8403 amplifier to prevent ground loops and digital noise injection. |
+| **Dedicated 5 V Power Supply** | Clean 5 V USB power bank or regulated bench PSU | Department | Lab stock | **LAB STOCK / TO BE RECONFIRMED** | Ensure dedicated isolated 5 V supply for PAM8403 is confirmed present before bench setup. |
 | **Lab Measurement Tools** | DMM, Oscilloscope, Function Generator | Department | Available in lab | **AVAILABLE** | DMM verified (3.28 V recorded on 18 Nov). Oscilloscope ready for PAM8403 drive verification. |
 
 ### Critical Missing Items Summary:

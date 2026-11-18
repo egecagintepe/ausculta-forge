@@ -48,11 +48,11 @@ The acoustic phantom replaces human subject recording by providing a repeatable,
 
 | Ref ID | Description | Model / SKU | Source | Quantity | Status in Lab |
 |---|---|---|---|---:|---|
-| **MCU-01** | Microcontroller Board | ESP32-S3-WROOM-1-N16R8 (DSTK22852) | Direnc.net | 2 | Verified working in lab (`COM8`, 3.28 V rail). |
-| **MIC-01** | Digital I²S MEMS Microphone | SZYTF INMP441 circular breakout | Direnc.net | 3 | 1 breadboarded & verified; 2 spare units available. |
-| **AMP-01** | Audio Power Amplifier Module | PAM8403 2×3 W Class-D mini module | Motorobit | 4 | In kit. Requires header soldering and BTL checks. |
-| **EXC-01** | Surface Vibration Exciter | 30 mm 12 Ω resonance speaker | Motorobit | 2 | In kit. Requires wire lead soldering and mounting. |
-| **CAB-01** | 3.5 mm TRS Analog Audio Cable | Juo braided AUX cable (1 m) | Amazon.com.tr | 1 | In kit. Connects PC line out to PAM8403. |
+| **MCU-01** | Microcontroller Board | ESP32-S3-WROOM-1-N16R8 (DSTK22852) | Direnc.net | 2 | Verified working in lab (`COM3` verified on 18 Nov; port must be dynamically discovered, never assumed static). |
+| **MIC-01** | Digital I²S MEMS Microphone | SZYTF INMP441 circular breakout | Direnc.net | 3 | 1 breadboarded & verified (3.28 V measured); 2 spare units available. Keep acoustic port unobstructed. |
+| **AMP-01** | Audio Power Amplifier Module | PAM8403 2×3 W Class-D mini module | Motorobit | 4 | **ORDERED / PHYSICAL INVENTORY NOT RECONFIRMED**. Documented in orders; physical bench check required. Enforce BTL isolation. |
+| **EXC-01** | Surface Vibration Exciter | 30 mm 12 Ω resonance speaker | Motorobit | 2 | **ORDERED / PHYSICAL INVENTORY NOT RECONFIRMED**. Documented in orders; physical bench check required before soldering leads. |
+| **CAB-01** | 3.5 mm TRS Analog Audio Cable | Juo braided AUX cable (1 m) | Amazon.com.tr | 1 | **ORDERED / PHYSICAL INVENTORY NOT RECONFIRMED**. Documented in orders; physical bench check required. |
 | **PRT-01** | Solderless Breadboard | 830-point solderless breadboard | Direnc.net | 2 | In lab. Holds ESP32-S3 and INMP441 jumper routes. |
 | **PRT-02** | Jumper Wires & Headers | M-M jumper set & 140-piece jumper kit | Direnc.net / Motorobit | Sets | In lab. Signal, ground, and rail routing. |
 | **PRT-03** | Prototype Perfboard | 12×12 cm perforated board | Motorobit | 1 | In kit. Can serve as baseplate for amplifier. |
