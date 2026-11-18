@@ -22,7 +22,7 @@
 | | **B (Ozan)** | Measure end-to-end latency and run 30-min continuous acquisition. | Firmware session limit audited (`G1_TARGET_SAMPLES = 480k` $\approx 10\text{ s}$, 40 s timeout). Software latency models implemented. Physical 30-min run paused. | Stage endurance firmware configuration to lift 10 s limit; run 30-minute stability test. |
 | | **C (Ege)** | Implement automated test script for measurement and reporting. | Advisor metrology automation CLI (`pcg_core.metrology`), automated tables, and synthetic validation benchmarks completed and verified. | Run automated CLI on physical phantom sweep recordings. |
 | **W09**<br>*(16–22 Nov)* | **A (Kaan)** | Feasibility test on phantom: recognizable S1/S2 heart sounds. | Completed physical breadboard wiring of INMP441 with ESP32-S3 (18 Nov). Demonstrated 23.2 dB in-band acoustic signal ratio in air. | Mount microphone inside chestpiece; validate S1/S2 transmission through phantom. |
-| | **B (Ozan)** | Confirm continuous, correctly timestamped recording without clipping. | Verified 3.28 V supply rail with Agilent DMM. Flashed candidate firmware. Streamed 1,920,000 physical I²S samples across two sessions with 0 drops and 0 CRC errors. | Verify continuous acquisition during acoustic playback without amplifier distortion. |
+| | **B (Ozan)** | Confirm continuous, correctly timestamped recording without clipping. | Verified 3.28 V supply rail with Agilent DMM (operator-attested). Flashed candidate firmware via ROM port COM4. Streamed 1,920,000 physical I²S samples across 4 distinct 10-s sessions (1 quiet, 3 stimulus) over USB CDC port COM3 with 0 drops and 0 CRC errors. | Verify continuous acquisition during acoustic phantom playback without amplifier distortion. |
 | | **C (Ege)** | Compare captured waveform against source recording numerically. | Completed technical acceptance report for 18 Nov data. Hardened phantom runner CLI with anti-false-pass guards, strict ingest, and S1/S2 rhythm matching. | Execute end-to-end phantom test on physical bench with live audio playback. |
 
 ---
@@ -33,14 +33,14 @@ On Wednesday, 18 November 2026, the team conducted its first physical hardware s
 
 1. **Hardware & Electrical Verification:**
    - Kaan wired the ESP32-S3-WROOM-1 and circular INMP441 MEMS microphone on a solderless breadboard.
-   - Ozan verified the $3.3\text{ V}$ supply rail at **3.28 V** using a calibrated Agilent U1232A digital multimeter (within safe specification: 1.62 V – 3.63 V).
+   - Ozan verified the $3.3\text{ V}$ supply rail at **3.28 V** using a handheld Agilent U1232A digital multimeter based on operator attestation (a formal calibration certificate of the meter was not inspected; nominal safe range: 1.62 V – 3.63 V).
 2. **Firmware Flashing & USB CDC Streaming:**
-   - Firmware was flashed onto the ESP32-S3 over USB CDC on port `COM3`.
-   - The team captured two 10.0-second physical sessions ($48\,000\text{ Hz}$, 32-bit slot, mono float32): a quiet ambient room baseline and an acoustic stimulus session.
-   - Streaming continuity was confirmed: **0 in-stream dropped samples, 0 CRC failures, and 0 dropped frames across 1,920,000 samples** (40 seconds total acquisition).
+   - Firmware was flashed onto the ESP32-S3 via the dedicated USB-UART ROM bootloader port (`COM4`). Runtime data streaming was established over native USB CDC on port `COM3` (port enumeration is dynamically assigned by the OS and must be discovered at runtime).
+   - The team captured **4 distinct 10.0-second physical sessions** ($48\,000\text{ Hz}$, 32-bit slot, mono float32): 1 quiet ambient room baseline (`091909_9e6baa63`) and 3 acoustic stimulus sessions (`093225_19cde788`, `094939_4888e670`, `100102_4e58ac08`).
+   - Streaming continuity was confirmed: **0 in-stream dropped samples, 0 CRC failures, and 0 dropped frames across all 1,920,000 samples** (4 sessions $\times$ 480,000 samples = 40.0 seconds total acquisition).
 3. **Acoustic Transduction in Air:**
    - The INMP441 microphone successfully transduced sound waves, yielding a **23.2 dB power ratio** in the 20–500 Hz cardiac passband between active sound and ambient silence.
-   - High test volume resulted in minor near-clipping (0.2775% samples $> 0.98\text{ FS}$), demonstrating high transducer sensitivity.
+   - Excessive acoustic loudness or close proximity to the loudspeaker during stimulus run 1 caused acoustic overload / near-clipping (0.2775% samples $> 0.98\text{ FS}$); acoustic drive levels and transducer distance must be standardized in future trials to ensure linear capture without clipping.
 
 ---
 
@@ -57,5 +57,7 @@ On Wednesday, 18 November 2026, the team conducted its first physical hardware s
 ### 4. Next Steps for Next Laboratory Session
 
 1. **Inventory Confirmation:** Physically confirm delivery and bench availability of the 30 mm exciter, PAM8403 amplifier, phantom coupling block, ultrasound gel, and stethoscope chestpiece.
-2. **Bench Safety Audit:** Enforce independent 5V power for the PAM8403 (never from ESP32 rails) and verify BTL speaker output isolation (no ground connection).
-3. **Execute Automated Feasibility Workflow:** Run `tools/hardware/run_phantom_pcg_experiment.py` to play CirCor reference recording `40058_AV.wav` through the phantom, capture via INMP441, and compute normalized cross-correlation ($\text{NCC} \ge 0.35$), coherence, and S1/S2 rhythm alignment.
+2. **Bench Safety Audit:** Enforce independent 5V power for the PAM8403 using a regulated bench supply or battery pack with proper connectors (never from ESP32 rails) and verify BTL speaker output isolation (no ground connection).
+3. **Execute Two-Step Automated Feasibility Workflow:**
+   - **Step A (Quiet Baseline):** Record a 10.0-second resting quiet baseline in the lab to establish the noise floor, saving `session_quiet.json` and its `raw.wav`.
+   - **Step B (Phantom PCG Playback & Evaluation):** Run `tools/hardware/run_phantom_pcg_experiment.py` supplying `--quiet-session <path_to_quiet_session>`, `--port <DISCOVERED_CDC_PORT>`, `--play-audio`, and `--verify-audio-routing` to play CirCor reference recording `40058_AV.wav` through the phantom, capture via INMP441, and compute in-band SNR ($\ge 12\text{ dB}$), normalized cross-correlation ($\text{NCC} \ge 0.35$), coherence ($\ge 0.40$), and S1/S2 rhythm alignment.

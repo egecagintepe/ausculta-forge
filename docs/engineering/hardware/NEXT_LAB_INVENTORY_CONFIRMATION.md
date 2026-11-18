@@ -32,28 +32,31 @@
 
 ---
 
-## 2. Practical Specifications & Approved Alternatives
+## 2. Practical Specifications & Provisional Bench Alternatives (Exploratory / Uncalibrated)
 
-To prevent laboratory delays, the following acceptable substitutes are authorized under existing project specifications:
+> [!NOTE]
+> **Metrological Status of Alternatives:**  
+> The provisional substitutes listed below are uncalibrated bench exploratory alternatives intended solely for preliminary functional bringup. They must **NOT** be treated as formally measured acoustic equivalents of validated medical soft-tissue phantom standards without dedicated characterization.
 
 ### 2.1 Acoustic Phantom Medium
-- **Primary Specification:** Platinum-cure or condensation-cure casting silicone (e.g. Smooth-On Ecoflex 00-30 or Sorta-Clear, dimensions $\approx 100\times 100\times 30\text{ mm}$).
-- **Approved Laboratory Alternative:** **10% Ballistic Gelatin Block**.
-  - Preparation: 100 g food-grade gelatin (Bloom 250) dissolved in 900 mL heated distilled water ($60^\circ\text{C}$), optionally with 50 mL glycerin to prevent dehydration, cast in a flat rectangular food container and chilled for $\ge 4\text{ hours}$.
-  - Acoustic Impedance: $\approx 1.5\text{–}1.6\times 10^6\text{ Pa}\cdot\text{s/m}$, closely matching human soft tissue ($\approx 1.63\times 10^6\text{ Pa}\cdot\text{s/m}$).
+- **Primary Specification:** Platinum-cure or condensation-cure casting silicone puck (e.g. Smooth-On Ecoflex 00-30 or Sorta-Clear, dimensions $\approx 100\times 100\times 30\text{ mm}$).
+- **Provisional Bench Alternative (Exploratory):** **10% Ballistic Gelatin Block**.
+  - Preparation: 100 g food-grade gelatin (Bloom 250) dissolved in 900 mL heated distilled water ($60^\circ\text{C}$), optionally with 50 mL glycerin to prevent dehydration, cast in a flat rectangular container and chilled for $\ge 4\text{ hours}$.
+  - Acoustic Impedance: Estimated $\approx 1.5\text{–}1.6\times 10^6\text{ Pa}\cdot\text{s/m}$ (literature approximation for preliminary acoustic coupling, uncalibrated).
 
 ### 2.2 Acoustic Coupling Gel
 - **Primary Specification:** Medical ultrasound transmission gel (e.g. Parker Aquasonic 100, carbomer-based).
-- **Approved Laboratory Alternative:** High-viscosity generic aloe vera gel ($>98\%$ purity) or food-grade pure glycerin.
-  - Requirement: Viscous enough to eliminate the micro-air gap between chestpiece diaphragm and phantom medium without introducing air bubbles.
+- **Provisional Bench Alternative (Exploratory):** High-viscosity generic aloe vera gel ($>98\%$ purity) or pure glycerin.
+  - Requirement: Eliminates micro-air gaps between chestpiece diaphragm and phantom medium during preliminary bringup without introducing air bubbles; acoustic attenuation is uncalibrated.
 
 ### 2.3 Stethoscope Chestpiece
 - **Primary Specification:** Standard adult dual-head acoustic stethoscope chestpiece (stainless steel or zinc alloy, diaphragm diameter $\approx 44\text{ mm}$, bell diameter $\approx 30\text{ mm}$).
-- **Approved Laboratory Alternative:** Any working mechanical acoustic stethoscope (e.g. 3M Littmann Classic II/III or generic Sprague Rappaport). The flexible rubber tubing can be temporarily detached from the chestpiece stem to insert the INMP441 microphone port.
+- **Provisional Bench Alternative (Exploratory):** Any working mechanical acoustic stethoscope (e.g. 3M Littmann Classic II/III or generic Sprague Rappaport). The flexible rubber tubing can be temporarily detached from the chestpiece stem to insert the INMP441 microphone port.
 
 ### 2.4 Independent 5 V Amplifier Power Supply
-- **Primary Specification:** Regulated laboratory linear DC power supply set to $5.00\text{ V}$, current limit $1.0\text{ A}$.
-- **Approved Laboratory Alternative:** Standard $5\text{ V}$ USB power bank (battery-operated) with a chopped USB-A power cable (VBUS $= 5\text{ V}$, GND).
+- **Primary Specification:** Regulated laboratory linear or low-ripple switched DC bench power supply set to $5.00\text{ V}$, current limit $1.0\text{ A}$.
+- **Recommended Bench Alternative:** Dedicated $5\text{ V}$ USB battery power bank equipped with a commercial USB-A to screw-terminal breakout board or barrel-jack adapter.
+- **WIRING SAFETY HAZARD:** Avoid loose, stripped wire ends or makeshift cut cables to prevent accidental power short-circuits or reverse-polarity damage to the PAM8403.
 - **CRITICAL RESTRICTION:** Under **NO CIRCUMSTANCES** may the PAM8403 be powered from the ESP32-S3 $3\text{V}3$ or $5\text{V}$ pins. The amplifier draws transient currents up to $800\text{ mA}$, which will induce voltage dips, reset the MCU, and corrupt audio sampling.
 
 ---
@@ -109,7 +112,8 @@ In accordance with course milestones and technical dependencies, the remaining p
 ┌────────────────────────────────────▼────────────────────────────────────┐
 │ 3. PCG Playback & Physical INMP441 Acquisition                          │
 │    Prerequisites: Assembled phantom + PC audio line-out to PAM8403.     │
-│    Tool: tools/hardware/run_phantom_pcg_experiment.py --port COMx       │
+│    Tool: tools/hardware/run_phantom_pcg_experiment.py                   │
+│          --port <DISCOVERED_CDC_PORT> --quiet-session <path>            │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
 ┌────────────────────────────────────▼────────────────────────────────────┐
@@ -141,14 +145,29 @@ In accordance with course milestones and technical dependencies, the remaining p
    - **Prerequisites:** All Table 1 items confirmed; DMM isolation verified.
    - **Blockers:** Poor mechanical bonding or air gap between exciter and phantom medium.
    - **Success Criteria:** Rigid mechanical assembly holding exciter, phantom block, and chestpiece under ~200 g constant pressure.
-3. **Experiment 3: Known PCG Playback & Physical INMP441 Acquisition**
-   - **Prerequisites:** Assembled phantom connected to PC audio line out; ESP32-S3 connected on native USB CDC.
+3. **Experiment 3: Known PCG Playback & Physical INMP441 Acquisition (Two-Step Workflow)**
+   - **Prerequisites:** Assembled phantom connected to PC audio line out; ESP32-S3 connected on native USB CDC. Port dynamically identified via `python -m serial.tools.list_ports`.
+   - **Step A — Quiet Baseline Recording:** Capture a 10.0 s ambient resting baseline first to establish the quiescent floor:
+     ```powershell
+     # Capture 10s quiet session and record its resulting path (e.g. experiments/hardware/session_quiet.json)
+     ```
+   - **Step B — Synchronized Stimulus Playback & Capture:**
+     ```powershell
+     python tools/hardware/run_phantom_pcg_experiment.py `
+         --port <DISCOVERED_CDC_PORT> `
+         --reference data/raw/week6_real_pcg_20261026/circor/40058_AV.wav `
+         --quiet-session <path_to_quiet_session> `
+         --play-audio `
+         --verify-audio-routing `
+         --operator "Kaan_Ozan_Ege"
+     ```
+   - **Mandatory SNR Rule:** Without `--quiet-session`, in-band acoustic SNR cannot be calculated and the runner marks the SNR gate as `INCONCLUSIVE_NO_QUIET_BASELINE`, strictly preventing false physical gate passes.
    - **Blockers:** Audio routing failure; USB CDC communication drops.
    - **Success Criteria:** Complete 10.0 s capture (480,000 samples @ 48 kHz) with strictly 0 in-stream dropped samples and 0 CRC failures.
 4. **Experiment 4: S1/S2 Morphological Validation (Week 9 Feasibility Gate)**
-   - **Prerequisites:** Clean physical capture from Experiment 3.
+   - **Prerequisites:** Clean physical capture from Experiment 3 with certified `--quiet-session`.
    - **Blockers:** High ambient room noise, acoustic clipping ($> 0.05\%$), or decoupled chestpiece.
-   - **Success Criteria:** Envelope contrast $\ge 2.0$, peak count ratio $0.5$–$1.8$, peak match fraction $\ge 70\%$, mean jitter $\le 45\text{ ms}$, $\text{NCC} \ge 0.35$, yielding official status `PHYSICAL_GATE_PASSED`.
+   - **Success Criteria:** In-band SNR $\ge 12\text{ dB}$, envelope contrast $\ge 2.0$, peak count ratio $0.5$–$1.8$, peak match fraction $\ge 70\%$, mean jitter $\le 45\text{ ms}$, $\text{NCC} \ge 0.35$, yielding official status `PHYSICAL_GATE_PASSED`.
 5. **Experiment 5: Physical Frequency Response & Noise Characterization**
    - **Prerequisites:** Passed Experiment 4 feasibility gate.
    - **Blockers:** Nonlinear amplifier saturation; lack of swept-sine reference calibration.
