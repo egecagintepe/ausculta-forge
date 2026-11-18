@@ -99,6 +99,10 @@ experiments/hardware/team_2026-11-18/*
 !experiments/hardware/team_2026-11-18/*.md
 experiments/sessions/*
 !experiments/sessions/.gitkeep
+experiments/phantom/*
+!experiments/phantom/.gitkeep
+!experiments/phantom/**/*.json
+!experiments/phantom/**/*.md
 experiments/virtual-bench/
 
 # Analysis reference assets and comparison reports

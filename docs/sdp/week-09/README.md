@@ -26,6 +26,14 @@
 - [Historical Progress Report with 18 Nov Addendum](../SDP4_WEEK01_06_DRAFT_PROGRESS_REPORT.md)
 - See [decisions.md](decisions.md) for open and resolved decisions.
 
+## Weeks 7–9 Feasibility Gate Preparation & Phantom Artifacts
+
+- [Weeks 7–9 Physical Feasibility Readiness Audit](../../engineering/hardware/W07_W09_READINESS_AUDIT.md) — Comprehensive component audit, safe PAM8403 BTL wiring rules, and firmware 10s/40s limit analysis.
+- [Acoustic Phantom BOM & Wiring Checklist](../../engineering/hardware/PHANTOM_BOM_AND_WIRING_CHECKLIST.md) — Mechanical/electrical BOM, pin-by-pin connections, and BTL ground isolation checks.
+- [Week 9 Physical PCG Feasibility Runbook](../../engineering/hardware/W09_PHYSICAL_PCG_FEASIBILITY_RUNBOOK.md) — Role-based lab protocol for Kaan, Ozan, and Ege with explicit STOP criteria.
+- [Week 9 Experiment Automation Plan](../../engineering/hardware/W09_EXPERIMENT_AUTOMATION_PLAN.md) — Software workflow architecture, mathematical metrics (NCC, Welch coherence, Shannon envelope).
+- [Automated Phantom Experiment Runner CLI](../../../tools/hardware/run_phantom_pcg_experiment.py) — Synchronized audio playback, USB CDC acquisition, and reporting runner.
+
 ## Open Notes & Limitations
 
 - Multimeter photo and acoustic sound port underside macro photos are missing in the field handoff; noted as explicit documentation limitations.
