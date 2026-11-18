@@ -54,11 +54,11 @@ flowchart LR
 
 Per EEE495 module structure (`A`, `B`, `C`), official responsibility and verifiable repository activity as of **2026-11-17** are recorded transparently:
 
-| Module | Official Owner | Official Course Scope | Verifiable Repository Status (2026-11-17) |
+| Module | Official Owner | Official Course Scope | Verifiable Repository Status (2026-11-18) |
 | :--- | :--- | :--- | :--- |
-| **Module A** | **Kaan** | Transducer selection (`INMP441`, `KECG2740PBJ`), analog front-end, chestpiece, phantom assembly & physical lab measurements | Literature reviews, candidate selection, procurement receipt inventory (`W05`), and mechanical draft complete (`7a99ff4`). **Multimeter 3.3V, continuity/short, noise-floor, and phantom physical measurements are `PENDING` (Wednesday 2026-11-18).** |
-| **Module B** | **Ozan** | Embedded acquisition, DMA buffering, timestamps, device–PC protocol specs & throughput/latency | Specification documents and BOM revisions (`REV01`–`REV03`) complete. **Actual ESP-IDF C/FreeRTOS firmware, TinyUSB CDC, `i2s_source.c`, G1/G2 builds, and hardware regression verification were authored and executed by Ege**; Ozan physical hardware execution is scheduled for Wednesday 2026-11-18. |
-| **Module C** | **Ege Çağın Tepe** | Windows/Python host backend, React UI, DSP, recording library, quality assessment, automated test suites & integration orchestration | FastAPI bridge, React UI, Welch PSD, CirCor/CinC2016 playback, `pcg_core.metrology`, controlled artifact benchmark, G1 hardware runs, C firmware + host tests, and Git-free Wednesday orchestrator verified. |
+| **Module A** | **Kaan** | Transducer selection (`INMP441`, `KECG2740PBJ`), analog front-end, chestpiece, phantom assembly & physical lab measurements | Breadboard physical integration of INMP441 (SCK->GPIO4, WS->GPIO5, SD->GPIO6, L/R->GND) and acoustic excitation feasibility completed on 18 Nov 2026. **Multimeter display photo and acoustic port macro photo missing; phantom physical measurements are `PENDING` (Week 10).** |
+| **Module B** | **Ozan** | Embedded acquisition, DMA buffering, timestamps, device–PC protocol specs & throughput/latency | Breadboard electrical continuity check, 3.3V power rail measurement (3.28V via Agilent U1232A, attested), firmware flashing on COM4, and physical execution of zero-loss G1/G2 sessions completed on 18 Nov 2026. Real C/FreeRTOS firmware & USB CDC authored by Ege. |
+| **Module C** | **Ege Çağın Tepe** | Windows/Python host backend, React UI, DSP, recording library, quality assessment, automated test suites & integration orchestration | C firmware architecture, dual-mode G1/G2 runtime, TinyUSB CDC protocol, FastAPI/React UI, Welch PSD & quality pipelines, independent verification of 18 Nov lab returns, and conditional acceptance reporting. |
 
 > Full branch audit confirming zero unmerged changes across all 49 remote branches: [`docs/engineering/BRANCH_CONSOLIDATION_AUDIT.md`](docs/engineering/BRANCH_CONSOLIDATION_AUDIT.md).
 
@@ -76,7 +76,7 @@ AuscultaForge strictly separates reproducible **software & G1 hardware evidence*
 | **Protocol Laboratory (`tools/protocol_lab/python`)** | **PASS** | Profile A/B wire codecs, CRC-32, defragmentation, RFC-3550 sequence gates — `59 passed, 1 skipped` (`g1_sim_runner.exe` optional). |
 | **Backend, DSP, Metrology & Orchestration (`software/tests`)** | **PASS** | FastAPI routes, WAV/sidecar integrity, Welch PSD, Springer/CirCor tools, controlled artifact benchmark (`5/5`), 10 fault-injection & acceptance tests for `wednesday_lab.py` & `windows_setup.ps1` (post-flash G1 re-run + `INCONCLUSIVE` stimulus check) — **`597 passed, 4 skipped`** (`672` total across Python/Protocol/C suites). |
 | **Desktop Frontend (`software/frontend`)** | **PASS** | TypeScript `tsc --noEmit` (`0` errors) + `9` `tsx` suites + production Vite bundle (`dist/`, `4.03 s`, includes Device Center `Wednesday Lab Mode`). |
-| **Physical INMP441 G2 (`source_mode=0`)** | **`PENDING / NOT_EXECUTED`** | Microphone not yet soldered/wired; gated behind Wednesday `2026-11-18` H0 inspection (`3.3V` `[3.15, 3.45] V`, continuity, photos) and explicit `authorize-g2`. |
+| **Physical INMP441 G2 (`source_mode=0`)** | **CONDITIONAL PASS** *(2026-11-18)* | Breadboard wiring (GPIO 4, 5, 6, GND), 3.28V VDD rail, 48 kHz, 24-bit in 32-bit slot over native USB CDC (`COM3`). 4 sessions (`091909_9e6baa63`, `093225_19cde788`, `094939_4888e670`, `100102_4e58ac08`) totaling `1,920,000` samples with **0 in-stream drops**. 23.2 dB acoustic response verified. Report: [`PHYSICAL_G2_ACCEPTANCE_REPORT.md`](experiments/hardware/team_2026-11-18/PHYSICAL_G2_ACCEPTANCE_REPORT.md). |
 | **Phantom FRF, 50 Hz Mains, Repeatability (≥10), 30-Min Stress** | **`NOT_EXECUTED`** | Physical phantom/exciter fixture pending Module A/B completion. Note: current firmware caps per-session runs at `G1_TARGET_SAMPLES=480000U` (`10.0 s` @ `48 kHz`) and `40 s` hard timer (`g1.h` / `g1.c`). |
 
 ---

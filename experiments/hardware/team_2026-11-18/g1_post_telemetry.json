@@ -1,0 +1,18 @@
+{
+  "origin": "REPORTED_BY_FIRMWARE",
+  "value": {
+    "session_id": 13833514539115818916,
+    "generated_samples": 480000,
+    "fully_queued_samples": 480000,
+    "dropped_samples": 0,
+    "audio_frames_queued": 1875,
+    "dma_overflow_events": 0,
+    "ring_overflow_events": 0,
+    "usb_partial_write_events": 0,
+    "usb_timeout_events": 0,
+    "usb_disconnect_events": 0,
+    "audio_bytes_queued": 2002500,
+    "stop_reason": 0,
+    "error_code": 0
+  }
+}

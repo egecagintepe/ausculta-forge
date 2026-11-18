@@ -1,0 +1,55 @@
+{
+  "session_id": "session_20261118_100102_4e58ac08",
+  "started_at_utc": "2026-11-18T10:01:02.879555+00:00",
+  "ended_at_utc": "2026-11-18T10:01:13.907945+00:00",
+  "source": "Physical USB INMP441 G2 (stimulus) on COM3",
+  "sample_rate_hz": 48000,
+  "total_blocks": 1875,
+  "total_samples": 480000,
+  "duration_s": 10.0,
+  "first_sequence": 0,
+  "last_sequence": 1874,
+  "first_timestamp_s": 2761.134,
+  "last_timestamp_s": 2771.1286,
+  "raw_wav_relpath": "raw.wav",
+  "raw_wav_sha256": "26c78582df26bcd209c1f051f09aca19c8462b9fc7067cd30a0a59eba57faa33",
+  "stream_quality": {
+    "total_blocks": 1875,
+    "dropped_blocks": 0,
+    "repeated_sequences": 0,
+    "sequence_discontinuities": 0,
+    "timestamp_regressions": 0,
+    "sample_rate_changes": 0,
+    "is_healthy": true
+  },
+  "git_commit_sha": null,
+  "environment": {
+    "python_version": "3.11.9",
+    "numpy_version": "2.4.6",
+    "scipy_version": "1.17.1",
+    "platform": "Windows-10-10.0.26200-SP0"
+  },
+  "acquisition_mode": "hardware",
+  "termination_reason": "completed",
+  "device_info": {
+    "port": "COM3",
+    "device_id": "ESP32-S3 (UID: 0xb1aa7cc4)",
+    "firmware_version": "1.1.0",
+    "source_mode": 0
+  },
+  "dsp_engine_version": "2.0.0",
+  "desktop_client_version": "0.1.0-alpha.1",
+  "app_version": "2.0.0",
+  "schema_version": "2.0.0",
+  "storage_format": "normalized_float32",
+  "wire_format": "signed_pcm_24bit_in_32bit_slot",
+  "storage_disclaimer": "WAV file contains normalized IEEE float32 audio samples in [-1.0, 1.0], derived via linear scaling from acquisition blocks. It is not an unparsed wire bitstream copy.",
+  "processing_profile": {
+    "filter_preset": "none_raw",
+    "acquisition_origin": "physical_i2s_unqualified",
+    "source_mode": 0,
+    "capture_role": "stimulus"
+  },
+  "status": "finalized",
+  "manifest_version": "2.0.0"
+}

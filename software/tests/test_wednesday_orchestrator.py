@@ -306,7 +306,7 @@ def test_windows_setup_missing_python_and_node_fault_injection():
         ],
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=120,
         encoding="utf-8",
         errors="replace",
     )

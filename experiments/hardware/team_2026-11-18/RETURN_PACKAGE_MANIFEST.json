@@ -1,0 +1,762 @@
+{
+  "schema_version": "1.0.0",
+  "created_utc": "2026-11-18T09:38:59.432454+00:00",
+  "operator": "Kaan_Ozan",
+  "notes": "2026-11-18 Lab Integration Return",
+  "baseline_commit": "319fcc59be0177bf45d5266025344d31e4e9a9c2",
+  "host_platform": "Windows-10-10.0.26200-SP0",
+  "python_version": "3.11.9",
+  "file_count": 142,
+  "gate_evidence_summary": {
+    "h0_g2_attestation_present": true,
+    "g1_acceptance_bundles": [
+      "experiments/hardware/20261118T090212Z_5e7113d0",
+      "experiments/hardware/20261118T091801Z_750cfd3e"
+    ],
+    "g2_qualification_jsons": [
+      "experiments/hardware/g2-quiet.json",
+      "experiments/hardware/g2-stimulus.json"
+    ],
+    "orchestrator_files": [
+      "experiments/hardware/wednesday_20261118_state.json",
+      "experiments/hardware/wednesday_g2_comparison.json",
+      "experiments/hardware/wednesday_g2_comparison.md"
+    ],
+    "recorded_sessions": [
+      {
+        "session_id": "session_20261118_091909_9e6baa63",
+        "source": "Physical USB INMP441 G2 (quiet) on COM3",
+        "acquisition_mode": "hardware",
+        "acquisition_origin": "physical_i2s_unqualified",
+        "sample_rate_hz": 48000,
+        "total_samples": 480000,
+        "duration_s": 10.0,
+        "raw_wav_sha256": "eb4f218c3a22158430993b2180cc28618b5e426d7588b1d3da1ca59fcdf3d903"
+      },
+      {
+        "session_id": "session_20261118_093225_19cde788",
+        "source": "Physical USB INMP441 G2 (stimulus) on COM3",
+        "acquisition_mode": "hardware",
+        "acquisition_origin": "physical_i2s_unqualified",
+        "sample_rate_hz": 48000,
+        "total_samples": 480000,
+        "duration_s": 10.0,
+        "raw_wav_sha256": "76698e92fea31bed8ec27836e8f04e66d20639c79dbcf665df90f4ea09b7c5d9"
+      }
+    ],
+    "boot_logs": []
+  },
+  "files": [
+    {
+      "arcname": "appdata_logs/flight_recorder.jsonl",
+      "size_bytes": 1460,
+      "sha256": "f4bc5411fde7435af5f13bf00f339b1a4583b61bad497d02e7609cd5f79c5a5b"
+    },
+    {
+      "arcname": "docs/sdp/PROGRESS_ASOF_2026-11-17.md",
+      "size_bytes": 8413,
+      "sha256": "13266c3b9920f20472b043c13e8d7aaa4762eb4129c79811ad4aef95418ae406"
+    },
+    {
+      "arcname": "docs/sdp/README.md",
+      "size_bytes": 5859,
+      "sha256": "bb52c917548b59aa4796c0c825b7279fe0062093ecc0d1d89f71c4fab474ea25"
+    },
+    {
+      "arcname": "docs/sdp/SDP4_WEEK01_06_DRAFT_PROGRESS_REPORT.md",
+      "size_bytes": 18820,
+      "sha256": "41fb73dbfe1b93145e2e732b9343090cfbabd3eef1b029a4ab52337f6fe9ce20"
+    },
+    {
+      "arcname": "docs/sdp/week-02/bc-interface-requirements.md",
+      "size_bytes": 11742,
+      "sha256": "d903ad591acabef412912258072e40b336596abe1620d1489cb371f3576a51ba"
+    },
+    {
+      "arcname": "docs/sdp/week-02/measurement-quality-plan.md",
+      "size_bytes": 14195,
+      "sha256": "8459009491018859156bf59388a7000c02f28c6d5706171223538aebd51aecf7"
+    },
+    {
+      "arcname": "docs/sdp/week-02/meeting-brief.md",
+      "size_bytes": 10528,
+      "sha256": "cf93e169cf31c51e97fcd90e27060c4b80cf49ea5394a8648a6c3b08f71bbfe6"
+    },
+    {
+      "arcname": "docs/sdp/week-02/module-c-status.md",
+      "size_bytes": 10088,
+      "sha256": "973fb715f13fa71ee0afc3ac996437a65985f14f96ca2537dc667e95480f24eb"
+    },
+    {
+      "arcname": "docs/sdp/week-02/submissions/README.md",
+      "size_bytes": 1363,
+      "sha256": "7d348a754af74fa91b3842293279755a4a8d81974f5635a4a5626065a7fbaf02"
+    },
+    {
+      "arcname": "docs/sdp/week-02/submissions/module-a-kaan/README.md",
+      "size_bytes": 1330,
+      "sha256": "73982164f065f7edadf5e354efdffdadf40b9f4152d7db3e4388788550ebecf6"
+    },
+    {
+      "arcname": "docs/sdp/week-02/submissions/module-a-kaan/W02_A_heart-sound-characteristics_v01.pdf",
+      "size_bytes": 84945,
+      "sha256": "215ce641889ac962f3bb050ab81123449e7a9ff93641dc01c8c57f208ad130e9"
+    },
+    {
+      "arcname": "docs/sdp/week-02/submissions/module-a-kaan/W02_A_technical-selection-criteria_v01.pdf",
+      "size_bytes": 82975,
+      "sha256": "ccbf6f6f4141bea59d33d9220641f1b2f0496684fdd3534e6fd176a73334f709"
+    },
+    {
+      "arcname": "docs/sdp/week-02/submissions/module-b-ozan/README.md",
+      "size_bytes": 1242,
+      "sha256": "29045f8a49247e14d0740fee3a99fba6be99daffd1007069af9f480113a347a1"
+    },
+    {
+      "arcname": "docs/sdp/week-02/submissions/module-b-ozan/W02_B_procurement-bom-test_REV01.xlsx",
+      "size_bytes": 28532,
+      "sha256": "beb6fedc34839884c5c8ce694089c94195e5b6f8de8653c0aef495b89e367baa"
+    },
+    {
+      "arcname": "docs/sdp/week-02/submissions/module-b-ozan/W02_B_system-design-technical-specification_REV01.docx",
+      "size_bytes": 218410,
+      "sha256": "357169afaedded8228fea8702f99a27fdc641a3c9fd95e5c89b6d17e69d5e98a"
+    },
+    {
+      "arcname": "docs/sdp/week-02/submissions/module-c-ege/README.md",
+      "size_bytes": 1084,
+      "sha256": "50262d905430dd82868bf2f90d5c87ae60e95cc53a4a06fc9989de15336c58a7"
+    },
+    {
+      "arcname": "docs/sdp/week-03/README.md",
+      "size_bytes": 2074,
+      "sha256": "c7dd6460523b3c88fe7d9ac6738d5b9ff1100b543b369101ceaefa2c12a10f56"
+    },
+    {
+      "arcname": "docs/sdp/week-03/decisions.md",
+      "size_bytes": 10868,
+      "sha256": "5f13339887b9c426fd65440055556e0ce07554acf98d9a7867fec256ce6aa9f4"
+    },
+    {
+      "arcname": "docs/sdp/week-03/submissions/README.md",
+      "size_bytes": 774,
+      "sha256": "52beded18b826c6a1959604fcf24749a731a575526a180af9b501b6b85efbe62"
+    },
+    {
+      "arcname": "docs/sdp/week-03/submissions/module-a-kaan/README.md",
+      "size_bytes": 954,
+      "sha256": "793ee40f89c29b37ccfca1ae9f4e6fb053af1075e4a8bd093a5c0b3a0db6c93a"
+    },
+    {
+      "arcname": "docs/sdp/week-03/submissions/module-a-kaan/W03_A_candidate-selection-report_v01.pdf",
+      "size_bytes": 85424,
+      "sha256": "4427479329db6fff73f004808eb64898463e7d068f22af95081fae498e0a0d1d"
+    },
+    {
+      "arcname": "docs/sdp/week-03/submissions/module-a-kaan/W03_A_transducer-candidate-selection.md",
+      "size_bytes": 10226,
+      "sha256": "3b79693374bf5895fd10d64b4757cdac2a55e642354a1ded4dc501ebeda45db9"
+    },
+    {
+      "arcname": "docs/sdp/week-03/submissions/module-b-ozan/README.md",
+      "size_bytes": 5236,
+      "sha256": "b94877cfdbd0e6fbdd69a75d30c29254c87731ee1c42b1b5f3b1e58c825cbb45"
+    },
+    {
+      "arcname": "docs/sdp/week-03/submissions/module-b-ozan/W03_B_device-to-host-frame-draft.md",
+      "size_bytes": 20684,
+      "sha256": "9a39f8cbdd13d67dba0661948faf359412c890a4ff19d5076067c5463d8503af"
+    },
+    {
+      "arcname": "docs/sdp/week-03/submissions/module-b-ozan/W03_B_procurement-bom-test_v02.xlsx",
+      "size_bytes": 69518,
+      "sha256": "2ea06ffc38853bbf55e9ccfa74080dc771c209a3c8fdf6746d0ab081e27c3007"
+    },
+    {
+      "arcname": "docs/sdp/week-03/submissions/module-b-ozan/W03_B_system-design-technical-specification_v02.docx",
+      "size_bytes": 240686,
+      "sha256": "f0172b1a1de3ea58973ab03a55cafa37f6aa9e788d7c1c4113b78036a2b4dec4"
+    },
+    {
+      "arcname": "docs/sdp/week-03/submissions/module-b-ozan/W03_B_task-closeout.md",
+      "size_bytes": 7243,
+      "sha256": "a666ec5ba1c7c122735199e6f59ea7795bda6f742e785270ed87e60a267e234d"
+    },
+    {
+      "arcname": "docs/sdp/week-03/submissions/module-c-ege/README.md",
+      "size_bytes": 1084,
+      "sha256": "3bd115cbf88d327bee185bdbc15d4095d6ddcfd75e141a59b2e5acd3f3469d83"
+    },
+    {
+      "arcname": "docs/sdp/week-03/submissions/module-c-ege/W03_C_quality-metrics-validation.md",
+      "size_bytes": 9878,
+      "sha256": "5a466005908c0f55037eaa48472a70dcc8e97cf645e2535f40ca5e77bb98dd74"
+    },
+    {
+      "arcname": "docs/sdp/week-04/README.md",
+      "size_bytes": 2114,
+      "sha256": "1446166414a0f70934cb5004ab86f3dec90843801606c868304e5e2a051f3bde"
+    },
+    {
+      "arcname": "docs/sdp/week-04/W04_B_actual-orders_2026-10-16_v01.csv",
+      "size_bytes": 10322,
+      "sha256": "4d86a2e428e9fb04b209331a7768ab6ecd75997d1866dd3017f9bcbb55465608"
+    },
+    {
+      "arcname": "docs/sdp/week-04/decisions.md",
+      "size_bytes": 3784,
+      "sha256": "7d7523d124b7e89515cd0e717160a5ca9bfed53104caf44c91b4b8862b98c5eb"
+    },
+    {
+      "arcname": "docs/sdp/week-04/procurement-closeout.md",
+      "size_bytes": 10330,
+      "sha256": "af9f7afd49faae562f8de2b381880cc150327c49da98382958106065f076a22d"
+    },
+    {
+      "arcname": "docs/sdp/week-04/submissions/README.md",
+      "size_bytes": 1379,
+      "sha256": "a86821aa888818a9747306d191f90c0cc62218895b6e0727531ffe2d20ed96bf"
+    },
+    {
+      "arcname": "docs/sdp/week-04/submissions/module-a-kaan/README.md",
+      "size_bytes": 2203,
+      "sha256": "dabed6929cd1fd6d8ba4aa0420f9877913e3e70c79d6d3e292df6c3bf4d1a7cc"
+    },
+    {
+      "arcname": "docs/sdp/week-04/submissions/module-a-kaan/W04_A_acquisition-requirements-freeze.md",
+      "size_bytes": 14551,
+      "sha256": "7a5dd03e96fafc3caf16df800e31cf5ff5aa73855061069d9ae07f2aaa6b0f2b"
+    },
+    {
+      "arcname": "docs/sdp/week-04/submissions/module-a-kaan/W04_A_acquisition-requirements-report_v01.pdf",
+      "size_bytes": 101161,
+      "sha256": "1dcb630340a9eac87c4c870353297b5d95b8b3c4bfe8d8868f12056e230e1410"
+    },
+    {
+      "arcname": "docs/sdp/week-04/submissions/module-a-kaan/W04_A_illustrative-highpass_v01.csv",
+      "size_bytes": 284,
+      "sha256": "e713b2e9660eb7ca58ecf3f39b0314216121bf1f6c8bbeae55044203aa20a8fe"
+    },
+    {
+      "arcname": "docs/sdp/week-04/submissions/module-a-kaan/W04_A_requirements-calculations_v01.py",
+      "size_bytes": 735,
+      "sha256": "c49e5337d85f8140d83d66c04e28122a68c415759442f1e935b153409d6c3ecd"
+    },
+    {
+      "arcname": "docs/sdp/week-04/submissions/module-b-ozan/README.md",
+      "size_bytes": 2172,
+      "sha256": "7f79316d8c992f46298face5bbbcc77a8ebedbc30fd06e050d799a2cc8634f64"
+    },
+    {
+      "arcname": "docs/sdp/week-04/submissions/module-b-ozan/W04_B_embedded-requirements-freeze.md",
+      "size_bytes": 11208,
+      "sha256": "5a20932b3d6014a0a34a89ee15cbccca145e49b70244dcb6072199ca5bd8ea11"
+    },
+    {
+      "arcname": "docs/sdp/week-04/submissions/module-b-ozan/W04_B_procurement-bom-test_REV03.xlsx",
+      "size_bytes": 79652,
+      "sha256": "77b1e281e7ecba0099cd9843c1e9b9f8646613b7f876d1ff55f5b6284afb3ee7"
+    },
+    {
+      "arcname": "docs/sdp/week-04/submissions/module-b-ozan/W04_B_system-design-technical-specification_REV03.docx",
+      "size_bytes": 237262,
+      "sha256": "3b75ad6524e8428ae9f3b1bbf1546e5390f0eb2b3670f99f8fee756e6800aa99"
+    },
+    {
+      "arcname": "docs/sdp/week-04/submissions/module-b-ozan/W04_B_to_C_protocol-proposal_v01.md",
+      "size_bytes": 6627,
+      "sha256": "7666c78dfc2ae2825160fa8a014382ee689072e750cdcdb215c7577db6bb04ed"
+    },
+    {
+      "arcname": "docs/sdp/week-04/submissions/module-c-ege/README.md",
+      "size_bytes": 1132,
+      "sha256": "3a3b4edaaed03e308a36c79913136f99916b38520d9b0b5fe359b01e61908036"
+    },
+    {
+      "arcname": "docs/sdp/week-04/submissions/module-c-ege/W04_C_application-requirements-freeze.md",
+      "size_bytes": 15275,
+      "sha256": "cb50a4d9ecc548102c5386fa9f2b67e8c93be95580d0ee24e8ee0301201004c3"
+    },
+    {
+      "arcname": "docs/sdp/week-05/README.md",
+      "size_bytes": 3226,
+      "sha256": "c7bc6e49c7cb0199b5054627fd82925fa927304ae57ef20e10fd238950ffb48a"
+    },
+    {
+      "arcname": "docs/sdp/week-05/decisions.md",
+      "size_bytes": 1545,
+      "sha256": "e8a02158342ee0f20e226fd26ac365a93d05ef42289ff3af39e60c75d51d0768"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/README.md",
+      "size_bytes": 1110,
+      "sha256": "d8ac0fc0efe64b7ec307f134da5d1dccc63d356236c7a27553f70600d0e498ca"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-a-kaan/README.md",
+      "size_bytes": 1876,
+      "sha256": "a803b39e4361c97ef57f628b975dc480d403807de2403328ce6de55d74b459c6"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-a-kaan/W05_A_acoustic-hardware-preparation-report_v01.pdf",
+      "size_bytes": 102065,
+      "sha256": "66220d1d99c77cde0b7bbed32571ea5fe1f96149114b16761965128992ea2a8b"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-a-kaan/W05_A_breadboard-front-end-bench-test.md",
+      "size_bytes": 4440,
+      "sha256": "57d035c61ac6bb0e9b5dbfa274a8530eb011a5e58eef46d5a944d440149a5aa6"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-a-kaan/W05_A_material-inventory_v01.md",
+      "size_bytes": 1721,
+      "sha256": "78e9fbbb2aa41f6f4a88c4e00ee26858dbb84742b113bf1bfd8b574a4ad84a2b"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-a-kaan/W05_A_mechanical-design_v01.md",
+      "size_bytes": 6941,
+      "sha256": "786a5750f47ed13e25170008353a69836cf96d79cc3340a00c6214f30939f4f2"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-a-kaan/W05_A_week06-test-readiness_v01.md",
+      "size_bytes": 2262,
+      "sha256": "d4b53e98a4802fd270d9880ecbc8607d07a844517d07a3e3bf3b9ef3e556429e"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-b-ozan/README.md",
+      "size_bytes": 1067,
+      "sha256": "eb79a7803ea9c24916ce1fdc9a10bfde05ab4d84c20c5e97d011ef285a8defff"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-b-ozan/W05_B_g1-bringup-plan_v01.md",
+      "size_bytes": 4975,
+      "sha256": "26cecd53b80b6b21f86641ab1699327017a4704f02560760cc16a359e0e6d5cc"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-b-ozan/W05_B_synthetic-stream-test.md",
+      "size_bytes": 720,
+      "sha256": "ff9fb35d118f60c6fa5f552105434e5f9f498fc381af7c772798b9e2e34966ea"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-c-ege/README.md",
+      "size_bytes": 2676,
+      "sha256": "9719754e321d228427a08c43fdae22bd8cd54fe913789f76cfffbf8643d80a13"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-c-ege/W05_C_host-integration-preflight_v01.md",
+      "size_bytes": 18426,
+      "sha256": "b5bab4b167ce97d58d97c9801cda2e4007c3587456fedb33022ed182af6a4450"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-c-ege/W05_C_host-transport-readiness_v01.md",
+      "size_bytes": 13762,
+      "sha256": "cafd551b1b79a646420942bd0977c6f897aeb6b19f589ed19ad49a213b4ebe04"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-c-ege/W05_C_live-display-recording-verification.md",
+      "size_bytes": 6350,
+      "sha256": "c027c4bb01cf5ea1f15149452ce8c27edb4aa6457c1aa83fa7439b8c1ab815a3"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-c-ege/W05_C_protocol-readiness-review_v01.md",
+      "size_bytes": 22745,
+      "sha256": "9c745d79ce4c57ec3f2a444585e0aa3b6c20dcff816b0aaaa6bf543a07898109"
+    },
+    {
+      "arcname": "docs/sdp/week-05/submissions/module-c-ege/W05_C_virtual-bench-verification_v01.md",
+      "size_bytes": 12851,
+      "sha256": "9ee85c569472167308b66275ea1975114ed8598252cae3817270aa44c3a58a6b"
+    },
+    {
+      "arcname": "docs/sdp/week-06/README.md",
+      "size_bytes": 2149,
+      "sha256": "45cde213fcfb079c44784fd59ddda42354b1ca80e39b87d29b6c69831adea256"
+    },
+    {
+      "arcname": "docs/sdp/week-06/decisions.md",
+      "size_bytes": 1633,
+      "sha256": "37b0dc4d28d74778776f550bf147b7ec33fa16c9699730b5dd1b7536406bfce2"
+    },
+    {
+      "arcname": "docs/sdp/week-06/submissions/README.md",
+      "size_bytes": 783,
+      "sha256": "c2e3d092a22444f12750ec779d2160008d832484e76272b6397b587d17a6a959"
+    },
+    {
+      "arcname": "docs/sdp/week-06/submissions/module-a-kaan/README.md",
+      "size_bytes": 1081,
+      "sha256": "c4d065efa3be1d60814adc2e07caf268c826297d8b3d04b2077b22ca8f8c2d76"
+    },
+    {
+      "arcname": "docs/sdp/week-06/submissions/module-a-kaan/W06_A_first-transducer-gain-bandwidth.md",
+      "size_bytes": 734,
+      "sha256": "df30c05d25bef3d856245ba10005ebc8112a73b806995fcf4416aeb86c6a6efb"
+    },
+    {
+      "arcname": "docs/sdp/week-06/submissions/module-b-ozan/README.md",
+      "size_bytes": 1067,
+      "sha256": "d5de7de090e3b5144dada78e3db50985dfbe56e19d0b9b53761447bf2d53698a"
+    },
+    {
+      "arcname": "docs/sdp/week-06/submissions/module-b-ozan/W06_B_real-input-timestamp-continuity.md",
+      "size_bytes": 730,
+      "sha256": "5942c39ca3525802f11af273672992828141343df34494cd7aeb848c9a519019"
+    },
+    {
+      "arcname": "docs/sdp/week-06/submissions/module-c-ege/README.md",
+      "size_bytes": 1475,
+      "sha256": "ea4111d4c3ec5e2df366bab2d271dcb2dda49c22811895950986f325c99281ae"
+    },
+    {
+      "arcname": "docs/sdp/week-06/submissions/module-c-ege/W06_C_spectrogram-recording-metadata.md",
+      "size_bytes": 44711,
+      "sha256": "90d2e2f0662b2bd587c8eda7b57fd0780ab8269c3fa963574d786f5fe11d94e4"
+    },
+    {
+      "arcname": "docs/sdp/week-07/README.md",
+      "size_bytes": 1419,
+      "sha256": "8ccc2ee4ed10bfc6e069be5ea132d7b748943d96a52a8183b04f8d8caf0ded70"
+    },
+    {
+      "arcname": "docs/sdp/week-07/decisions.md",
+      "size_bytes": 365,
+      "sha256": "17d46799d08742c2da7ab24b3962e86c54e66f2c6217f31610692e83388346d7"
+    },
+    {
+      "arcname": "docs/sdp/week-07/submissions/README.md",
+      "size_bytes": 989,
+      "sha256": "a401a46756c586ea807e1df4a1ff9259cc37551a171a82bdad0131e98fd8b4a2"
+    },
+    {
+      "arcname": "docs/sdp/week-07/submissions/module-a-kaan/README.md",
+      "size_bytes": 1081,
+      "sha256": "3d231b214186a1016b6c0fbebcc1a9311409a1fe8723e4770d990ec2da387a7c"
+    },
+    {
+      "arcname": "docs/sdp/week-07/submissions/module-a-kaan/W07_A_acoustic-phantom-build.md",
+      "size_bytes": 721,
+      "sha256": "1bc183a976dec2e63e2b6d40038e35b300102850b14f21eeda34936917a2bee5"
+    },
+    {
+      "arcname": "docs/sdp/week-07/submissions/module-b-ozan/README.md",
+      "size_bytes": 1067,
+      "sha256": "8085763ab7de8bb8e54c88adc04ae81dea68bcd2ef396d9c9e30c9784d09ff9b"
+    },
+    {
+      "arcname": "docs/sdp/week-07/submissions/module-b-ozan/W07_B_device-status-packet-loss.md",
+      "size_bytes": 728,
+      "sha256": "5da218e08ce2ad7f7ea9f3226f31f1ed5ba732a4f15eb50699e40ef476e3c999"
+    },
+    {
+      "arcname": "docs/sdp/week-07/submissions/module-c-ege/README.md",
+      "size_bytes": 1326,
+      "sha256": "da01c7f5a58a540b97091818eaf18584d08e4652095fc18f391e54f855471086"
+    },
+    {
+      "arcname": "docs/sdp/week-07/submissions/module-c-ege/W07_C_dataset-playback-path.md",
+      "size_bytes": 3789,
+      "sha256": "3e36d60dbeb954597cfc98f7b86dc5a8db686dc2d455305dc9eb2185121db348"
+    },
+    {
+      "arcname": "docs/sdp/week-08/README.md",
+      "size_bytes": 1557,
+      "sha256": "0f6a44d3e65a349e865051600618f91dddd4393456430e12532127dfd1d12c56"
+    },
+    {
+      "arcname": "docs/sdp/week-08/decisions.md",
+      "size_bytes": 365,
+      "sha256": "9f9555f22f4d4284dce7e82a682176fed8ab74f1e9b1a6111278fa904eb98d17"
+    },
+    {
+      "arcname": "docs/sdp/week-08/submissions/README.md",
+      "size_bytes": 1025,
+      "sha256": "9a8dd8d48a7a41a62f06235ad91459da7b1e4042bbab3a881a0b2286db02201f"
+    },
+    {
+      "arcname": "docs/sdp/week-08/submissions/module-a-kaan/README.md",
+      "size_bytes": 1081,
+      "sha256": "7c8384bd6c9cf3336ac1fbdb2a0dfba3c1ee236fb7fee404ed5e24a2a56fbc9a"
+    },
+    {
+      "arcname": "docs/sdp/week-08/submissions/module-a-kaan/W08_A_phantom-frequency-response.md",
+      "size_bytes": 725,
+      "sha256": "bf4dc7dda7bd195ec091c2b2e9f29d6acb14f4403de49cfe031dfef3448ef727"
+    },
+    {
+      "arcname": "docs/sdp/week-08/submissions/module-b-ozan/README.md",
+      "size_bytes": 1067,
+      "sha256": "7640d7311b69251dfdb73b8276df6f8993d3eebb179a42975c6fdd8f6a1816b5"
+    },
+    {
+      "arcname": "docs/sdp/week-08/submissions/module-b-ozan/W08_B_latency-continuous-run.md",
+      "size_bytes": 721,
+      "sha256": "121d63e01c929a864521b3ae62f68598b1fdaf61bd43ae48f43e6e844089774f"
+    },
+    {
+      "arcname": "docs/sdp/week-08/submissions/module-c-ege/README.md",
+      "size_bytes": 1303,
+      "sha256": "1fa876979a1c8ef97ef28910142cd7be7bfd0165f829317bc2fa2ac9af06ca54"
+    },
+    {
+      "arcname": "docs/sdp/week-08/submissions/module-c-ege/W08_C_automated-measurement-script.md",
+      "size_bytes": 3927,
+      "sha256": "5897f56626cf303d60e80e2780200a9aceeb2dd16448b382fdf90574eb55be4a"
+    },
+    {
+      "arcname": "docs/sdp/week-09/README.md",
+      "size_bytes": 2282,
+      "sha256": "2963c7ff572a520fc199bce69cf08333d9f6e6650cf679bb70bae3ef053820ff"
+    },
+    {
+      "arcname": "docs/sdp/week-09/decisions.md",
+      "size_bytes": 365,
+      "sha256": "a591b5993fa07e7c76bf02d6a0a42941b8b746631bf21ff5935145ce9556e039"
+    },
+    {
+      "arcname": "docs/sdp/week-09/submissions/README.md",
+      "size_bytes": 819,
+      "sha256": "c8c72d42036cdf30c6b168895d649c4d33490cce781553c826264a6c23c55e8f"
+    },
+    {
+      "arcname": "docs/sdp/week-09/submissions/module-a-kaan/README.md",
+      "size_bytes": 1081,
+      "sha256": "ad50696624b203c21a874d28db5081129e9d7b3bf4fd8373e06eb9ed0967fd18"
+    },
+    {
+      "arcname": "docs/sdp/week-09/submissions/module-a-kaan/W09_A_feasibility-test.md",
+      "size_bytes": 2908,
+      "sha256": "d43cb041dad010b3ff9ff75e3b61daeab9bef52a65687e10f617ce8a30c5156f"
+    },
+    {
+      "arcname": "docs/sdp/week-09/submissions/module-b-ozan/README.md",
+      "size_bytes": 1067,
+      "sha256": "5aef5242ac6d77f86304bcba8373447e7188b4785760907d37c64ed08d81510d"
+    },
+    {
+      "arcname": "docs/sdp/week-09/submissions/module-b-ozan/W09_B_continuity-clipping-verification.md",
+      "size_bytes": 3519,
+      "sha256": "6626d461f9c8e92d434c9f99cec39eae67214ba11295627e5e583c1633e000a0"
+    },
+    {
+      "arcname": "docs/sdp/week-09/submissions/module-c-ege/README.md",
+      "size_bytes": 1420,
+      "sha256": "73a8bcc23e410f0cb459f4505ca2082dca0dc88f0ae6a0e0b10c10003fe7efa2"
+    },
+    {
+      "arcname": "docs/sdp/week-09/submissions/module-c-ege/W09_C_source-capture-comparison.md",
+      "size_bytes": 4679,
+      "sha256": "636ba969f50b40f5cdda777623dd6fdfa7fcb98a85fd6af77187818480b9b548"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T090212Z_5e7113d0/acceptance_report.md",
+      "size_bytes": 987,
+      "sha256": "0a6849b3a028e6d2cb069d47220633122b3f35e25081ba9e3be9d78a1d98232d"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T090212Z_5e7113d0/board_identity.json",
+      "size_bytes": 50,
+      "sha256": "03467d561af7a0ab777f230a04dce671f803d9a7becaae40522396df3d8283c9"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T090212Z_5e7113d0/fault_events.jsonl",
+      "size_bytes": 1460,
+      "sha256": "f4bc5411fde7435af5f13bf00f339b1a4583b61bad497d02e7609cd5f79c5a5b"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T090212Z_5e7113d0/firmware_build_manifest.json",
+      "size_bytes": 1570,
+      "sha256": "39e964798c5c347a4c2a7c5774d5f30e1dabec21b2351ac0fa687c60d81b5929"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T090212Z_5e7113d0/g1_protocol_summary.json",
+      "size_bytes": 3023,
+      "sha256": "3b6b16fec379136bd1b56260104137a3808dcc74f38176dc1d457c2f984705e1"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T090212Z_5e7113d0/g1_sample_integrity.json",
+      "size_bytes": 155,
+      "sha256": "ef4bbfc630108026be56253bce9eeebd4c8e54613331eff7647282708204c6e8"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T090212Z_5e7113d0/g1_telemetry.json",
+      "size_bytes": 476,
+      "sha256": "c2b6230e1bedb598109782a84f115375a8a086e064f9890583d09efeecd0d276"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T090212Z_5e7113d0/g1_timing.json",
+      "size_bytes": 385,
+      "sha256": "70876091647123eff6177a1a124334a3c7b69b5249c8b807b467a60cb394b05a"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T090212Z_5e7113d0/session_manifest.json",
+      "size_bytes": 344,
+      "sha256": "6f3aae296d2aa5559fc7c4f2f1dd689fe72f338bfe41a02f7563585690f8de0c"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T090212Z_5e7113d0/sha256_manifest.json",
+      "size_bytes": 960,
+      "sha256": "dbbd96aa14662187a086a8e254fba6b72f96749e590d4386d2d4b9ff7df1bda4"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T090212Z_5e7113d0/usb_enumeration.json",
+      "size_bytes": 478,
+      "sha256": "47ccc8e2283e7a6becba9f155d4142302e5b0e72dad0befb747cd6a1683363c1"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T091801Z_750cfd3e/acceptance_report.md",
+      "size_bytes": 987,
+      "sha256": "0a6849b3a028e6d2cb069d47220633122b3f35e25081ba9e3be9d78a1d98232d"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T091801Z_750cfd3e/board_identity.json",
+      "size_bytes": 50,
+      "sha256": "03467d561af7a0ab777f230a04dce671f803d9a7becaae40522396df3d8283c9"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T091801Z_750cfd3e/fault_events.jsonl",
+      "size_bytes": 1460,
+      "sha256": "f4bc5411fde7435af5f13bf00f339b1a4583b61bad497d02e7609cd5f79c5a5b"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T091801Z_750cfd3e/firmware_build_manifest.json",
+      "size_bytes": 2471,
+      "sha256": "8d986961f7304af41e253a6afe32a03c6d91bb4cb7621249f800ff870265471c"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T091801Z_750cfd3e/g1_protocol_summary.json",
+      "size_bytes": 3025,
+      "sha256": "f516278d151fcaeb82ade57b176b03dfa99a69d4fe911c9ae601145d48890e9b"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T091801Z_750cfd3e/g1_sample_integrity.json",
+      "size_bytes": 155,
+      "sha256": "ef4bbfc630108026be56253bce9eeebd4c8e54613331eff7647282708204c6e8"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T091801Z_750cfd3e/g1_telemetry.json",
+      "size_bytes": 477,
+      "sha256": "b081beb3b91b06239ea62d79bd78eb9d9803db48a29f15d575c32fe631855596"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T091801Z_750cfd3e/g1_timing.json",
+      "size_bytes": 386,
+      "sha256": "aba722e29c7e7c7c4d95b8a510477ece88ff0ab13016866785fd05e731d90622"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T091801Z_750cfd3e/session_manifest.json",
+      "size_bytes": 344,
+      "sha256": "6152bf685ea4b291cc69848de3219a527aabfc3df1ede83a48c498a275123bf1"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T091801Z_750cfd3e/sha256_manifest.json",
+      "size_bytes": 960,
+      "sha256": "63b5e2545703a330a94ef66dd3cdcf4c7c7887b7e2bb7cedd5a9eed0e5d25f76"
+    },
+    {
+      "arcname": "experiments/hardware/20261118T091801Z_750cfd3e/usb_enumeration.json",
+      "size_bytes": 478,
+      "sha256": "47ccc8e2283e7a6becba9f155d4142302e5b0e72dad0befb747cd6a1683363c1"
+    },
+    {
+      "arcname": "experiments/hardware/g2-quiet.json",
+      "size_bytes": 205027,
+      "sha256": "83783a85308060509ce88c565c21b9ed1e3a83685069d654a9575e7870bc5199"
+    },
+    {
+      "arcname": "experiments/hardware/g2-stimulus.json",
+      "size_bytes": 205725,
+      "sha256": "67f75e50556b61251b0eb67b8857419610c7ac41b556ec92eb0a4f11ca4b00cd"
+    },
+    {
+      "arcname": "experiments/hardware/photos/esp32_inmp441_wiring_angle1.jpg",
+      "size_bytes": 184463,
+      "sha256": "522161195e9f4924143942091db920e50af3aa62655b57807346721bea19df95"
+    },
+    {
+      "arcname": "experiments/hardware/photos/esp32_inmp441_wiring_top.jpg",
+      "size_bytes": 246015,
+      "sha256": "e35ccd377900d84d3c15ecdad2dd3482a90729869061c38c434ba36843dd55ce"
+    },
+    {
+      "arcname": "experiments/hardware/preflight_20261118.json",
+      "size_bytes": 2548,
+      "sha256": "759635d04ab786feab5a13bc5cef99f8fc801cc54acf38b1350b3315b1cb473c"
+    },
+    {
+      "arcname": "experiments/hardware/wednesday_20261118_state.json",
+      "size_bytes": 17953,
+      "sha256": "ab5ef37b2880b31b0c7bd1369db34ec43a61ffd4931c17ffc3e4f7584ebefd3f"
+    },
+    {
+      "arcname": "experiments/hardware/wednesday_g2_comparison.json",
+      "size_bytes": 5745,
+      "sha256": "5e952d3684471f562753b3ec980bc4d6941020290cdb5ad9f7a66c2a2be4cadf"
+    },
+    {
+      "arcname": "experiments/hardware/wednesday_g2_comparison.md",
+      "size_bytes": 699,
+      "sha256": "9254e6fcc1e1e918a908325667fb28e200a20ec958a38bb4e4434c85594eaaa1"
+    },
+    {
+      "arcname": "experiments/sessions/session_20261118_091909_9e6baa63/manifest.json",
+      "size_bytes": 2347,
+      "sha256": "adb5bc177484ccc6180c8e4ead154d4a05ccdc21f36eb05fcabb5f013ef6f949"
+    },
+    {
+      "arcname": "experiments/sessions/session_20261118_091909_9e6baa63/raw.wav",
+      "size_bytes": 1920058,
+      "sha256": "eb4f218c3a22158430993b2180cc28618b5e426d7588b1d3da1ca59fcdf3d903"
+    },
+    {
+      "arcname": "experiments/sessions/session_20261118_091909_9e6baa63/session.json",
+      "size_bytes": 1880,
+      "sha256": "748ffef69a536a3d2438d634aaf736b273901723ab90e7c24f0f4d888e4e5c6d"
+    },
+    {
+      "arcname": "experiments/sessions/session_20261118_093225_19cde788/manifest.json",
+      "size_bytes": 2353,
+      "sha256": "02e6d0788390273e0059308728089aeac418da6e27974c7aac9dfedcf276931f"
+    },
+    {
+      "arcname": "experiments/sessions/session_20261118_093225_19cde788/raw.wav",
+      "size_bytes": 1920058,
+      "sha256": "76698e92fea31bed8ec27836e8f04e66d20639c79dbcf665df90f4ea09b7c5d9"
+    },
+    {
+      "arcname": "experiments/sessions/session_20261118_093225_19cde788/session.json",
+      "size_bytes": 1887,
+      "sha256": "2431d6f3730354a3de402409915aa0bc1e9257c909efca26f7b9bf419d9843c2"
+    },
+    {
+      "arcname": "firmware/releases/g2_candidate_20261117/board_identity.json",
+      "size_bytes": 2296,
+      "sha256": "c80fdb387855b3673249e4e11e99dcc13f013bbedfc5f9be16bbc7da6a19116a"
+    },
+    {
+      "arcname": "firmware/releases/g2_candidate_20261117/firmware_build_manifest.json",
+      "size_bytes": 2471,
+      "sha256": "8d986961f7304af41e253a6afe32a03c6d91bb4cb7621249f800ff870265471c"
+    },
+    {
+      "arcname": "firmware/releases/g2_candidate_20261117/first-flash.txt",
+      "size_bytes": 2937,
+      "sha256": "651e7d6e09ba7458f85c920375b8c5fbf7e45a409237944b8cc599725abcb49e"
+    },
+    {
+      "arcname": "firmware/releases/g2_candidate_20261117/g2_physical_attestation.json",
+      "size_bytes": 661,
+      "sha256": "5df0cdfe5b4e81b9e8da6f626a5e5148ddc6a393970e85dfe5c8b13d7748f7e9"
+    },
+    {
+      "arcname": "software/pcg_app/wednesday_orchestrator.py",
+      "size_bytes": 55120,
+      "sha256": "8622f28419b7ced5d971796f4540a622eee6e497f55d5405ce13736cee7fa4e0"
+    },
+    {
+      "arcname": "software/tests/test_wednesday_orchestrator.py",
+      "size_bytes": 28527,
+      "sha256": "b90ee4d7c7176af8d7922b7916fc4c44101e0cf32ae3086a8bf4eb34dd52476e"
+    }
+  ],
+  "integrity_note": "Strictly read-only snapshot of actual local lab files; no synthetic values added."
+}

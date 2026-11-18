@@ -1,0 +1,89 @@
+{
+  "repo_root": "C:\\Users\\User\\Desktop\\bitirme projesi",
+  "path_ascii_no_spaces": false,
+  "recommended_ascii_junction": "C:\\pcg_starter",
+  "git": {
+    "checkout_mode": "GITHUB_DOWNLOAD_ZIP",
+    "branch": "NONE (ZIP)",
+    "head": "319fcc59be0177bf45d5266025344d31e4e9a9c2",
+    "dirty": false
+  },
+  "python": {
+    "executable": "C:\\Users\\User\\Desktop\\bitirme projesi\\.venv\\Scripts\\python.exe",
+    "version": "3.11.9",
+    "in_project_venv": true,
+    "modules": {
+      "numpy": true,
+      "scipy": true,
+      "fastapi": true,
+      "uvicorn": true,
+      "serial": true,
+      "pywt": true,
+      "esptool": true,
+      "pytest": true
+    },
+    "all_modules_ready": true
+  },
+  "frontend": {
+    "node": "v24.20.0",
+    "node_compatible": true,
+    "npm_available": true,
+    "node_modules_present": false
+  },
+  "toolchains": {
+    "host_gcc": "C:\\Program Files\\msys64\\ucrt64\\bin\\gcc.EXE",
+    "esp_idf_in_shell": "NOT_ACTIVE",
+    "esp_idf_5_5_1_present": false
+  },
+  "manifests": {
+    "g1_rollback_backup": {
+      "present": true,
+      "hashes_verified": true,
+      "status": "COMPILED_BUT_NOT_FLASHED",
+      "build_directory": "C:\\Users\\User\\Desktop\\bitirme projesi\\firmware\\g1_rollback_backup",
+      "source_modes": [
+        1
+      ]
+    },
+    "g1_staged_release": {
+      "present": true,
+      "hashes_verified": true,
+      "status": "COMPILED_BUT_NOT_FLASHED",
+      "build_directory": "C:\\Users\\User\\Desktop\\bitirme projesi\\firmware\\releases\\g1_release_20261117",
+      "source_modes": [
+        1
+      ]
+    },
+    "g2_staged_candidate": {
+      "present": true,
+      "hashes_verified": true,
+      "status": "PREPARED_NOT_AUTHORIZED_FOR_FLASH",
+      "build_directory": "C:\\Users\\User\\Desktop\\bitirme projesi\\firmware\\releases\\g2_candidate_20261117",
+      "source_modes": [
+        1,
+        0
+      ]
+    }
+  },
+  "passive_com_ports": [
+    {
+      "port_name": "COM3",
+      "description": "USB Seri Cihaz (COM3)",
+      "hwid": "USB VID:PID=303A:4001 SER=123456 LOCATION=1-2:x.0",
+      "vid": 12346,
+      "pid": 16385,
+      "serial_number": "123456",
+      "manufacturer": "Microsoft",
+      "product": null,
+      "interface": null,
+      "is_espressif_candidate": true,
+      "candidate_reason": "Espressif VID 0x303A (PID 16385); canonical HELLO required",
+      "vid_hex": "0x303A",
+      "pid_hex": "0x4001"
+    }
+  ],
+  "espressif_candidates": [
+    "COM3"
+  ],
+  "PHYSICAL_PORT_POLICY": "Passive scan only; single owner per COM port; never hardcode COM10."
+}

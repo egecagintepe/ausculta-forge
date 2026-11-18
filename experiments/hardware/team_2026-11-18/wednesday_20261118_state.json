@@ -1,0 +1,407 @@
+{
+  "schema_version": "1.0.0",
+  "created_utc": "2026-11-18T09:01:58.309072+00:00",
+  "updated_utc": "2026-11-18T09:32:37.135157+00:00",
+  "repo_root": "C:\\Users\\User\\Desktop\\bitirme projesi",
+  "git_info": {
+    "commit": "319fcc59be0177bf45d5266025344d31e4e9a9c2",
+    "state": "DOWNLOAD_ZIP_NO_GIT"
+  },
+  "selected_port": {
+    "port_name": "COM3",
+    "description": "USB Seri Cihaz (COM3)",
+    "hwid": "USB VID:PID=303A:4001 SER=123456 LOCATION=1-2:x.0",
+    "vid": 12346,
+    "pid": 16385,
+    "serial_number": "123456",
+    "manufacturer": "Microsoft",
+    "product": null,
+    "interface": null,
+    "is_espressif_candidate": true,
+    "candidate_reason": "Espressif VID 0x303A (PID 16385); canonical HELLO required",
+    "vid_hex": "0x303A",
+    "pid_hex": "0x4001"
+  },
+  "device_identity": {
+    "port": "COM3",
+    "protocol_version": "1.0",
+    "firmware_version": "1.1.0",
+    "device_uid_low": "0xb1aa7cc4",
+    "hardware_sample_rate_hz": 48000,
+    "max_frame_samples": 256,
+    "supported_profiles_mask": 2,
+    "supported_encodings_mask": 1
+  },
+  "stages": {
+    "preflight_and_hashes": {
+      "status": "PASSED",
+      "updated_utc": "2026-11-18T09:32:23.398279+00:00",
+      "detail": {
+        "git": {
+          "commit": "319fcc59be0177bf45d5266025344d31e4e9a9c2",
+          "state": "DOWNLOAD_ZIP_NO_GIT"
+        },
+        "checks": {
+          "serial": "READY",
+          "fastapi": "READY",
+          "uvicorn": "READY",
+          "numpy": "READY",
+          "scipy": "READY",
+          "pywt": "READY",
+          "node": "READY",
+          "npm": "READY",
+          "cargo": "MISSING",
+          "rustc": "MISSING",
+          "python": "READY",
+          "project_venv": "READY",
+          "frontend_dependencies": "MISSING",
+          "MSVC_WebView2_drivers_cable": "MANUAL_ACTION_REQUIRED",
+          "optional_ML": "MANUAL_ACTION_REQUIRED (not required for USB/DSP)",
+          "release_artifacts": "READY"
+        },
+        "manifests": {
+          "g1_rollback_backup": {
+            "path": "C:\\Users\\User\\Desktop\\bitirme projesi\\firmware\\g1_rollback_backup\\firmware_build_manifest.json",
+            "status": "COMPILED_BUT_NOT_FLASHED",
+            "firmware_version": "1.1.0",
+            "hashes_verified": true
+          },
+          "g1_manifest": {
+            "path": "C:\\Users\\User\\Desktop\\bitirme projesi\\firmware\\releases\\g1_release_20261117\\firmware_build_manifest.json",
+            "status": "COMPILED_BUT_NOT_FLASHED",
+            "firmware_version": "1.1.0",
+            "hashes_verified": true
+          },
+          "g2_manifest": {
+            "path": "C:\\Users\\User\\Desktop\\bitirme projesi\\firmware\\releases\\g2_candidate_20261117\\firmware_build_manifest.json",
+            "build_directory": "C:\\Users\\User\\Desktop\\bitirme projesi\\firmware\\releases\\g2_candidate_20261117",
+            "status": "COMPILED_BUT_NOT_FLASHED",
+            "firmware_version": "1.1.0",
+            "hashes_verified": true,
+            "authorized_for_flash": true,
+            "physical_attestation": {
+              "attested_utc": "2026-11-18T09:11:04.426554+00:00",
+              "operator": "Kaan & Ozan",
+              "multimeter_id": "Agilent U1232A",
+              "measured_vdd_volts": 3.28,
+              "bclk_gpio": 4,
+              "ws_gpio": 5,
+              "din_gpio": 6,
+              "slot": "left",
+              "binary_sha256": {
+                "bootloader/bootloader.bin": "28e9a026860d4b75c1573dacdf89570770186435983156b3347a107925e6dbe0",
+                "auscultaforge_g1.bin": "22af47eef7a4a51765254a1144627bf44b39c53dfab8b8ce13f18a10ebd67dbb",
+                "partition_table/partition-table.bin": "73c0b5c3e5fcba3a151cc70c453c93dd5f4798899e7f2f8cca76da1f32ffc501"
+              },
+              "sdkconfig_sha256": "fc56de3b431da13d219b1a1a99acc783834760ab8fb59283eb78ab0a60f1ef71"
+            }
+          }
+        }
+      }
+    },
+    "usb_discovery": {
+      "status": "PASSED",
+      "updated_utc": "2026-11-18T09:32:23.400285+00:00",
+      "detail": {
+        "port_name": "COM3",
+        "description": "USB Seri Cihaz (COM3)",
+        "hwid": "USB VID:PID=303A:4001 SER=123456 LOCATION=1-2:x.0",
+        "vid": 12346,
+        "pid": 16385,
+        "serial_number": "123456",
+        "manufacturer": "Microsoft",
+        "product": null,
+        "interface": null,
+        "is_espressif_candidate": true,
+        "candidate_reason": "Espressif VID 0x303A (PID 16385); canonical HELLO required",
+        "vid_hex": "0x303A",
+        "pid_hex": "0x4001"
+      }
+    },
+    "hello_handshake": {
+      "status": "PASSED",
+      "updated_utc": "2026-11-18T09:32:24.491087+00:00",
+      "detail": {
+        "port": "COM3",
+        "protocol_version": "1.0",
+        "firmware_version": "1.1.0",
+        "device_uid_low": "0xb1aa7cc4",
+        "hardware_sample_rate_hz": 48000,
+        "max_frame_samples": 256,
+        "supported_profiles_mask": 2,
+        "supported_encodings_mask": 1
+      }
+    },
+    "g1_regression": {
+      "status": "RESUMED_PASSED",
+      "updated_utc": "2026-11-18T09:32:24.501638+00:00",
+      "detail": {
+        "conclusion": "PHYSICAL_G1_PASSED",
+        "verification_result": "PASS",
+        "host_samples_accepted": 480000,
+        "host_sample_value_errors": 0,
+        "firmware_samples_dropped": 0,
+        "sha256_hash": "08f55010ada204d8f4631749b2976afd432a29167c3a8a2220a46fad6386ce96",
+        "source_mode": 1,
+        "bundle_dir": "C:\\Users\\User\\Desktop\\bitirme projesi\\experiments\\hardware\\20261118T091801Z_750cfd3e",
+        "device_uid_low": "0xb1aa7cc4",
+        "firmware_version": "1.1.0",
+        "manifest_role": "g2_post_flash",
+        "manifest_path": "C:\\Users\\User\\Desktop\\bitirme projesi\\firmware\\releases\\g2_candidate_20261117\\firmware_build_manifest.json",
+        "manifest_sdkconfig_sha256": "fc56de3b431da13d219b1a1a99acc783834760ab8fb59283eb78ab0a60f1ef71",
+        "flash_evidence_sha256": "651e7d6e09ba7458f85c920375b8c5fbf7e45a409237944b8cc599725abcb49e",
+        "post_g2_flash_verified": true,
+        "failure_reasons": []
+      }
+    },
+    "g2_physical_gate": {
+      "status": "PASSED",
+      "updated_utc": "2026-11-18T09:32:24.501638+00:00",
+      "detail": {
+        "g2_manifest": "C:\\Users\\User\\Desktop\\bitirme projesi\\firmware\\releases\\g2_candidate_20261117\\firmware_build_manifest.json",
+        "status": "COMPILED_BUT_NOT_FLASHED",
+        "physical_attestation": {
+          "attested_utc": "2026-11-18T09:11:04.426554+00:00",
+          "operator": "Kaan & Ozan",
+          "multimeter_id": "Agilent U1232A",
+          "measured_vdd_volts": 3.28,
+          "bclk_gpio": 4,
+          "ws_gpio": 5,
+          "din_gpio": 6,
+          "slot": "left",
+          "binary_sha256": {
+            "bootloader/bootloader.bin": "28e9a026860d4b75c1573dacdf89570770186435983156b3347a107925e6dbe0",
+            "auscultaforge_g1.bin": "22af47eef7a4a51765254a1144627bf44b39c53dfab8b8ce13f18a10ebd67dbb",
+            "partition_table/partition-table.bin": "73c0b5c3e5fcba3a151cc70c453c93dd5f4798899e7f2f8cca76da1f32ffc501"
+          },
+          "sdkconfig_sha256": "fc56de3b431da13d219b1a1a99acc783834760ab8fb59283eb78ab0a60f1ef71"
+        },
+        "flash_confirmed": true
+      }
+    },
+    "g2_quiet_capture": {
+      "status": "RESUMED_PASSED",
+      "updated_utc": "2026-11-18T09:32:24.501638+00:00",
+      "detail": {
+        "role": "quiet",
+        "session_id": "session_20261118_091909_9e6baa63",
+        "session_dir": "C:\\Users\\User\\Desktop\\bitirme projesi\\experiments\\sessions\\session_20261118_091909_9e6baa63",
+        "raw_wav_path": "C:\\Users\\User\\Desktop\\bitirme projesi\\experiments\\sessions\\session_20261118_091909_9e6baa63\\raw.wav",
+        "raw_wav_sha256": "eb4f218c3a22158430993b2180cc28618b5e426d7588b1d3da1ca59fcdf3d903",
+        "source_mode": 0,
+        "acquisition_origin": "physical_i2s_inmp441",
+        "sample_rate_hz": 48000,
+        "samples": 480000,
+        "duration_s": 10.0,
+        "constant_zero": false,
+        "constant_signal": false,
+        "rms_fs": 0.08277282001285878,
+        "peak_fs": 0.6374626159667969,
+        "steady_rms_fs": 0.011630662,
+        "steady_peak_fs": 0.06877971,
+        "dc_fs": 0.0018097665329774222,
+        "saturation_fraction": 0.0,
+        "clipping_detected": false,
+        "mains_hum_prominent": false,
+        "welch_peak_freq_hz_20_500": 433.594,
+        "welch_band_power_20_500": 2.4203538208118126e-05,
+        "crc_failures": 0,
+        "dropped_frames": 0,
+        "firmware_telemetry": {
+          "generated_samples": 480256,
+          "fully_queued_samples": 480000,
+          "dropped_samples": 256,
+          "post_target_drained_samples": 256,
+          "in_stream_dropped_samples": 0,
+          "dma_overflows": 0,
+          "ring_overflows": 0,
+          "stop_reason": 1
+        }
+      }
+    },
+    "g2_stimulus_capture": {
+      "status": "PASSED",
+      "updated_utc": "2026-11-18T09:32:36.713583+00:00",
+      "detail": {
+        "role": "stimulus",
+        "session_id": "session_20261118_093225_19cde788",
+        "session_dir": "C:\\Users\\User\\Desktop\\bitirme projesi\\experiments\\sessions\\session_20261118_093225_19cde788",
+        "raw_wav_path": "C:\\Users\\User\\Desktop\\bitirme projesi\\experiments\\sessions\\session_20261118_093225_19cde788\\raw.wav",
+        "raw_wav_sha256": "76698e92fea31bed8ec27836e8f04e66d20639c79dbcf665df90f4ea09b7c5d9",
+        "source_mode": 0,
+        "acquisition_origin": "physical_i2s_inmp441",
+        "sample_rate_hz": 48000,
+        "samples": 480000,
+        "duration_s": 10.0,
+        "constant_zero": false,
+        "constant_signal": false,
+        "rms_fs": 0.2397387801775761,
+        "peak_fs": 0.9999823570251465,
+        "steady_rms_fs": 0.20696988641840555,
+        "steady_peak_fs": 0.9999823570251465,
+        "dc_fs": -0.0051292670021454495,
+        "saturation_fraction": 0.0,
+        "clipping_detected": true,
+        "mains_hum_prominent": false,
+        "welch_peak_freq_hz_20_500": 23.438,
+        "welch_band_power_20_500": 0.007026718045568355,
+        "crc_failures": 0,
+        "dropped_frames": 0,
+        "firmware_telemetry": {
+          "generated_samples": 480256,
+          "fully_queued_samples": 480000,
+          "dropped_samples": 256,
+          "post_target_drained_samples": 256,
+          "in_stream_dropped_samples": 0,
+          "dma_overflows": 0,
+          "ring_overflows": 0,
+          "stop_reason": 1
+        }
+      }
+    },
+    "return_package": {
+      "status": "PASSED",
+      "updated_utc": "2026-11-18T09:32:37.135157+00:00",
+      "detail": {
+        "status": "PACKAGED",
+        "zip_path": "C:\\Users\\User\\Desktop\\bitirme projesi\\AuscultaForge_Lab_Return_Kaan_Ozan_20261118_093236Z.zip",
+        "zip_size_bytes": 4687496,
+        "zip_sha256": "06a8bca34bf616b1a649f7fe5a840a14b8fb3b5e03fc2dc643b01e108a067fd4",
+        "file_count": 136,
+        "gate_evidence_summary": {
+          "h0_g2_attestation_present": true,
+          "g1_acceptance_bundles": [
+            "experiments/hardware/20261118T090212Z_5e7113d0",
+            "experiments/hardware/20261118T091801Z_750cfd3e"
+          ],
+          "g2_qualification_jsons": [],
+          "orchestrator_files": [
+            "experiments/hardware/wednesday_20261118_state.json",
+            "experiments/hardware/wednesday_g2_comparison.json",
+            "experiments/hardware/wednesday_g2_comparison.md"
+          ],
+          "recorded_sessions": [
+            {
+              "session_id": "session_20261118_091909_9e6baa63",
+              "source": "Physical USB INMP441 G2 (quiet) on COM3",
+              "acquisition_mode": "hardware",
+              "acquisition_origin": "physical_i2s_unqualified",
+              "sample_rate_hz": 48000,
+              "total_samples": 480000,
+              "duration_s": 10.0,
+              "raw_wav_sha256": "eb4f218c3a22158430993b2180cc28618b5e426d7588b1d3da1ca59fcdf3d903"
+            },
+            {
+              "session_id": "session_20261118_093225_19cde788",
+              "source": "Physical USB INMP441 G2 (stimulus) on COM3",
+              "acquisition_mode": "hardware",
+              "acquisition_origin": "physical_i2s_unqualified",
+              "sample_rate_hz": 48000,
+              "total_samples": 480000,
+              "duration_s": 10.0,
+              "raw_wav_sha256": "76698e92fea31bed8ec27836e8f04e66d20639c79dbcf665df90f4ea09b7c5d9"
+            }
+          ],
+          "boot_logs": []
+        }
+      }
+    }
+  },
+  "operator_prompt_checklist": "=== CARSAMBA 18 KASIM — TEK SEFERDE FIZIKSEL KONTROL (H0) ===\nDevam etmeden once Kaan & Ozan asagidaki 3 kaniti hazirlamalidir:\n1. FOTOGRAFLAR (on + arka yuz):\n   - ESP32-S3 (YD-ESP32-23 / N16R8) karti + pin yazilari net gorunur.\n   - INMP441 karti + 6 lehim bacagi (VDD, GND, SCK, WS, SD, L/R) + ALT AKUSTIK DELIK tamamen acik.\n2. MULTIMETRE OLCUMU (Mikrofon TAKILI DEGILKEN, tek USB kablosu ile):\n   - ESP32 3V3 - GND arasi gerilim: _____ V (Guvenli aralik: 3.15 - 3.45 V, ASLA 5V degil)\n   - Multimetre modeli / no: _____\n3. GUC KESIKKEN (USB CIKARILMIS) KISA DEVRE & SUREKLILIK:\n   - INMP441 VDD - GND kisa devre YOK (Open / >MOhm).\n   - Sureklilik: VDD->3V3, GND->GND, SCK->GPIO4, WS->GPIO5, SD->GPIO6, L/R->GND (LEFT slot).\n\nHazir olunca yetkilendirme komutu (asla otomatik verilmez):\n  .\\.venv\\Scripts\\python.exe tools/hardware/bringup.py authorize-g2 --bclk 4 --ws 5 --din 6 --slot left --vdd-volts <OLCULEN_V> --operator \"Kaan & Ozan\" --multimeter \"<OLCU_ALETI>\"\nArdindan ROM Bootloader modunda tek insan onayli flash:\n  .\\.venv\\Scripts\\python.exe tools/hardware/bringup.py flash --port <COM_ROM> --manifest firmware/releases/g2_candidate_20261117/firmware_build_manifest.json",
+  "latest_return_zip": {
+    "status": "PACKAGED",
+    "zip_path": "C:\\Users\\User\\Desktop\\bitirme projesi\\AuscultaForge_Lab_Return_Kaan_Ozan_20261118_093236Z.zip",
+    "zip_size_bytes": 4687496,
+    "zip_sha256": "06a8bca34bf616b1a649f7fe5a840a14b8fb3b5e03fc2dc643b01e108a067fd4",
+    "file_count": 136,
+    "gate_evidence_summary": {
+      "h0_g2_attestation_present": true,
+      "g1_acceptance_bundles": [
+        "experiments/hardware/20261118T090212Z_5e7113d0",
+        "experiments/hardware/20261118T091801Z_750cfd3e"
+      ],
+      "g2_qualification_jsons": [],
+      "orchestrator_files": [
+        "experiments/hardware/wednesday_20261118_state.json",
+        "experiments/hardware/wednesday_g2_comparison.json",
+        "experiments/hardware/wednesday_g2_comparison.md"
+      ],
+      "recorded_sessions": [
+        {
+          "session_id": "session_20261118_091909_9e6baa63",
+          "source": "Physical USB INMP441 G2 (quiet) on COM3",
+          "acquisition_mode": "hardware",
+          "acquisition_origin": "physical_i2s_unqualified",
+          "sample_rate_hz": 48000,
+          "total_samples": 480000,
+          "duration_s": 10.0,
+          "raw_wav_sha256": "eb4f218c3a22158430993b2180cc28618b5e426d7588b1d3da1ca59fcdf3d903"
+        },
+        {
+          "session_id": "session_20261118_093225_19cde788",
+          "source": "Physical USB INMP441 G2 (stimulus) on COM3",
+          "acquisition_mode": "hardware",
+          "acquisition_origin": "physical_i2s_unqualified",
+          "sample_rate_hz": 48000,
+          "total_samples": 480000,
+          "duration_s": 10.0,
+          "raw_wav_sha256": "76698e92fea31bed8ec27836e8f04e66d20639c79dbcf665df90f4ea09b7c5d9"
+        }
+      ],
+      "boot_logs": []
+    }
+  },
+  "github_evidence_drop": {
+    "status": "NOT_REQUESTED",
+    "uploaded": false
+  },
+  "pre_g2_flash_g1_regression": {
+    "conclusion": "PHYSICAL_G1_PASSED",
+    "verification_result": "PASS",
+    "host_samples_accepted": 480000,
+    "host_sample_value_errors": 0,
+    "firmware_samples_dropped": 0,
+    "sha256_hash": "08f55010ada204d8f4631749b2976afd432a29167c3a8a2220a46fad6386ce96",
+    "source_mode": 1,
+    "bundle_dir": "C:\\Users\\User\\Desktop\\bitirme projesi\\experiments\\hardware\\20261118T090212Z_5e7113d0",
+    "device_uid_low": "0xb1aa7cc4",
+    "firmware_version": "1.1.0",
+    "manifest_role": "g1_baseline",
+    "manifest_path": "C:\\Users\\User\\Desktop\\bitirme projesi\\firmware\\releases\\g1_release_20261117\\firmware_build_manifest.json",
+    "manifest_sdkconfig_sha256": "5c137ae2416c5e356a5c6e0488c5b41ae9a194b77a9f4f0bd233054bd364332b",
+    "flash_evidence_sha256": null,
+    "post_g2_flash_verified": false,
+    "failure_reasons": []
+  },
+  "g2_comparison_paths": {
+    "json": "C:\\Users\\User\\Desktop\\bitirme projesi\\experiments\\hardware\\wednesday_g2_comparison.json",
+    "markdown": "C:\\Users\\User\\Desktop\\bitirme projesi\\experiments\\hardware\\wednesday_g2_comparison.md"
+  },
+  "g2_acceptance_evaluation": {
+    "verdict": "PASSED",
+    "thresholds": {
+      "min_snr_20_500hz_db": 6.0,
+      "min_fullband_rms_ratio": 1.8,
+      "min_peak_ratio": 1.5,
+      "max_stimulus_saturation_fraction": 0.01
+    },
+    "observed": {
+      "snr_20_500hz_db": 23.2,
+      "quiet_rms_fs": 0.011631,
+      "stimulus_rms_fs": 0.20697,
+      "fullband_rms_ratio": 17.7952,
+      "quiet_peak_fs": 0.06878,
+      "stimulus_peak_fs": 0.999982,
+      "peak_ratio": 14.5389,
+      "stimulus_saturation_fraction": 0.0
+    },
+    "criteria": {
+      "distinct_wav_sha256": true,
+      "snr_20_500hz_db_min_6db": true,
+      "fullband_rms_ratio_min_1_8x": true,
+      "peak_ratio_min_1_5x": true,
+      "no_excessive_saturation": true
+    },
+    "reasons": []
+  }
+}

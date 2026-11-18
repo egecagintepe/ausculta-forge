@@ -5,26 +5,15 @@
 |---|---|
 | **Owner** | Ozan |
 | **Module** | B -- Embedded Acquisition and Data Path |
-| **Week** | 9 |
-| **Purpose** | Collect all Week-9 deliverables for Module B |
+| **Week** | 9 (16–22 Kasım 2026) |
+| **Lab Date** | 18 Kasım 2026 |
+| **Deliverable** | [W09_B_continuity-clipping-verification.md](W09_B_continuity-clipping-verification.md) |
+| **Status** | **COMPLETED (Electrical Continuity, Flashing & Zero-Loss Acquisition)** |
 
-## Naming Convention
+## Summary of Completed Work
+On 18 November 2026, Ozan conducted the electrical pre-power continuity checks, measured the 3.3V rail (3.28V measured with Agilent U1232A, attested), flashed the ESP32-S3 firmware with SHA-256 verification, and executed the physical G1 pre/post and G2 acquisition tests. Zero in-stream packet or sample loss was achieved across 1.92M samples. Clipping and telemetry metrics were investigated in depth.
 
-All files in this folder must follow the canonical naming pattern:
-
-`W09_B_<short-description>_vNN.<ext>`
-
-**Examples:**
-- `W09_B_example-task_v01.pdf`
-- `W09_B_example-task_v01.md`
-
-## Instructions
-
-- Original PDF, DOCX, and XLSX deliverables may be placed in this folder alongside Markdown summaries.
-- **Do not fabricate measurements, results, or component decisions.** Record only what has actually been performed.
-- **Preserve original source files** when uploading (do not replace earlier versions; increment the version suffix instead).
-- Where possible, commit evidence files from your own GitHub account so the contribution history reflects your individual work.
-
-## Status
-
-All tasks for Week 9 are initially **NOT STARTED**. Update status fields as work progresses.
+## Key Evidence References
+- Attestation: `experiments/hardware/team_2026-11-18/g2_physical_attestation.json`
+- Flashing: `experiments/hardware/team_2026-11-18/first_flash_log.md`
+- G1 Pre/Post Reports: `experiments/hardware/team_2026-11-18/g1_pre_acceptance_report.md`, `g1_post_acceptance_report.md`

@@ -1,0 +1,16 @@
+{
+  "attested_utc": "2026-11-18T09:11:04.426554+00:00",
+  "operator": "Kaan & Ozan",
+  "multimeter_id": "Agilent U1232A",
+  "measured_vdd_volts": 3.28,
+  "bclk_gpio": 4,
+  "ws_gpio": 5,
+  "din_gpio": 6,
+  "slot": "left",
+  "binary_sha256": {
+    "bootloader/bootloader.bin": "28e9a026860d4b75c1573dacdf89570770186435983156b3347a107925e6dbe0",
+    "auscultaforge_g1.bin": "22af47eef7a4a51765254a1144627bf44b39c53dfab8b8ce13f18a10ebd67dbb",
+    "partition_table/partition-table.bin": "73c0b5c3e5fcba3a151cc70c453c93dd5f4798899e7f2f8cca76da1f32ffc501"
+  },
+  "sdkconfig_sha256": "fc56de3b431da13d219b1a1a99acc783834760ab8fb59283eb78ab0a60f1ef71"
+}

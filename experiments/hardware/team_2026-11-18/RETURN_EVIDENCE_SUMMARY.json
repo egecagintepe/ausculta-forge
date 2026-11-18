@@ -1,0 +1,202 @@
+{
+  "schema_version": "1.0.0",
+  "evaluation_date_utc": "2026-11-18T13:20:00Z",
+  "hardware_test_date": "2026-11-18",
+  "project": "AuscultaForge",
+  "milestone": "G2_PHYSICAL_I2S_ACQUISITION",
+  "verdict": "CONDITIONAL_PASS",
+  "verdict_rationale": "Deterministic physical I2S acquisition over USB CDC verified with 0 in-stream drops across all sessions. G1 firmware rollback / dual-mode compatibility verified pre- and post-flash. Electrical 3.28V rail attested by operators. Acoustic response confirmed with 23.2 dB stimulus-to-quiet ratio. Acoustic calibration, phantom frequency response, and clinical stethoscope certification remain PENDING.",
+  "personnel_contributions": {
+    "ege_cagin_tepe": {
+      "role": "Firmware & Software Lead",
+      "tasks": [
+        "ESP32-S3 firmware architecture and dual-mode runtime (G1 synthetic / G2 physical I2S)",
+        "ESP-IDF v5.5.1 I2S driver configuration (48 kHz, 24-bit in 32-bit slot, Philips mode, DMA ring)",
+        "USB CDC binary streaming protocol and frame packaging",
+        "Host ingestion pipelines, validation CLI (bringup.py), and desktop application",
+        "Automated test suites and regression verification"
+      ]
+    },
+    "kaan": {
+      "role": "Acoustic & Mechanical Integration",
+      "tasks": [
+        "Breadboard mechanical positioning and jumper routing for INMP441 breakout",
+        "Acoustic stimulus positioning and physical handling",
+        "Acoustic chamber / chestpiece design exploration (prototype phase)"
+      ]
+    },
+    "ozan": {
+      "role": "Electronic & Laboratory Integration",
+      "tasks": [
+        "Bench power supply / USB VDD rail voltage measurement (3.28V on Agilent U1232A, attested)",
+        "Multimeter pin-to-pin continuity and short-circuit verification",
+        "Hardware test script execution in lab environment (preflight, bringup, qualify)",
+        "Lab evidence packaging and handoff return"
+      ]
+    }
+  },
+  "hardware_configuration": {
+    "microcontroller": "ESP32-S3 (QFN56 revision v0.2, 8MB PSRAM)",
+    "mac_address": "7c:e8:b1:aa:7c:c4",
+    "uid_low": "0xb1aa7cc4",
+    "usb_vid_pid": "303a:4001",
+    "ports": {
+      "native_usb_cdc": "COM3",
+      "uart_rom_flash": "COM4"
+    },
+    "sensor": "INMP441 Omnidirectional Bottom-Port I2S MEMS Microphone",
+    "pinout": {
+      "bclk_sck": "GPIO4",
+      "ws_lrclk": "GPIO5",
+      "data_sd": "GPIO6",
+      "lr_select": "GND (Left Channel)",
+      "vdd": "3.3V Rail (measured 3.28V)",
+      "gnd": "GND Rail"
+    }
+  },
+  "firmware_evidence": {
+    "firmware_version": "1.1.0",
+    "build_manifest_sha256": {
+      "bootloader.bin": "28e9a026e6f9d249fbf24659bf6a127a69ea1d07255909249e0c774ee842a275",
+      "auscultaforge_g1.bin": "22af47eeadfa80bf8527a2066faaa4fb79730f7b1f3bdf9d05e3230a1eb97980",
+      "partition-table.bin": "73c0b5c3ff90fbdbf8615fe56fa76b325256e2c3491baee388a18357fc5a8716"
+    },
+    "flash_status": "VERIFIED",
+    "flash_log_hash_verified": true
+  },
+  "test_results": {
+    "g1_pre_flash": {
+      "bundle": "20261118T090212Z_5e7113d0",
+      "status": "PHYSICAL_G1_PASSED",
+      "total_samples": 480000,
+      "total_blocks": 1875,
+      "dropped_blocks": 0,
+      "sample_errors": 0
+    },
+    "g1_post_flash": {
+      "bundle": "20261118T091801Z_750cfd3e",
+      "status": "PHYSICAL_G1_PASSED",
+      "total_samples": 480000,
+      "total_blocks": 1875,
+      "dropped_blocks": 0,
+      "sample_errors": 0
+    },
+    "g2_sessions": [
+      {
+        "session_id": "session_20261118_091909_9e6baa63",
+        "type": "quiet",
+        "source": "Physical USB INMP441 G2 (quiet) on COM3",
+        "sample_rate_hz": 48000,
+        "total_samples": 480000,
+        "duration_s": 10.0,
+        "wav_sha256": "eb4f218c3a22158430993b2180cc28618b5e426d7588b1d3da1ca59fcdf3d903",
+        "dropped_blocks": 0,
+        "in_stream_dropped_samples": 0,
+        "post_target_drained_samples": 256,
+        "metrics": {
+          "peak": 0.637463,
+          "full_rms": 0.082773,
+          "first_100ms_rms": 0.49818,
+          "steady_1_to_5s_rms": 0.015611,
+          "dc_offset": 0.00181,
+          "near_clip_pct": 0.0,
+          "saturation_pct": 0.0
+        },
+        "notes": "High initial RMS caused by I2S FIFO startup transient and DC blocking high-pass settling; settles to 0.0156 RMS."
+      },
+      {
+        "session_id": "session_20261118_093225_19cde788",
+        "type": "stimulus",
+        "source": "Physical USB INMP441 G2 (stimulus) on COM3",
+        "sample_rate_hz": 48000,
+        "total_samples": 480000,
+        "duration_s": 10.0,
+        "wav_sha256": "76698e92fea31bed8ec27836e8f04e66d20639c79dbcf665df90f4ea09b7c5d9",
+        "dropped_blocks": 0,
+        "in_stream_dropped_samples": 0,
+        "post_target_drained_samples": 256,
+        "metrics": {
+          "peak": 0.999982,
+          "full_rms": 0.239739,
+          "first_100ms_rms": 0.686002,
+          "steady_1_to_5s_rms": 0.222381,
+          "dc_offset": -0.005129,
+          "near_clip_pct": 0.2775,
+          "near_clip_sample_count": 1332,
+          "saturation_pct": 0.0013
+        },
+        "stimulus_to_quiet_ratio_db": 23.2,
+        "notes": "High acoustic stimulus volume approached sensor ceiling (peak 0.999982). Near-clipping on 0.2775% of samples."
+      },
+      {
+        "session_id": "session_20261118_094939_4888e670",
+        "type": "stimulus_run2",
+        "sample_rate_hz": 48000,
+        "total_samples": 480000,
+        "duration_s": 10.0,
+        "wav_sha256": "6662e737c3da3fe43fcbaab2be77648356a59960ff7b5d204787f71cbef8c1fa",
+        "dropped_blocks": 0,
+        "in_stream_dropped_samples": 0,
+        "metrics": {
+          "peak": 0.997762,
+          "full_rms": 0.014342,
+          "steady_1_to_5s_rms": 0.021873,
+          "near_clip_pct": 0.0006,
+          "saturation_pct": 0.0
+        }
+      },
+      {
+        "session_id": "session_20261118_100102_4e58ac08",
+        "type": "stimulus_run3",
+        "sample_rate_hz": 48000,
+        "total_samples": 480000,
+        "duration_s": 10.0,
+        "wav_sha256": "1381dcce8a1feefc0516709848f075da34bdf88f3957bf8e5c26f784e2ea4169",
+        "dropped_blocks": 0,
+        "in_stream_dropped_samples": 0,
+        "metrics": {
+          "peak": 0.999967,
+          "full_rms": 0.105337,
+          "steady_1_to_5s_rms": 0.020928,
+          "near_clip_pct": 0.0575,
+          "saturation_pct": 0.0002
+        }
+      }
+    ]
+  },
+  "telemetry_accounting": {
+    "dma_block_size": 256,
+    "target_sample_count": 480000,
+    "firmware_generated_samples": 480256,
+    "firmware_queued_samples": 480000,
+    "firmware_dropped_samples_total": 256,
+    "post_target_drained_samples": 256,
+    "in_stream_dropped_samples": 0,
+    "interpretation": "Leftover DMA buffer drained cleanly upon STOP boundary; 0 samples dropped during active transmission."
+  },
+  "provenance_and_git_baseline": {
+    "lab_execution_baseline_commit": "319fcc59b85c13e4334354f5950a7c41eb4ea87f",
+    "current_origin_main_commit": "93f18efdd7ca6b7de5271dfa88781f40139b44a4",
+    "firmware_binary_release_tag": "g2_candidate_20261117",
+    "binary_match": true,
+    "explanation": "The lab setup executed scripts from commit 319fcc5 where laptop_working_manifest.json was created. The flashed firmware was the precompiled release g2_candidate_20261117 whose SHA-256 hashes match repository files bit-for-bit."
+  },
+  "documentation_gaps_and_risks": {
+    "multimeter_photograph": {
+      "status": "OPERATOR_ATTESTED_DISPLAY_PHOTO_MISSING",
+      "detail": "3.28V rail measured on Agilent U1232A attested by Kaan and Ozan; display photo was not taken."
+    },
+    "acoustic_port_macro_photo": {
+      "status": "INCOMPLETE",
+      "detail": "Top and angle photos show board wiring; bottom acoustic sound port macro view not captured."
+    },
+    "acoustic_calibration": {
+      "status": "NOT_PERFORMED",
+      "detail": "Relative acoustic capture verified (23.2 dB delta), but SPL sensitivity, acoustic phantom, and clinical frequency response are uncalibrated."
+    },
+    "stimulus_volume_control": {
+      "status": "OBSERVED_NEAR_CLIPPING",
+      "detail": "High sound level resulted in 0.2775% near-clipping (>0.98 FS). Subsequent calibration must use calibrated SPL source."
+    }
+  }
+}

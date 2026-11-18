@@ -190,6 +190,31 @@ def test_raw_microphone_screen_does_not_claim_physical_pass(tmp_path,signal):
     with pytest.raises(ValueError): qualify_recording(tmp_path/sid)
 
 
+def test_qualify_recording_startup_transient_and_near_clipping_metrics(tmp_path):
+    """Regression test ensuring startup transient is separated from steady RMS, and near-clipping vs saturation."""
+    recorder = SessionRecorder(tmp_path)
+    sid = recorder.start(acquisition_mode="software_simulated")
+    # Construct 1 second of audio (48000 samples)
+    # First 100 ms has huge initial transient (+-0.90)
+    # Remaining 900 ms has steady low noise (+-0.02) plus a few near-clipped peaks (+-0.985)
+    rate = 48000
+    samples = np.full(rate, 0.02, dtype=np.float32)
+    samples[:int(rate * 0.1)] = 0.90  # Startup transient in first 100 ms
+    # Inject 100 near-clipped samples (>0.98 but <0.9999)
+    samples[10000:10100] = 0.985
+    recorder.record_block(SampleBlock(sequence=0, timestamp_s=0, sample_rate_hz=rate, samples=samples))
+    recorder.stop()
+    report = qualify_recording(tmp_path / sid)
+    assert "steady_rms_fs" in report
+    assert "near_clipping_fraction" in report
+    # Steady RMS should be significantly lower than full RMS due to excluding the startup transient
+    assert report["steady_rms_fs"] < report["rms_fs"]
+    # Saturation fraction strictly at hard rails should be 0
+    assert report["saturation_fraction"] == 0.0
+    # Near clipping should detect the 100 samples
+    assert report["near_clipping_fraction"] == pytest.approx(100 / rate, rel=1e-3)
+
+
 def test_existing_session_cannot_be_overwritten(tmp_path):
     recorder=SessionRecorder(tmp_path)
     existing=tmp_path/"preserve"; existing.mkdir()
