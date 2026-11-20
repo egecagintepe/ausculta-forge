@@ -109,9 +109,17 @@ Uyaran kaydında (`session_20261118_093225_19cde788`), tepe değer **0,999982 FS
 - **Farkın Nedeni:** `saturation_fraction` metriği yalnızca örneklerin kesin olarak tepeye yapıştığı (`|x| >= 0.9999`) durumları ölçerken, `clipping_detected` eşiği `|x| > 0.98` olan tepeye yakın bölgedeki örnekleri (%0,2775 / 1.332 örnek) tespit etmiştir.
 - **Mühendislik Yorumu:** Akustik hoparlörden verilen test tonu seviyesi mikrofona çok yakın tutulmuş ve INMP441'in dinamik aralığının sınırına dayanılmıştır. Bu durum dijital bir bozulma veya yazılım hatası değil, aşırı akustik ses basıncı uyarımıdır. Sonraki deneylerde hoparlör ses seviyesinin düşürülmesi veya mesafenin artırılması gerekmektedir.
 
-### 5.4 Spektral Güç Oranı
-- 20–500 Hz kalp sesi odak bandında uyaran oturumu ile sessiz oturum arasındaki Welch PSD güç farkı **23,2 dB** olarak doğrulanmıştır (bağımsız 4. derece Butterworth filtresiyle ~24,7 dB).
-- Bu fark, mikrofonun çevresel uyarana duyarlı olduğunu ve akustik yolun çalıştığını kanıtlamaktadır.
+### 5.4 Spektral Güç Oranı (23,2 dB ve 8,0 dB Ayrımı)
+- **Uyaran Oturumu 1 (`093225_19cde788`):** Yüksek hoparlör ses şiddeti altında 20–500 Hz bandında sessiz oturuma kıyasla **23,2 dB güç oranı** ölçülmüştür (%0,2775 tepe-yakın kırpılma, bağımsız 4. derece Butterworth filtresiyle ~24,7 dB).
+- **Uyaran Oturumu 3 (`100102_4e58ac08`):** İkinci laboratuvar teslim paketinde (`100114Z.zip`) yer alan bu oturumda, ses şiddetinin düşürülmesi veya uyarım mesafesinin değişmesi sonucunda 20–500 Hz güç oranı **8,0 dB** olarak hesaplanmıştır. Bu oturumda `clipping_detected=true`, tam 10 saniyelik oturum tepe değeri **0,999967 FS** (1 örnek $\ge 0,9999\text{ FS}$ doyumda) ve yakın-kırpılma **%0,0575** (276 örnek) olarak kaydedilmiştir. Kararlı analiz penceresinde (1–5 s) tepe genlik 0,1667 FS (ve analiz penceresine bağlı olarak 0,9984 FS) ve kararlı RMS 0,0209 FS seviyesine inmekle birlikte, %0,0575 değeri projenin <%0,05 yakın-kırpılma hedef eşiğini bir miktar aştığından, bu kayıt "tamamen doğrusal" veya "kırpılmasız" (clipping-free) olarak nitelendirilemez.
+- **Mühendislik Sonucu:** 23,2 dB ve 8,0 dB değerleri **farklı iki fiziksel uyaran oturumuna** aittir. Her iki ölçüm de sistemin uyarana tepki verdiğini doğrulamakta, ancak uyaran seviyesine bağlı olarak dinamik aralığın değiştiğini göstermektedir. Bu veriler birbirinin üzerine yazılmadan ayrı kanıtlar olarak korunmuştur ([`wednesday_g2_comparison.md`](wednesday_g2_comparison.md) ve [`wednesday_g2_comparison_run3_8db.md`](wednesday_g2_comparison_run3_8db.md)).
+
+### 5.5 Ham WAV SHA-256 Özet Düzeltmesi (REV04 Denetimi)
+İkinci teslim paketi (`AuscultaForge_Lab_Return_Kaan_Ozan_20261118_100114Z.zip`) bağımsız SHA-256 denetiminden geçirilmiş ve 148/148 dosya bütünlüğü doğrulanmıştır. Yapılan incelemede, GitHub özet tablosunda (`RETURN_EVIDENCE_SUMMARY.json`) son iki oturumun WAV hash değerlerinde kopyalama hatası saptanmış ve kanıt dosyalarıyla eşitlenerek düzeltilmiştir:
+- `session_20261118_091909_9e6baa63/raw.wav`: `eb4f218c3a22158430993b2180cc28618b5e426d7588b1d3da1ca59fcdf3d903` (Doğrulandı)
+- `session_20261118_093225_19cde788/raw.wav`: `76698e92fea31bed8ec27836e8f04e66d20639c79dbcf665df90f4ea09b7c5d9` (Doğrulandı)
+- `session_20261118_094939_4888e670/raw.wav`: `733de8fdd1f722a7a6be9e17d354261561da53852d9aa5a6c691cd9503c3c857` (Düzeltildi; eski hatalı özet: `6662e7...`)
+- `session_20261118_100102_4e58ac08/raw.wav`: `26c78582df26bcd209c1f051f09aca19c8462b9fc7067cd30a0a59eba57faa33` (Düzeltildi; eski hatalı özet: `1381dc...`)
 
 ---
 

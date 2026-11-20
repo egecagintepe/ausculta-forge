@@ -57,16 +57,16 @@ The acoustic phantom replaces human subject recording by providing a repeatable,
 | **PRT-02** | Jumper Wires & Headers | M-M jumper set & 140-piece jumper kit | Direnc.net / Motorobit | Sets | In lab. Signal, ground, and rail routing. |
 | **PRT-03** | Prototype Perfboard | 12×12 cm perforated board | Motorobit | 1 | In kit. Can serve as baseplate for amplifier. |
 
-### 2.2 Missing Items Requiring Immediate Procurement
+### 2.2 Procurement & Inventory Status of Phantom Materials (REV04 Update)
 
-| Ref ID | Item Required | Recommended Specification | Indicative Source / Cost | Priority | Purpose & Functional Requirement |
+| Ref ID | Item | Specification & Model | Source & Unit Price | Procurement Status | In-Hand Lab Status |
 |---|---|---|---|---|---|
-| **CP-01** | Acoustic Stethoscope Chestpiece | Standard dual-head adult/pediatric stethoscope (metal bell + tunable diaphragm) | Pharmacy / Medical supply / Department stock (~150–250 TL) | **CRITICAL (P0)** | Acts as acoustic acoustic transformer/impedance matcher from phantom surface to air cavity. |
-| **PH-01** | Acoustic Phantom Medium | Platinum-cure silicone (Ecoflex 00-30 / DragonSkin) OR 10% Knox Ballistic Gelatin mold (40 mm dia × 30 mm depth) | Medical silicone supplier OR grocery Knox gelatin mold (~40–120 TL) | **CRITICAL (P0)** | Provides human-tissue-mimicking acoustic velocity (~1540 m/s), density, and damping. |
-| **GEL-01** | Acoustic Coupling Gel | Standard medical ultrasound transmission gel (250 ml bottle) | Local pharmacy / Medical supply (~50 TL) | **HIGH (P1)** | Eliminates micro air gaps at exciter–phantom and phantom–chestpiece contact surfaces. |
-| **PWR-01** | Isolated 5 V Power Source | Standalone 5 V USB battery power bank OR bench DC linear power supply | Lab inventory / personal electronics (0 TL) | **HIGH (P1)** | Powers PAM8403 independently, isolating Class-D switching transients from ESP32 rail. |
-| **JCK-01** | 3.5 mm Stereo Breakout Jack | 3.5 mm TRS female jack breakout board OR terminal block (or cut AUX cable) | Lab electronics kit / Direnc.net (~15–30 TL) | **MEDIUM (P2)** | Provides clean solder/screw connection from 3.5 mm cable to PAM8403 line input. |
-| **FIX-01** | Mechanical Fixture / Weight | Standard laboratory retort stand with clamp OR calibrated 200 g contact weight | Physics/EE lab stock (0 TL) | **MEDIUM (P2)** | Ensures consistent 1.5–2.0 N coupling pressure during repeated trials. |
+| **CP-01** | Acoustic Stethoscope Chestpiece | Galena Çift Taraflı Profesyonel Yetişkin Steteskop (A-01) | Trendyol (MEDICATION) / 283.00 TL | Ordered (User-Reported) | **ORDERED / PHYSICAL ARRIVAL UNCONFIRMED** |
+| **PH-01** | Acoustic Phantom Medium | AnkaHobiMarket RTV-2 Kalıp Silikonu + Katalizör (500 g, 5 Shore) | Trendyol / 350.00 TL | Ordered (User-Reported) | **ORDERED / PHYSICAL ARRIVAL UNCONFIRMED** |
+| **GEL-01** | Acoustic Coupling Gel | Standard medical ultrasound transmission gel (250 ml bottle) | Local pharmacy / Medical supply (~50 TL) | **NOT ORDERED / MISSING** | **ABSENT** (RTV-2 is casting silicone, not ultrasound gel) |
+| **PWR-01** | Isolated 5 V Power Source | Standalone 5 V USB battery power bank with terminal adapter OR bench DC supply | Lab inventory / bench | **LAB STOCK / TO BE RECONFIRMED** | Ready to allocate |
+| **JCK-01** | 3.5 mm Stereo Breakout Jack | 3.5 mm TRS female jack breakout board OR terminal block | Lab electronics kit / Direnc.net (~15–30 TL) | Sourced | Available in lab |
+| **FIX-01** | Mechanical Fixture / Weight | Standard laboratory retort stand with clamp OR calibrated 200 g contact weight | Physics/EE lab stock (0 TL) | Sourced | Available in lab |
 
 ---
 

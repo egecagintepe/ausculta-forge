@@ -134,7 +134,7 @@
         "sample_rate_hz": 48000,
         "total_samples": 480000,
         "duration_s": 10.0,
-        "wav_sha256": "6662e737c3da3fe43fcbaab2be77648356a59960ff7b5d204787f71cbef8c1fa",
+        "wav_sha256": "733de8fdd1f722a7a6be9e17d354261561da53852d9aa5a6c691cd9503c3c857",
         "dropped_blocks": 0,
         "in_stream_dropped_samples": 0,
         "metrics": {
@@ -143,7 +143,8 @@
           "steady_1_to_5s_rms": 0.021873,
           "near_clip_pct": 0.0006,
           "saturation_pct": 0.0
-        }
+        },
+        "notes": "Intermediate acoustic stimulus level. Verified bit-for-bit SHA256 in second lab return package."
       },
       {
         "session_id": "session_20261118_100102_4e58ac08",
@@ -151,7 +152,7 @@
         "sample_rate_hz": 48000,
         "total_samples": 480000,
         "duration_s": 10.0,
-        "wav_sha256": "1381dcce8a1feefc0516709848f075da34bdf88f3957bf8e5c26f784e2ea4169",
+        "wav_sha256": "26c78582df26bcd209c1f051f09aca19c8462b9fc7067cd30a0a59eba57faa33",
         "dropped_blocks": 0,
         "in_stream_dropped_samples": 0,
         "metrics": {
@@ -160,7 +161,9 @@
           "steady_1_to_5s_rms": 0.020928,
           "near_clip_pct": 0.0575,
           "saturation_pct": 0.0002
-        }
+        },
+        "stimulus_to_quiet_ratio_db": 8.0,
+        "notes": "Reduced acoustic stimulus level resulting in 8.0 dB (20-500 Hz) power ratio with reduced near-clipping (0.0575%). Distinct from Stimulus Run 1 (23.2 dB)."
       }
     ]
   },
