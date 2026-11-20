@@ -23,9 +23,9 @@
 | **PAM8403 Audio Amplifier** | 2 × 3 W Class-D stereo breakout board | Ordered (f0f6b57) | **UNKNOWN / TO CONFIRM** | Shipped / with Kaan? | Kaan |
 | **3.5 mm AUX Cable** | 3.5 mm male stereo plug to bare wire / split | Ordered | **UNKNOWN / TO CONFIRM** | Shipped / with Kaan? | Kaan |
 | **Independent 5 V Power Supply** | 5V USB battery power bank or regulated DC supply | Lab Stock / Sourced | **UNKNOWN / TO CONFIRM** | Lab stock / bench | Ozan |
-| **Stethoscope Chestpiece** | Dual-head adult chestpiece (diaphragm + bell) | Not Sourced | **NO** | Missing | Kaan |
-| **Acoustic Phantom Medium** | Compliant block (~100 × 100 × 30 mm) | Not Sourced | **NO** | Missing | Kaan |
-| **Acoustic Coupling Gel** | Ultrasound transmission gel | Not Sourced | **NO** | Missing | Kaan |
+| **Stethoscope Chestpiece** | Galena Çift Taraflı Yetişkin (A-01, 283.00 TL) | Ordered (User-Reported) | **UNKNOWN / TO CONFIRM** | Shipped / with Kaan? | Kaan |
+| **Acoustic Phantom Medium** | AnkaHobiMarket RTV-2 Kalıp Silikonu 500g (A-09, 350.00 TL) | Ordered (User-Reported) | **UNKNOWN / TO CONFIRM** | Shipped / with Kaan? | Kaan |
+| **Acoustic Coupling Gel** | Ultrasound transmission gel (Aquasonic / generic) | Not Sourced | **NO** | Missing (RTV-2 is not gel) | Kaan |
 | **Digital Multimeter** | Calibrated DMM (e.g. Agilent U1232A) | Lab Stock | **YES** (Available in Lab) | Electronics Lab | Ozan |
 | **Multimeter Camera / Smartphone** | Camera to record rail voltage photos | Field Item | **YES** (Available) | Mobile | Ozan |
 | **Mechanical Clamps / Weights** | 200–500 g mass for chestpiece coupling pressure | Lab Stock | **UNKNOWN / TO CONFIRM** | Mechanics Lab | Kaan |
@@ -39,7 +39,9 @@
 > The provisional substitutes listed below are uncalibrated bench exploratory alternatives intended solely for preliminary functional bringup. They must **NOT** be treated as formally measured acoustic equivalents of validated medical soft-tissue phantom standards without dedicated characterization.
 
 ### 2.1 Acoustic Phantom Medium
-- **Primary Specification:** Platinum-cure or condensation-cure casting silicone puck (e.g. Smooth-On Ecoflex 00-30 or Sorta-Clear, dimensions $\approx 100\times 100\times 30\text{ mm}$).
+- **Primary Specification (REV04 Ordered):** **AnkaHobiMarket RTV-2 Kalıp Silikonu + Katalizör (500 g, 5 Shore, yarı şeffaf)** — 350.00 TL (Trendyol).
+  - *Procurement Status:* User reported ordered (screenshot on file); official invoice and delivery confirmation pending. Supersedes historical 3 mm silicone sheet candidate (1,173.00 TL) to prevent double counting.
+  - *Chemical / Mechanical Caveat:* RTV-2 is a two-part liquid condensation-cure silicone requiring exact catalyst proportion (~2–4%), degassing, and $\ge 12\text{–}24\text{ hours}$ curing time. It is **NOT ultrasound gel** and **NOT a ready-made solid sheet**. Mechanical behavior and acoustic impedance must be evaluated on a cured sample puck.
 - **Provisional Bench Alternative (Exploratory):** **10% Ballistic Gelatin Block**.
   - Preparation: 100 g food-grade gelatin (Bloom 250) dissolved in 900 mL heated distilled water ($60^\circ\text{C}$), optionally with 50 mL glycerin to prevent dehydration, cast in a flat rectangular container and chilled for $\ge 4\text{ hours}$.
   - Acoustic Impedance: Estimated $\approx 1.5\text{–}1.6\times 10^6\text{ Pa}\cdot\text{s/m}$ (literature approximation for preliminary acoustic coupling, uncalibrated).
@@ -47,11 +49,19 @@
 ### 2.2 Acoustic Coupling Gel
 - **Primary Specification:** Medical ultrasound transmission gel (e.g. Parker Aquasonic 100, carbomer-based).
 - **Provisional Bench Alternative (Exploratory):** High-viscosity generic aloe vera gel ($>98\%$ purity) or pure glycerin.
-  - Requirement: Eliminates micro-air gaps between chestpiece diaphragm and phantom medium during preliminary bringup without introducing air bubbles; acoustic attenuation is uncalibrated.
+  - Requirement: Eliminates micro-air gaps between chestpiece diaphragm and phantom medium during preliminary bringup without introducing air bubbles; acoustic attenuation is uncalibrated. Note that RTV-2 liquid silicone CANNOT be used as coupling gel.
 
 ### 2.3 Stethoscope Chestpiece
-- **Primary Specification:** Standard adult dual-head acoustic stethoscope chestpiece (stainless steel or zinc alloy, diaphragm diameter $\approx 44\text{ mm}$, bell diameter $\approx 30\text{ mm}$).
-- **Provisional Bench Alternative (Exploratory):** Any working mechanical acoustic stethoscope (e.g. 3M Littmann Classic II/III or generic Sprague Rappaport). The flexible rubber tubing can be temporarily detached from the chestpiece stem to insert the INMP441 microphone port.
+- **Primary Specification (REV04 Ordered):** **Galena Çift Taraflı Profesyonel Yetişkin Steteskop** (A-01) — 283.00 TL (Trendyol MEDICATION).
+  - *Procurement Status:* User reported ordered (screenshot on file); official invoice and physical delivery confirmation pending. Supersedes historical Medikaltec candidate (679.99 TL) to prevent double counting.
+  - *Application:* Flexible tubing will be detached from the chestpiece stem to couple the INMP441 MEMS microphone acoustic port into the internal acoustic chamber.
+- **Provisional Bench Alternative (Exploratory):** Any working mechanical acoustic stethoscope (e.g. 3M Littmann Classic II/III or generic Sprague Rappaport) borrowed for bench testing.
+
+### 2.4 Procurement Total Reconciliation (REV04 as of 2026-11-20)
+- **Historical REV03 Working Baseline:** **3,613.21 TL** (contains an unconfirmed 90.00 TL estimate for Motorobit perfboards).
+- **New Items Added (REV04):** Galena Stethoscope (283.00 TL) + RTV-2 Silicone (350.00 TL) = **633.00 TL**.
+- **Current Provisional Total:** **4,246.21 TL** (or **4,156.21 TL** if the 90.00 TL unconfirmed estimate is excluded).
+- **Audit Rule:** Neither total represents fully audited expense until tax invoices and actual charged amounts (shipping/coupons) are reconciled. Historical candidates are not accumulated.
 
 ### 2.4 Independent 5 V Amplifier Power Supply
 - **Primary Specification:** Regulated laboratory linear or low-ripple switched DC bench power supply set to $5.00\text{ V}$, current limit $1.0\text{ A}$.

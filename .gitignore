@@ -92,6 +92,7 @@ pnpm-debug.log*
 
 # Session recording outputs
 ilkentegrasyonolcumleri/
+Yeni klasör/
 experiments/hardware/*
 !experiments/hardware/team_2026-11-18/
 experiments/hardware/team_2026-11-18/*
