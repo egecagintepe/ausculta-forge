@@ -69,9 +69,9 @@ A key finding of the REV04 audit is the explicit separation of the two compariso
 
 The REV04 deliverables authored by Ozan have been incorporated into Week 09 Module B:
 
-- **Technical Specification:** `docs/sdp/week-09/submissions/module-b-ozan/W09_B_system-design-technical-specification_REV04_W09_2026-11-20.docx` (36 pages, DSS-SYS-001 REV04). Includes Appendix F detailing physical G2 evidence, port assignments (ROM COM4 vs CDC COM3), and safe 5V power rules.
-- **BOM & Test Matrix Workbook:** `docs/sdp/week-09/submissions/module-b-ozan/W09_B_procurement-bom-test_REV04_W09_2026-11-20.xlsx` (17 sheets, formula-verified totals of 4,246.21 TL / 4,156.21 TL).
-- **QA & Reconciliation Note:** `docs/sdp/week-09/submissions/module-b-ozan/AuscultaForge_REV04_W09_QA_2026-11-20.md`.
+- **Technical Specification:** `docs/sdp/week-09/submissions/module-b-ozan/W09_B_system-design-technical-specification_REV04_2026-11-20.docx` (38 pages, DSS-SYS-001 REV04-QA). Includes Section 13/17 alignment, Appendix F detailing physical G2 evidence, port assignments (ROM COM4 vs CDC COM3), safe 5V power rules, B-01a/B-01b separation, and 4,246.21 TL provisional spend.
+- **BOM & Test Matrix Workbook:** `docs/sdp/week-09/submissions/module-b-ozan/W09_B_procurement-bom-test_REV04_2026-11-20.xlsx` (17 sheets, formula-verified totals of 4,246.21 TL / 4,156.21 TL, B-01a 35.35 TL + B-01b 90.00 TL = 3 boards, aligned Test_Matrisi!I14 and W09_Durum!D14).
+- **QA & Reconciliation Note:** `docs/sdp/week-09/submissions/module-b-ozan/AuscultaForge_W09_REV04_QA_2026-11-20.md`.
 - **Historical Preservation:** Historical REV03 files in `docs/sdp/week-04/submissions/module-b-ozan/` remain completely untouched.
 
 ---

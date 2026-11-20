@@ -17,11 +17,11 @@
 1. **Physical Continuity & G2 Ingest Acceptance:**
    - [W09_B_continuity-clipping-verification.md](W09_B_continuity-clipping-verification.md) — 18 Nov lab report: 3.28V rail measurement (Agilent U1232A, operator-attested), ROM flash on COM4, USB CDC streaming on COM3, and 0 in-stream loss over 1,920,000 samples.
 2. **REV04 System Design Technical Specification:**
-   - [W09_B_system-design-technical-specification_REV04_W09_2026-11-20.docx](W09_B_system-design-technical-specification_REV04_W09_2026-11-20.docx) — Technical specification document (DSS-SYS-001 REV04, 36 pages). Includes Appendix F detailing 18 Nov physical evidence boundaries, live USB CDC Profile B framing, and updated provisional BOM.
+   - [W09_B_system-design-technical-specification_REV04_2026-11-20.docx](W09_B_system-design-technical-specification_REV04_2026-11-20.docx) — Technical specification document (DSS-SYS-001 REV04-QA, 38 pages). Includes Section 13/17 alignment, Appendix B/D/E/F, B-01a/B-01b perfboard separation, physical G2 evidence, and updated provisional BOM.
 3. **REV04 Procurement, BOM & Test Matrix Workbook:**
-   - [W09_B_procurement-bom-test_REV04_W09_2026-11-20.xlsx](W09_B_procurement-bom-test_REV04_W09_2026-11-20.xlsx) — 17 worksheets with updated BOM, provisional spending reconciliations, and test matrix. Preserves historical REV03 sheets without modification.
+   - [W09_B_procurement-bom-test_REV04_2026-11-20.xlsx](W09_B_procurement-bom-test_REV04_2026-11-20.xlsx) — 17 worksheets with updated BOM, provisional spending reconciliations (4,246.21 TL / 4,156.21 TL), B-01a/B-01b separation (3 boards), aligned `Test_Matrisi!I14` and `W09_Durum!D14`, and 0 formula errors. Preserves historical REV03 sheets without modification.
 4. **REV04 Quality Assurance & Reconciliation Note:**
-   - [AuscultaForge_REV04_W09_QA_2026-11-20.md](AuscultaForge_REV04_W09_QA_2026-11-20.md) — Independent QA audit of REV04 Office deliverables, pricing reconciliation, 18 Nov evidence checks, and open gates.
+   - [AuscultaForge_W09_REV04_QA_2026-11-20.md](AuscultaForge_W09_REV04_QA_2026-11-20.md) — Comprehensive QA audit of REV04 Office deliverables (04-QA revision), pricing reconciliation, 18 Nov evidence checks, and resolution of GitHub hash discrepancies.
 
 ---
 

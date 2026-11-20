@@ -13,7 +13,7 @@
 | Folder | Owner | Module | Current Status |
 |---|---|---|---|
 | `submissions/module-a-kaan/` | Kaan | A -- Acquisition Hardware and Characterisation | **COMPLETED / CALIBRATION PENDING** ([W09_A_feasibility-test.md](submissions/module-a-kaan/W09_A_feasibility-test.md) — Breadboard wiring, INMP441 placement, acoustic sound test) |
-| `submissions/module-b-ozan/` | Ozan | B -- Embedded Acquisition and Data Path | **COMPLETED / REV04 INTEGRATED** ([W09_B](submissions/module-b-ozan/W09_B_continuity-clipping-verification.md), [REV04 Spec (.docx)](submissions/module-b-ozan/W09_B_system-design-technical-specification_REV04_W09_2026-11-20.docx), [REV04 BOM (.xlsx)](submissions/module-b-ozan/W09_B_procurement-bom-test_REV04_W09_2026-11-20.xlsx), [REV04 QA Note](submissions/module-b-ozan/AuscultaForge_REV04_W09_QA_2026-11-20.md)) |
+| `submissions/module-b-ozan/` | Ozan | B -- Embedded Acquisition and Data Path | **COMPLETED / REV04 INTEGRATED** ([W09_B](submissions/module-b-ozan/W09_B_continuity-clipping-verification.md), [REV04 Spec (.docx)](submissions/module-b-ozan/W09_B_system-design-technical-specification_REV04_2026-11-20.docx), [REV04 BOM (.xlsx)](submissions/module-b-ozan/W09_B_procurement-bom-test_REV04_2026-11-20.xlsx), [REV04 QA Note](submissions/module-b-ozan/AuscultaForge_W09_REV04_QA_2026-11-20.md)) |
 | `submissions/module-c-ege/` | Ege | C -- Computer Application and Quality Assessment | **COMPLETED / PHANTOM PENDING** ([W09_C_source-capture-comparison.md](submissions/module-c-ege/W09_C_source-capture-comparison.md) — Physical acceptance report, Welch PSD analysis, startup transient & clipping root-cause analysis) |
 
 ## Tracked Evidence & Lab Links
