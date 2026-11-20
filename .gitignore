@@ -126,3 +126,7 @@ experiments/virtual-bench/*
 software/build_backend/
 software/dist_backend/
 software/frontend/src-tauri/target/
+
+# Local integration staging and incoming dropboxes
+_incoming/
+

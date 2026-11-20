@@ -36,8 +36,14 @@ The laboratory package contains four 10.0-second physical recordings ($48\,000\t
 | `session_20261118_100102_4e58ac08` | Acoustic Stimulus (Run 3) | 10.0 s (480,000) | `26c78582df26bcd209c1f051f09aca19c8462b9fc7067cd30a0a59eba57faa33` | `1381dcce8a1f...` | **DISCREPANCY RESOLVED (CORRECTED)** |
 
 > [!IMPORTANT]
-> **Resolution of Hash Discrepancies:**  
-> The former hashes (`6662e737...` and `1381dcce...`) in `experiments/hardware/team_2026-11-18/RETURN_EVIDENCE_SUMMARY.json` were clerical errors introduced during initial report drafting. In contrast, the individual session sidecars (`session_stimulus_4888e670.json` and `session_stimulus_4e58ac08.json`), `RETURN_PACKAGE_MANIFEST.json`, and `SHA256SUMS.txt` all recorded the verified true hashes (`733de8fd...` and `26c78582...`). `RETURN_EVIDENCE_SUMMARY.json` and `PHYSICAL_G2_ACCEPTANCE_REPORT.md` have now been updated with the verified true values.
+> **Resolution of Hash Discrepancies & Manifest Provenance:**  
+> The former hashes (`6662e737...` and `1381dcce...`) in `experiments/hardware/team_2026-11-18/RETURN_EVIDENCE_SUMMARY.json` were clerical errors introduced during initial report drafting.  
+> Crucially, `RETURN_PACKAGE_MANIFEST.json` in the laboratory package only enumerates the first two baseline sessions (`session_20261118_091807_e7aa7c19` and `session_20261118_093225_19cde788`). It does not list the later two stimulus runs.  
+> The physical provenance and true digests of the final two WAV recordings (`session_20261118_094939_4888e670` → `733de8fd...` and `session_20261118_100102_4e58ac08` → `26c78582...`) are established directly by:
+> 1. The root archive checksum file `SHA256SUMS.txt` (148/148 verified member files in `AuscultaForge_Lab_Return_Kaan_Ozan_20261118_100114Z.zip`),
+> 2. The individual session sidecar metadata files (`session_stimulus_4888e670.json` and `session_stimulus_4e58ac08.json`), and
+> 3. The laboratory test run orchestrator state file (`wednesday_20261118_state.json`).  
+> `RETURN_EVIDENCE_SUMMARY.json` and `PHYSICAL_G2_ACCEPTANCE_REPORT.md` have now been updated with the verified true values.
 
 ---
 
@@ -52,7 +58,8 @@ A key finding of the REV04 audit is the explicit separation of the two compariso
 2. **Stimulus Run 3 (10:01:02 UTC — 8.0 dB):**
    - Evaluated in `experiments/hardware/team_2026-11-18/wednesday_g2_comparison_run3_8db.json` / `.md` (from package `100114Z.zip`).
    - Result: **8.0 dB** in-band (20–500 Hz) power ratio against Quiet Baseline.
-   - Acoustic Observation: Reduced drive volume or repositioned sound source produced linear capture with near-clipping reduced to $0.0575\%$.
+   - Acoustic Observation & Near-Clipping Audit: With lower speaker drive level and repositioned source, near-clipping was substantially reduced from $0.2775\%$ ($1\,332$ samples) down to **$0.0575\%$** ($276$ samples), with `clipping_detected = true` and full 10-second capture peak reaching **$0.999967\text{ FS}$** ($1$ sample at saturation $\ge 0.9999\text{ FS}$).
+   - Non-Linearity Caveat: Because $0.0575\%$ slightly exceeds the project's $< 0.05\%$ near-clipping target, this run **cannot** be characterized as "linear capture" or "clipping-free". Furthermore, while steady-state analysis windows (e.g. 1–5 s) exhibit attenuated peak values ($0.1667\text{ FS}$ / steady RMS $0.0209\text{ FS}$), full-session peaks approach full scale. Standardized acoustic drive attenuation remains mandatory for upcoming phantom experiments.
 
 **Conclusion:** Both runs are preserved as separate, non-overlapping empirical records. The variation demonstrates that the INMP441 responds dynamically to changing sound pressure levels, and standardizing acoustic drive level is mandated for upcoming phantom experiments.
 

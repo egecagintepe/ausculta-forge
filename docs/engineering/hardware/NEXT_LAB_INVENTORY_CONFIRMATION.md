@@ -19,7 +19,7 @@
 | **INMP441 MEMS Breakout** | Bottom-port omnidirectional I²S microphone | In-Hand | **YES** (Verified 18 Nov) | Lab breadboard | Kaan |
 | **Solderless Breadboard & Jumpers** | Standard breadboard + M-M jumpers | In-Hand | **YES** (Verified 18 Nov) | Lab bench | Kaan |
 | **USB-C Data Cable** | High-speed data cable (tested on COM3) | In-Hand | **YES** (Verified 18 Nov) | Lab bench | Ozan |
-| **30 mm Vibration Exciter** | 4–8 $\Omega$, 3–5 W electrodynamic surface transducer | Ordered (f0f6b57) | **UNKNOWN / TO CONFIRM** | Shipped / with Kaan? | Kaan |
+| **30 mm Vibration Exciter** | 12 $\Omega$, 3–5 W electrodynamic surface transducer | Ordered (f0f6b57) | **UNKNOWN / TO CONFIRM** | Shipped / with Kaan? | Kaan |
 | **PAM8403 Audio Amplifier** | 2 × 3 W Class-D stereo breakout board | Ordered (f0f6b57) | **UNKNOWN / TO CONFIRM** | Shipped / with Kaan? | Kaan |
 | **3.5 mm AUX Cable** | 3.5 mm male stereo plug to bare wire / split | Ordered | **UNKNOWN / TO CONFIRM** | Shipped / with Kaan? | Kaan |
 | **Independent 5 V Power Supply** | 5V USB battery power bank or regulated DC supply | Lab Stock / Sourced | **UNKNOWN / TO CONFIRM** | Lab stock / bench | Ozan |
@@ -41,7 +41,7 @@
 ### 2.1 Acoustic Phantom Medium
 - **Primary Specification (REV04 Ordered):** **AnkaHobiMarket RTV-2 Kalıp Silikonu + Katalizör (500 g, 5 Shore, yarı şeffaf)** — 350.00 TL (Trendyol).
   - *Procurement Status:* User reported ordered (screenshot on file); official invoice and delivery confirmation pending. Supersedes historical 3 mm silicone sheet candidate (1,173.00 TL) to prevent double counting.
-  - *Chemical / Mechanical Caveat:* RTV-2 is a two-part liquid condensation-cure silicone requiring exact catalyst proportion (~2–4%), degassing, and $\ge 12\text{–}24\text{ hours}$ curing time. It is **NOT ultrasound gel** and **NOT a ready-made solid sheet**. Mechanical behavior and acoustic impedance must be evaluated on a cured sample puck.
+  - *Chemical / Mechanical Caveat:* RTV-2 is a two-part liquid condensation-cure silicone requiring exact catalyst proportion per the manufacturer's instruction sheet / product label upon unboxing (do not assume a fixed generic ~2–4% ratio), degassing, and $\ge 12\text{–}24\text{ hours}$ curing time. It is **NOT ultrasound gel** and **NOT a ready-made solid sheet**. Mechanical behavior and acoustic impedance must be evaluated on a cured sample puck.
 - **Provisional Bench Alternative (Exploratory):** **10% Ballistic Gelatin Block**.
   - Preparation: 100 g food-grade gelatin (Bloom 250) dissolved in 900 mL heated distilled water ($60^\circ\text{C}$), optionally with 50 mL glycerin to prevent dehydration, cast in a flat rectangular container and chilled for $\ge 4\text{ hours}$.
   - Acoustic Impedance: Estimated $\approx 1.5\text{–}1.6\times 10^6\text{ Pa}\cdot\text{s/m}$ (literature approximation for preliminary acoustic coupling, uncalibrated).
@@ -57,17 +57,17 @@
   - *Application:* Flexible tubing will be detached from the chestpiece stem to couple the INMP441 MEMS microphone acoustic port into the internal acoustic chamber.
 - **Provisional Bench Alternative (Exploratory):** Any working mechanical acoustic stethoscope (e.g. 3M Littmann Classic II/III or generic Sprague Rappaport) borrowed for bench testing.
 
-### 2.4 Procurement Total Reconciliation (REV04 as of 2026-11-20)
-- **Historical REV03 Working Baseline:** **3,613.21 TL** (contains an unconfirmed 90.00 TL estimate for Motorobit perfboards).
-- **New Items Added (REV04):** Galena Stethoscope (283.00 TL) + RTV-2 Silicone (350.00 TL) = **633.00 TL**.
-- **Current Provisional Total:** **4,246.21 TL** (or **4,156.21 TL** if the 90.00 TL unconfirmed estimate is excluded).
-- **Audit Rule:** Neither total represents fully audited expense until tax invoices and actual charged amounts (shipping/coupons) are reconciled. Historical candidates are not accumulated.
-
 ### 2.4 Independent 5 V Amplifier Power Supply
 - **Primary Specification:** Regulated laboratory linear or low-ripple switched DC bench power supply set to $5.00\text{ V}$, current limit $1.0\text{ A}$.
 - **Recommended Bench Alternative:** Dedicated $5\text{ V}$ USB battery power bank equipped with a commercial USB-A to screw-terminal breakout board or barrel-jack adapter.
 - **WIRING SAFETY HAZARD:** Avoid loose, stripped wire ends or makeshift cut cables to prevent accidental power short-circuits or reverse-polarity damage to the PAM8403.
 - **CRITICAL RESTRICTION:** Under **NO CIRCUMSTANCES** may the PAM8403 be powered from the ESP32-S3 $3\text{V}3$ or $5\text{V}$ pins. The amplifier draws transient currents up to $800\text{ mA}$, which will induce voltage dips, reset the MCU, and corrupt audio sampling.
+
+### 2.5 Procurement Total Reconciliation (REV04 as of 2026-11-20)
+- **Historical REV03 Working Baseline:** **3,613.21 TL** (contains an unconfirmed 90.00 TL estimate for Motorobit perfboards).
+- **New Items Added (REV04):** Galena Stethoscope (283.00 TL) + RTV-2 Silicone (350.00 TL) = **633.00 TL**.
+- **Current Provisional Total:** **4,246.21 TL** (or **4,156.21 TL** if the 90.00 TL unconfirmed estimate is excluded).
+- **Audit Rule:** Neither total represents fully audited expense until tax invoices and actual charged amounts (shipping/coupons) are reconciled. Historical candidates are not accumulated.
 
 ---
 

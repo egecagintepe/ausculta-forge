@@ -1,3 +1,8 @@
+> [!NOTE]
+> **Tarihsel Belge Koruma Notu (Historical Record Preservation):**  
+> Bu belge, 20 Kasım 2026 tarihinde Ozan (Modül B) tarafından REV04 teslim paketinin ön incelemesi ve hazırlığı amacıyla kaleme alınmış **entegrasyon öncesi tarihsel denetim notudur**.  
+> Belge içindeki *"GitHub durumu: Hiçbir commit, push veya PR açılmadı. Bu dosyalar kullanıcı kontrolüne sunulan REV04 taslaklarıdır."* ifadesi, bu teslimatın Git `feature/rev04-evidence-integration` dalına entegre edilmesinden ve PR açılmasından önceki hazırlık aşamasını yansıtmakta olup, tarihsel bütünlük amacıyla aslına sadık biçimde muhafaza edilmiştir.
+
 # AuscultaForge | REV04 / WEEK 09 (20 Kasım 2026) kontrol notu
 
 **Aktif hafta:** **Week 09 = 16–22 Kasım 2026**. Bu belge, 20 Kasım Cuma durumunu gösterir. 18 Kasım fiziksel INMP441 G2 gerçekleşmesi Week09 içinde tamamlanan **alt test**tir; resmî Week09 akustik fantom üzerinden tanınabilir S1/S2 ve kaynak–kayıt sayısal kıyası **PENDING**. Week08'den kalan 30 dakikalık sürekli akış ve 20–500 Hz transfer cevabı testleri de PENDING'dir. Gelecekteki Week10–12 hedefleri bu haftanın gerçekleşeni gibi yazılmadı.
