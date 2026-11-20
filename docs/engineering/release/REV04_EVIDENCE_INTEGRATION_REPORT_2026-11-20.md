@@ -38,7 +38,7 @@ The laboratory package contains four 10.0-second physical recordings ($48\,000\t
 > [!IMPORTANT]
 > **Resolution of Hash Discrepancies & Manifest Provenance:**  
 > The former hashes (`6662e737...` and `1381dcce...`) in `experiments/hardware/team_2026-11-18/RETURN_EVIDENCE_SUMMARY.json` were clerical errors introduced during initial report drafting.  
-> Crucially, `RETURN_PACKAGE_MANIFEST.json` in the laboratory package only enumerates the first two baseline sessions (`session_20261118_091807_e7aa7c19` and `session_20261118_093225_19cde788`). It does not list the later two stimulus runs.  
+> Crucially, `RETURN_PACKAGE_MANIFEST.json` in the laboratory package only enumerates the first two baseline sessions (`session_20261118_091909_9e6baa63` and `session_20261118_093225_19cde788`). It does not list the later two stimulus runs.  
 > The physical provenance and true digests of the final two WAV recordings (`session_20261118_094939_4888e670` → `733de8fd...` and `session_20261118_100102_4e58ac08` → `26c78582...`) are established directly by:
 > 1. The root archive checksum file `SHA256SUMS.txt` (148/148 verified member files in `AuscultaForge_Lab_Return_Kaan_Ozan_20261118_100114Z.zip`),
 > 2. The individual session sidecar metadata files (`session_stimulus_4888e670.json` and `session_stimulus_4e58ac08.json`), and
