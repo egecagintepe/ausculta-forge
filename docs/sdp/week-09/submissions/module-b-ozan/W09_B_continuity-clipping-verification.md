@@ -14,7 +14,7 @@ Verify electrical safety and continuity of the ESP32-S3 + INMP441 breadboard set
 
 - Agilent U1232A Handheld Digital Multimetre.
 - Pre-compiled firmware release `firmware/releases/g2_candidate_20261117` provided by Ege.
-- Python verification scripts (`software/bringup.py`).
+- Python verification scripts (`tools/hardware/bringup.py`).
 - Hardware setup assembled by Kaan.
 
 ## Work Performed
@@ -63,3 +63,12 @@ Verify electrical safety and continuity of the ESP32-S3 + INMP441 breadboard set
 ## Next Week Handoff
 
 Deliver continuous, zero-loss embedded acquisition pipeline to Week 10 for prolonged multi-minute stability runs, battery power supply ripple testing, and automated clipping alarm calibration in host software.
+
+
+## Week 09 / REV04 — 20 Kasım 2026 dokümantasyon teslimi
+
+- [Sistem tasarımı ve teknik şartname, Word REV04](W09_B_system-design-technical-specification_REV04_2026-11-20.docx)
+- [Satın alma, BOM ve test matrisi, Excel REV04](W09_B_procurement-bom-test_REV04_2026-11-20.xlsx)
+- [Rev04 son QA ve açık kalan deneyler](AuscultaForge_W09_REV04_QA_2026-11-20.md)
+
+**Ayrım:** 18 Kasım fiziksel G1 ve INMP441 G2 fonksiyonel testleri PASS; ancak bağımsız fantom S1/S2, 30 dakika sürekli akış, 20–500 Hz karakterizasyonu ve ECM/AFE ölçümleri henüz tamamlanmadı. Yerel ZIP ile repo özetindeki iki WAV SHA farkı açık bulgudur; RAW WAV veya geçmiş deney kanıtı değiştirilmemiştir.
