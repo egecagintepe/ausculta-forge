@@ -64,7 +64,7 @@ Yerel laboratuvar ZIP içindeki listelenmiş **148/148** dosya SHA-256 kontrolü
 > Ozan'ın yukarıdaki tespiti, belgenin yazıldığı tarihte `main` dalındaki (`8445eea`) `RETURN_EVIDENCE_SUMMARY.json` dosyasında bulunan kopyalama hatasını doğru biçimde yakalamıştır.  
 > Bu PR (#36) kapsamında yapılan bağımsız adli denetimde:
 > 1. `AuscultaForge_Lab_Return_Kaan_Ozan_20261118_100114Z.zip` paketi 148/148 dosya bazında bit-for-bit doğrulanmıştır.
-> 2. `RETURN_PACKAGE_MANIFEST.json` dosyasının yalnızca ilk iki oturumu (`091807` ve `093225`) kapsadığı; 3. ve 4. oturumların (`094939` ve `100102`) ise laboratuvar akışında sonradan alındığı tespit edilmiştir.
+> 2. `RETURN_PACKAGE_MANIFEST.json` dosyasının yalnızca ilk iki oturumu (`091909` ve `093225`) kapsadığı; 3. ve 4. oturumların (`094939` ve `100102`) ise laboratuvar akışında sonradan alındığı tespit edilmiştir.
 > 3. Bu son iki oturumun gerçek fiziksel WAV dosyalarının SHA-256 değerlerinin ZIP içindeki `SHA256SUMS.txt`, oturum JSON dosyaları (`session_stimulus_4888e670.json` ve `session_stimulus_4e58ac08.json`) ve orkestratör durum dosyası (`wednesday_20261118_state.json`) ile tam olarak uyuşan **`733de8fdd1f722a7a6be9e17d354261561da53852d9aa5a6c691cd9503c3c857`** ve **`26c78582df26bcd209c1f051f09aca19c8462b9fc7067cd30a0a59eba57faa33`** olduğu kanıtlanmıştır.
 > 4. Dolayısıyla PR dalında `RETURN_EVIDENCE_SUMMARY.json` ve `PHYSICAL_G2_ACCEPTANCE_REPORT.md` dosyalarındaki hatalı değerler düzeltilmiş olup, düzeltilmiş gerçek SHA değerleri korunmaktadır.
 
