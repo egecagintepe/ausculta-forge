@@ -163,6 +163,89 @@ class TestIntegrityAndAntiFalsePassGuards:
         assert snr > 20.0  # ~26 dB
         assert status == "PASS"
         assert detail["status"] == "PASS"
+        assert "active_to_quiet_band_power_ratio_db" in detail
+
+    def test_quiet_baseline_zero_or_subnoise_is_inconclusive(self, tmp_path):
+        """Digital silence or sub-noise quiet baseline must return INCONCLUSIVE, never 60 dB."""
+        fs = 48000
+        dur_s = 5.0
+        n = int(dur_s * fs)
+        stim = (0.3 * np.sin(2 * np.pi * 50 * np.linspace(0, dur_s, n))).astype(np.float32)
+
+        # Silent quiet recording (all zeros)
+        quiet_file = tmp_path / "quiet_silent.wav"
+        wavfile.write(quiet_file, fs, np.zeros(n, dtype=np.int16))
+
+        snr, status, detail = evaluate_quiet_baseline_snr(
+            stimulus_capture=stim,
+            quiet_path=quiet_file,
+            sample_rate_hz=fs,
+        )
+        assert snr is None
+        assert status == "INCONCLUSIVE_QUIET_ZERO_OR_INVALID"
+        assert detail["status"] == "INCONCLUSIVE"
+
+    def test_reject_copied_content_hash_as_capture(self, tmp_path):
+        """Even with a different filename, matching SHA-256 of stimulus/reference must be rejected."""
+        ref_path = ROOT / "data/raw/week6_real_pcg_20261026/circor/40058_AV.wav"
+        if not ref_path.is_file():
+            pytest.skip("Reference PCG file not found.")
+
+        # Copy reference under an innocent-sounding name
+        copied_wav = tmp_path / "actual_physical_capture_20261125.wav"
+        copied_wav.write_bytes(ref_path.read_bytes())
+
+        out_dir = tmp_path / "phantom_run_hash_reject"
+        with pytest.raises(RuntimeError, match="CRITICAL_INTEGRITY_VIOLATION.*identical"):
+            execute_phantom_pcg_experiment(
+                reference_wav_path=ref_path,
+                output_dir=out_dir,
+                captured_wav_path=copied_wav,
+            )
+
+    def test_s1_s2_one_to_one_matching_prevents_peak_reuse(self):
+        """One single captured peak cannot be reused to match multiple reference peaks."""
+        fs = 48000
+        dur_s = 5.0
+        n = int(dur_s * fs)
+        t = np.linspace(0, dur_s, n, endpoint=False)
+
+        # Reference has 5 regular beats at 1.0, 1.8, 2.6, 3.4, 4.2 s
+        ref = np.zeros(n, dtype=np.float32)
+        for burst_t in [1.0, 1.8, 2.6, 3.4, 4.2]:
+            idx = int(burst_t * fs)
+            ref[idx:idx + int(0.08 * fs)] = 0.8 * np.sin(2 * np.pi * 50 * t[:int(0.08 * fs)])
+
+        # Case 1: Capture has only ONE peak at 1.0 s, then silence (fails on peak count or match)
+        cap = np.zeros(n, dtype=np.float32)
+        idx1 = int(1.0 * fs)
+        cap[idx1:idx1 + int(0.08 * fs)] = 0.8 * np.sin(2 * np.pi * 50 * t[:int(0.08 * fs)])
+
+        matched, status, detail = verify_s1_s2_morphological_correspondence(
+            ref_signal=ref,
+            cap_signal=cap,
+            sample_rate_hz=fs,
+            delay_ms=0.0,
+        )
+        assert matched is False
+        assert "INSUFFICIENT" in status or "MISMATCH" in status or "LOW_PEAK_MATCH" in status
+        assert detail["matched_peak_count"] <= 1  # Cannot reuse the single peak 5 times!
+
+        # Case 2: Capture has 5 peaks (spaced by >=0.3s so each is detected), but only ONE aligns with reference (at 1.0s).
+        # Other 4 are at 1.3, 1.6, 2.0, 2.3s (all >80ms away from ref peaks at 1.8, 2.6, 3.4, 4.2s)
+        cap5 = np.zeros(n, dtype=np.float32)
+        for burst_t in [1.0, 1.3, 1.6, 2.0, 2.3]:
+            idx = int(burst_t * fs)
+            cap5[idx:idx + int(0.08 * fs)] = 0.8 * np.sin(2 * np.pi * 50 * t[:int(0.08 * fs)])
+
+        matched5, status5, detail5 = verify_s1_s2_morphological_correspondence(
+            ref_signal=ref,
+            cap_signal=cap5,
+            sample_rate_hz=fs,
+            delay_ms=0.0,
+        )
+        assert matched5 is False
+        assert detail5["matched_peak_count"] == 1  # Exactly 1 match, others not falsely paired with 1.8, 2.6, etc.
 
     def test_simulated_experiment_run(self, tmp_path):
         """Simulated trial verifies software pipeline while strictly marking PHYSICAL_PENDING."""

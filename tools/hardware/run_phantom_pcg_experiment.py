@@ -91,6 +91,13 @@ class PlaybackController:
         if self.playback_error:
             raise RuntimeError(f"AUDIO_PLAYBACK_INITIALIZATION_FAILED: {self.playback_error}")
 
+    def stop(self) -> None:
+        try:
+            import winsound
+            winsound.PlaySound(None, winsound.SND_PURGE)
+        except Exception:
+            pass
+
 
 def compute_shannon_envelope(
     signal: np.ndarray,
@@ -164,6 +171,9 @@ def verify_s1_s2_morphological_correspondence(
         return False, f"INCONCLUSIVE_FLAT_ENVELOPE (contrast {env_contrast:.2f} < 2.0, lacks distinct S1/S2 bursts)", {
             "ref_peak_count": len(ref_peaks),
             "cap_peak_count": len(cap_peaks),
+            "matched_peak_count": 0,
+            "matched_fraction": 0.0,
+            "timing_errors_ms": [],
             "envelope_contrast": round(env_contrast, 2),
             "reason": "Captured envelope is relatively flat; characteristic of continuous noise rather than pulsed heart sounds.",
         }
@@ -172,6 +182,9 @@ def verify_s1_s2_morphological_correspondence(
         return False, "INCONCLUSIVE_INSUFFICIENT_REFERENCE_PEAKS", {
             "ref_peak_count": len(ref_peaks),
             "cap_peak_count": len(cap_peaks),
+            "matched_peak_count": 0,
+            "matched_fraction": 0.0,
+            "timing_errors_ms": [],
             "reason": "Reference signal has fewer than 4 identifiable heart sound complexes.",
         }
 
@@ -179,6 +192,9 @@ def verify_s1_s2_morphological_correspondence(
         return False, "INCONCLUSIVE_INSUFFICIENT_CAPTURED_PEAKS", {
             "ref_peak_count": len(ref_peaks),
             "cap_peak_count": len(cap_peaks),
+            "matched_peak_count": 0,
+            "matched_fraction": 0.0,
+            "timing_errors_ms": [],
             "reason": "Captured signal has fewer than 4 identifiable heart sound complexes.",
         }
 
@@ -188,41 +204,53 @@ def verify_s1_s2_morphological_correspondence(
         return False, f"INCONCLUSIVE_PEAK_COUNT_MISMATCH (captured {len(cap_peaks)} vs ref {len(ref_peaks)})", {
             "ref_peak_count": len(ref_peaks),
             "cap_peak_count": len(cap_peaks),
+            "matched_peak_count": 0,
+            "matched_fraction": 0.0,
+            "timing_errors_ms": [],
             "peak_ratio": round(peak_ratio, 2),
             "reason": "Number of detected peaks differs significantly from reference heart sound complexes.",
         }
 
-    # For each reference peak, look for corresponding captured peak within match_tolerance_ms
+    # For each reference peak, look for corresponding captured peak within match_tolerance_ms (one-to-one, order-preserving)
     delay_s = delay_ms / 1000.0
     tol_s = match_tolerance_ms / 1000.0
-    cap_times = np.array([p["time_s"] for p in cap_peaks], dtype=np.float64)
 
     matched_pairs: list[dict[str, Any]] = []
     timing_errors_ms: list[float] = []
+    matched_cap_indices: set[int] = set()
 
     for rp in ref_peaks:
         expected_t = rp["time_s"] + delay_s
-        diffs = np.abs(cap_times - expected_t)
-        best_idx = int(np.argmin(diffs))
-        best_diff = float(diffs[best_idx])
+        best_idx: Optional[int] = None
+        best_diff: float = float("inf")
 
-        if best_diff <= tol_s:
-            err_ms = round(best_diff * 1000.0, 2)
-            timing_errors_ms.append(err_ms)
+        for i, cp in enumerate(cap_peaks):
+            if i in matched_cap_indices:
+                continue
+            diff = abs(cp["time_s"] - expected_t)
+            if diff < best_diff:
+                best_diff = diff
+                best_idx = i
+
+        if best_idx is not None and best_diff <= tol_s:
+            matched_cap_indices.add(best_idx)
+            signed_err_ms = round((cap_peaks[best_idx]["time_s"] - expected_t) * 1000.0, 2)
+            timing_errors_ms.append(abs(signed_err_ms))
             matched_pairs.append({
                 "ref_time_s": rp["time_s"],
                 "expected_cap_time_s": round(expected_t, 4),
                 "actual_cap_time_s": cap_peaks[best_idx]["time_s"],
-                "timing_error_ms": err_ms,
+                "timing_error_ms": signed_err_ms,
             })
 
     matched_fraction = float(len(matched_pairs) / len(ref_peaks))
     mean_jitter_ms = float(np.mean(timing_errors_ms)) if timing_errors_ms else 999.0
 
-    # Calculate average inter-peak interval for captured peaks
+    # Calculate cadence: cardiac cycle (S1-to-S1) spans two consecutive envelope peaks (S1 and S2)
     cap_intervals = np.diff([p["time_s"] for p in cap_peaks]) if len(cap_peaks) > 1 else np.array([])
     mean_cap_period = float(np.mean(cap_intervals)) if len(cap_intervals) > 0 else 0.0
-    est_hr_bpm = float(60.0 / mean_cap_period) if mean_cap_period > 0.1 else 0.0
+    est_cycle_s = float(2.0 * mean_cap_period) if mean_cap_period > 0.1 else 0.0
+    est_hr_bpm = float(60.0 / est_cycle_s) if est_cycle_s > 0.3 else 0.0
 
     is_matched = (
         matched_fraction >= min_match_fraction
@@ -239,8 +267,10 @@ def verify_s1_s2_morphological_correspondence(
         "min_required_fraction": min_match_fraction,
         "mean_timing_jitter_ms": round(mean_jitter_ms, 2),
         "max_allowed_jitter_ms": max_mean_timing_jitter_ms,
-        "captured_mean_interval_s": round(mean_cap_period, 4),
+        "mean_inter_peak_interval_s": round(mean_cap_period, 4),
+        "estimated_cardiac_cycle_s": round(est_cycle_s, 4),
         "estimated_heart_rate_bpm": round(est_hr_bpm, 1),
+        "cardiac_cadence_note": "Heart rate estimated assuming 2 envelope peaks per cardiac cycle (S1 and S2). Exact S1/S2 phase assignment requires ECG or clinical ground-truth timing.",
         "matched_pairs": matched_pairs[:8],  # First 8 for provenance
     }
 
@@ -374,24 +404,46 @@ def evaluate_quiet_baseline_snr(
     stim_rms = float(rms(stim_win))
     quiet_rms = float(rms(quiet_win))
 
-    if quiet_rms < 1e-12:
-        snr_val = 60.0
-    else:
-        snr_val = float(20.0 * np.log10(stim_rms / quiet_rms))
+    if not np.isfinite(stim_rms) or stim_rms <= 1e-12:
+        return None, "INCONCLUSIVE_STIMULUS_ZERO_OR_INVALID", {
+            "quiet_file": str(p),
+            "stimulus_band_rms": round(stim_rms, 6),
+            "quiet_band_rms": round(quiet_rms, 6),
+            "reason": "Stimulus capture has zero, sub-noise, or non-finite RMS (< 1e-12 FS); invalid/silent recording.",
+            "status": "INCONCLUSIVE",
+        }
 
-    snr_val = round(snr_val, 2)
-    is_pass = bool(snr_val >= 12.0)
-    status = "PASS" if is_pass else f"INCONCLUSIVE_LOW_SNR ({snr_val:.1f} dB < 12.0 dB)"
+    if not np.isfinite(quiet_rms) or quiet_rms <= 1e-12:
+        return None, "INCONCLUSIVE_QUIET_ZERO_OR_INVALID", {
+            "quiet_file": str(p),
+            "stimulus_band_rms": round(stim_rms, 6),
+            "quiet_band_rms": round(quiet_rms, 6),
+            "reason": "Quiet baseline recording has zero, sub-noise, or non-finite RMS (< 1e-12 FS); unphysical or disconnected microphone.",
+            "status": "INCONCLUSIVE",
+        }
+
+    power_ratio_db = round(float(20.0 * np.log10(stim_rms / quiet_rms)), 2)
+    sig_only_snr_db = (
+        round(float(10.0 * np.log10((stim_rms**2 - quiet_rms**2) / (quiet_rms**2))), 2)
+        if stim_rms > quiet_rms
+        else None
+    )
+
+    is_pass = bool(power_ratio_db >= 12.0)
+    status = "PASS" if is_pass else f"INCONCLUSIVE_LOW_SNR ({power_ratio_db:.1f} dB < 12.0 dB)"
 
     detail = {
         "quiet_file": str(p),
         "stimulus_band_rms": round(stim_rms, 6),
         "quiet_band_rms": round(quiet_rms, 6),
-        "snr_20_500hz_db": snr_val,
+        "active_to_quiet_band_power_ratio_db": power_ratio_db,
+        "snr_20_500hz_db": power_ratio_db,
+        "signal_only_snr_db": sig_only_snr_db,
         "min_required_snr_db": 12.0,
         "status": status,
+        "metric_definition": "active_to_quiet_band_power_ratio_db = 10*log10(Pa/Pq) = 20*log10(RMSa/RMSq) in 20-500 Hz cardiac band. Not absolute sound pressure level.",
     }
-    return snr_val, status, detail
+    return power_ratio_db, status, detail
 
 
 def execute_phantom_pcg_experiment(
@@ -513,10 +565,20 @@ def execute_phantom_pcg_experiment(
             raise FileNotFoundError(f"Captured WAV not found: {p_cap}")
 
         # CRITICAL INTEGRITY CHECK: Reject if user passed reference or stimulus as capture
-        if p_cap == reference_wav_path.resolve() or p_cap == stimulus_wav_path.resolve():
+        cap_bytes = p_cap.read_bytes()
+        cap_sha256 = hashlib.sha256(cap_bytes).hexdigest()
+        stim_sha256 = hashlib.sha256(stimulus_wav_path.read_bytes()).hexdigest()
+        ref_sha256 = hashlib.sha256(reference_wav_path.read_bytes()).hexdigest()
+
+        if (
+            p_cap == reference_wav_path.resolve()
+            or p_cap == stimulus_wav_path.resolve()
+            or cap_sha256 == stim_sha256
+            or cap_sha256 == ref_sha256
+        ):
             raise RuntimeError(
-                f"CRITICAL_INTEGRITY_VIOLATION: Captured file ({p_cap.name}) is identical to reference/stimulus. "
-                "Refusing self-validation."
+                f"CRITICAL_INTEGRITY_VIOLATION: Captured file ({p_cap.name}, SHA256: {cap_sha256[:12]}...) "
+                "is identical to reference or stimulus by file path or SHA-256 digest! Refusing self-validation."
             )
 
         cap_fs, cap_data = wavfile.read(p_cap)
@@ -576,23 +638,31 @@ def execute_phantom_pcg_experiment(
             print("      [WARN] Audio routing not explicitly certified (--verify-audio-routing).")
 
         if play_audio:
-            print("      Initializing synchronized audio playback to PAM8403...")
+            print("      Preparing synchronized audio playback to PAM8403...")
             playback_controller = PlaybackController(stimulus_wav_path)
-            playback_controller.start()
-            playback_status = "PLAYING"
-            time.sleep(0.05)
+
+        def _on_capture_started():
+            if playback_controller:
+                playback_controller.start()
 
         print(f"      Streaming {target_samples} samples from ESP32-S3 over USB CDC...")
-        session_result = record_g2_session(
-            root=ROOT,
-            port=port,
-            role="pcg_phantom_stimulus",
-            target_samples=target_samples,
-            capture_timeout_s=25.0,
-            sessions_dir=run_dir,
-        )
+        try:
+            session_result = record_g2_session(
+                root=ROOT,
+                port=port,
+                role="pcg_phantom_stimulus",
+                target_samples=target_samples,
+                capture_timeout_s=25.0,
+                sessions_dir=run_dir,
+                on_capture_started=_on_capture_started if play_audio else None,
+            )
+        except Exception as cap_err:
+            if playback_controller:
+                playback_controller.stop()
+            raise cap_err
 
         if playback_controller:
+            playback_controller.completed_event.wait(timeout=2.0)
             if playback_controller.playback_error:
                 playback_status = f"FAILED: {playback_controller.playback_error}"
                 raise RuntimeError(f"AUDIO_PLAYBACK_ABORTED: {playback_controller.playback_error}")
@@ -661,24 +731,33 @@ def execute_phantom_pcg_experiment(
 
     telemetry_valid = bool(fw_telem is not None and dropped_frames is not None and crc_failures is not None)
     
-    # Assess firmware sample drops (256 post-target drain is expected, in-stream drops must be 0)
-    fw_drops = fw_telem.get("dropped_samples", 0) if fw_telem else 0
-    in_stream_loss = bool(dropped_frames and dropped_frames > 0)
-    crc_errors_present = bool(crc_failures and crc_failures > 0)
-    excessive_fw_drops = bool(fw_drops > 256)
+    # Assess firmware sample drops: only proven post-target drain (256 samples) allowed
+    in_stream_fw_drops = capture_meta.get("in_stream_dropped_samples")
+    if in_stream_fw_drops is None:
+        fw_drops = int(fw_telem.get("dropped_samples", 0)) if fw_telem else 0
+        if fw_drops == 256 and (not dropped_frames) and (not crc_failures):
+            in_stream_fw_drops = 0
+            post_drain = 256
+        else:
+            in_stream_fw_drops = fw_drops
+            post_drain = 0
+    else:
+        post_drain = int(capture_meta.get("post_target_drained_samples", 0))
 
-    gate_data_integrity = telemetry_valid and (not in_stream_loss) and (not crc_errors_present) and (not excessive_fw_drops)
+    in_stream_loss = bool((dropped_frames and dropped_frames > 0) or in_stream_fw_drops > 0)
+    crc_errors_present = bool(crc_failures and crc_failures > 0)
+
+    gate_data_integrity = telemetry_valid and (not in_stream_loss) and (not crc_errors_present)
 
     if not telemetry_valid:
         data_integrity_status = "INCONCLUSIVE_MISSING_TELEMETRY"
-    elif in_stream_loss:
+    elif dropped_frames and dropped_frames > 0:
         data_integrity_status = f"FAILED_SEQUENCE_GAPS ({dropped_frames} frames dropped)"
     elif crc_errors_present:
         data_integrity_status = f"FAILED_CRC_FAILURES ({crc_failures} packets corrupt)"
-    elif excessive_fw_drops:
-        data_integrity_status = f"FAILED_FIRMWARE_DROPS ({fw_drops} > 256 samples)"
+    elif in_stream_fw_drops > 0:
+        data_integrity_status = f"FAILED_FIRMWARE_DROPS ({in_stream_fw_drops} in-stream samples lost)"
     else:
-        post_drain = 256 if fw_drops == 256 else 0
         data_integrity_status = f"PASS (0 in-stream drops, 0 CRC errors, post_target_drain={post_drain})"
 
     gate_clipping = bool(near_clip_frac < 0.0005 and cap_peak < 0.99)
@@ -719,11 +798,13 @@ def execute_phantom_pcg_experiment(
 
     # 6. S1/S2 Morphological Envelope & Rhythm Verification
     print("\n[6/6] Verifying S1/S2 heart sound morphological correspondence...")
+    # filt_ref and filt_cap are already mutual-delay aligned by estimate_phantom_alignment.
+    # Pass delay_ms=0.0 to prevent coordinate double-shifting.
     gate_s1s2, s1s2_status, s1s2_detail = verify_s1_s2_morphological_correspondence(
         ref_signal=filt_ref,
         cap_signal=filt_cap,
         sample_rate_hz=target_sample_rate_hz,
-        delay_ms=alignment_res.estimated_delay_ms,
+        delay_ms=0.0,
     )
 
     # Playback Gate Check
