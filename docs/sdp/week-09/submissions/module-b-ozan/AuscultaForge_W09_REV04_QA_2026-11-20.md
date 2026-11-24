@@ -1,19 +1,19 @@
 > [!NOTE]
 > **Tarihsel Belge Koruma ve Entegrasyon Notu (Historical Record & Integration Notice):**  
 > Bu belge, 20 Kasım 2026 tarihinde Ozan (Modül B) tarafından hazırlanan **REV04 / 04-QA nihai yerel inceleme ve denetim raporudur**.  
-> Belgedeki *"GitHub'a commit/push yapılmadı"* ifadesi, yerel hazırlık anındaki tarihsel durumu yansıtmakta olup; bu belge PR #36 (`feature/rev04-evidence-integration`) dalına kanonik kaynak olarak dahil edilmiştir.  
+> Belgedeki *"GitHub'a commit/push yapılmadı"* ve *"GitHub hedef yolu docs/sdp/week-09/submissions/module-b-ozan/"* ifadeleri yerel hazırlık anındaki tarihsel durumu yansıtmakta olup; bu belge PR #36 (`feature/rev04-evidence-integration`) dalına kanonik kaynak olarak dahil edilmiş ve `main` ile uzlaştırılmıştır.  
 > Aşağıda yer alan *"Kapanmamış GitHub WAV SHA-256 uyumsuzluğu"* bölümündeki gözlem, belgenin yazıldığı sırada `origin/main` üzerinde açık olan durumu belgelemektedir. Bu uyumsuzluk, PR #36 dalında ikinci laboratuvar ZIP'i (`100114Z.zip`, 148/148 `SHA256SUMS.txt` tam eşleşme), oturum JSON kanıtları ve orkestratör durum dosyasıyla doğrulanarak çözümlenmiştir (ayrıntılar için ilgili bölüm altındaki Entegrasyon Notuna bakınız). Düzeltilmiş SHA değerleri korunmaktadır.
 
 # AuscultaForge — REV04 / Week 09 QA Düzeltme ve Açık Kanıt Raporu
 
 **Tarih:** 20 Kasım 2026 — Week 09 (16–22 Kasım 2026)  
-**Durum:** Kullanıcı incelemesi için düzeltilmiş yerel taslaklar. **GitHub'a commit/push yapılmadı.**
+**Durum:** 20 Kasım 2026 itibarıyla son QA onaylı yayın paketi; hedef GitHub yolu `docs/sdp/week-09/submissions/module-b-ozan/`.
 
 ## Güncel dosyalar (tek geçerli QA seti)
 
 1. **Excel:** `W09_B_procurement-bom-test_REV04_2026-11-20.xlsx` — **17 sekme**.
 2. **Word:** `W09_B_system-design-technical-specification_REV04_2026-11-20.docx` — **38 sayfa** (görüntüleme testi).
-3. **Bu rapor:** `AuscultaForge_W09_REV04_QA_2026-11-20.md`.
+3. **QA raporu:** `AuscultaForge_W09_REV04_QA_2026-11-20.md`.
 
 Güncel dosyalar `W09_B_` önekiyle adlandırılmıştır; `REV04` yalnız belge sürümüdür. Tarihsel Week 04 / Rev03 içerikleri korunmuştur. `REV03` tarihli kayıtlar yalnız önceki tasarım/sipariş kararlarının **tarihsel kanıtı** olarak tutulmuştur. `REV04-W09-QA` küçük uyum düzeltmesidir; yeni laboratuvar deneyi gerçekleştirildiğini iddia etmez.
 
@@ -70,9 +70,9 @@ Yerel laboratuvar ZIP içindeki listelenmiş **148/148** dosya SHA-256 kontrolü
 
 ## QA kontrolleri ve teslim sınırı
 
-- Excel **17 sekme**; `Sipariş_Kayıt!G18=35,35`, `G19=90`, `Gerçek_Sipariş_Rev04!D17=4.246,21`, `D18=4.156,21`, `Test_Matrisi!I14` ile `W09_Durum!D14` uyumlu.
+- Excel **17 sekme ve 57 formül**; `Sipariş_Kayıt!G18=35,35`, `G19=90`, `Gerçek_Sipariş_Rev04!D17=4.246,21`, `D18=4.156,21`, `Test_Matrisi!I14` ile `W09_Durum!D14` uyumlu. 20 Kasım son kontrolünde `Test_Matrisi!I8/I10/I16/I17` de Week 8'den sarkan ve yalnız kısa akışla kısmen doğrulanan deneyleri açıkça belirtir.
 - XLSX yeniden içe alınıp ana aralıklar incelendi; `#REF!`, `#DIV/0!`, `#VALUE!`, `#NAME?`, `#N/A`, `#NUM!` aramasında hücre eşleşmesi bulunmadı.
 - Word yeniden PDF/PNG olarak çizdirildi; **38 sayfa** üretildi. İçindekiler, revizyon tablosu, Böl.13/17, Ek B/D ve son Ek F.5–F.6 bölümleri görsel kontrol edildi. Ek F yeni içeriktir; geçmiş sayfaların yerleşimi mümkün olduğunca korundu.
-- İki dosya da **GitHub'a yüklenmemiştir**. Kullanıcı incelemesi tamamlanmadan repo durumu değiştirilmeyecektir.
+- GitHub Week 09 yayın hedefi: `docs/sdp/week-09/submissions/module-b-ozan/`. Yayınlanan commit/PR bilgisi bu statik QA notundan ayrı doğrulanacaktır.
 
 **Onay öncesi dört açık teyit:** 7×9 cm plaketlerin nihai fiyat/dekontu, Galena/RTV-2 gerçek ödeme ve teslim bilgileri, fiziksel fantom montaj/PCG testi, GitHub son iki WAV hash uzlaşması. Bu kanıtlar gelmedikçe `ALINDIĞI BİLDİRİLDİ` / `PENDING` notları bilinçli olarak korunur.
