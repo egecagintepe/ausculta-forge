@@ -32,6 +32,7 @@ import sys
 import threading
 import time
 from typing import Any, Optional, Tuple
+import uuid
 
 import numpy as np
 import scipy.signal
@@ -58,13 +59,15 @@ except ImportError as exc:
 
 
 class PlaybackController:
-    """Thread-safe Windows audio player with active error tracking."""
+    """Thread-safe Windows audio player with active error, abort, and timeout tracking."""
 
     def __init__(self, wav_path: Path):
         self.wav_path = wav_path
         self.started_event = threading.Event()
         self.completed_event = threading.Event()
         self.playback_error: Optional[str] = None
+        self.stop_error: Optional[str] = None
+        self.aborted: bool = False
         self.start_timestamp: Optional[float] = None
         self.end_timestamp: Optional[float] = None
         self.thread: Optional[threading.Thread] = None
@@ -76,7 +79,8 @@ class PlaybackController:
                 self.start_timestamp = time.monotonic()
                 self.started_event.set()
                 winsound.PlaySound(str(self.wav_path), winsound.SND_FILENAME)
-                self.end_timestamp = time.monotonic()
+                if not self.aborted:
+                    self.end_timestamp = time.monotonic()
             except Exception as e:
                 self.playback_error = str(e)
                 self.started_event.set()
@@ -92,11 +96,154 @@ class PlaybackController:
             raise RuntimeError(f"AUDIO_PLAYBACK_INITIALIZATION_FAILED: {self.playback_error}")
 
     def stop(self) -> None:
+        self.aborted = True
         try:
             import winsound
             winsound.PlaySound(None, winsound.SND_PURGE)
+        except Exception as exc:
+            self.stop_error = str(exc)
+
+
+def discover_usb_cdc_ports() -> list[dict[str, Any]]:
+    """Discover available serial ports and flag Espressif USB CDC devices (VID 0x303A)."""
+    try:
+        import serial.tools.list_ports
+    except ImportError as exc:
+        raise RuntimeError(f"pyserial not available: {exc}") from exc
+
+    ports = []
+    for p in serial.tools.list_ports.comports():
+        is_espressif = (p.vid == 0x303A) or ("espressif" in (p.manufacturer or "").lower()) or ("jtag" in (p.description or "").lower())
+        ports.append({
+            "device": p.device,
+            "description": p.description,
+            "manufacturer": p.manufacturer,
+            "vid": hex(p.vid) if p.vid is not None else None,
+            "pid": hex(p.pid) if p.pid is not None else None,
+            "is_espressif_usb_cdc": bool(is_espressif),
+        })
+    return ports
+
+
+def play_calibration_tone(duration_s: float = 3.0, freq_hz: float = 120.0, gain_dbfs: float = -18.0) -> dict[str, Any]:
+    """Play a safe, low-volume calibration tone through default PC audio output."""
+    import tempfile
+    import winsound
+
+    fs = 48000
+    n = int(duration_s * fs)
+    t = np.linspace(0.0, duration_s, n, endpoint=False, dtype=np.float32)
+    amp = 10.0 ** (gain_dbfs / 20.0)
+    tone = amp * (0.7 * np.sin(2.0 * np.pi * freq_hz * t) + 0.3 * np.sin(2.0 * np.pi * (2.0 * freq_hz) * t))
+    fade = min(int(0.05 * fs), n // 4)
+    if fade > 0:
+        tone[:fade] *= np.linspace(0.0, 1.0, fade, dtype=np.float32)
+        tone[-fade:] *= np.linspace(1.0, 0.0, fade, dtype=np.float32)
+
+    pcm16 = (np.clip(tone, -1.0, 1.0) * 32767.0).astype(np.int16)
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
+        tmp_path = Path(tf.name)
+    try:
+        wavfile.write(tmp_path, fs, pcm16)
+        winsound.PlaySound(str(tmp_path), winsound.SND_FILENAME)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    return {
+        "status": "CALIBRATION_TONE_PLAYED",
+        "duration_s": duration_s,
+        "freq_hz": freq_hz,
+        "gain_dbfs": gain_dbfs,
+        "note": "Operator must physically confirm PAM8403 and exciter audible/tactile response using --verify-audio-routing on the stimulus run.",
+    }
+
+
+def _append_trial_index(output_dir: Path, report: dict[str, Any]) -> None:
+    """Maintain a chronological index of all phantom trials (including failed/inconclusive)."""
+    index_json = output_dir / "TRIAL_INDEX.json"
+    index_md = output_dir / "TRIAL_INDEX.md"
+    entries: list[dict[str, Any]] = []
+    if index_json.is_file():
+        try:
+            entries = json.loads(index_json.read_text(encoding="utf-8"))
+            if not isinstance(entries, list):
+                entries = []
         except Exception:
-            pass
+            entries = []
+
+    gates = report.get("gates") or {}
+    snr_detail = (gates.get("acoustic_snr") or {}).get("detail") or {}
+    s1s2_detail = (gates.get("s1_s2_morphology") or {}).get("detail") or {}
+    entries.append({
+        "trial_id": report.get("trial_id"),
+        "timestamp_utc": report.get("timestamp_utc"),
+        "operator": report.get("operator"),
+        "hardware_status": report.get("hardware_status"),
+        "gate_status": report.get("gate_status"),
+        "overall_pass": gates.get("overall_pass"),
+        "snr_db": snr_detail.get("active_to_quiet_band_power_ratio_db"),
+        "ncc": (gates.get("cross_correlation") or {}).get("ncc"),
+        "match_fraction": s1s2_detail.get("matched_fraction"),
+        "notes": report.get("notes"),
+        "report_dir": str(output_dir / str(report.get("trial_id"))),
+    })
+    index_json.write_text(json.dumps(entries, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    lines = [
+        "# AuscultaForge — Chronological Phantom Trial Index",
+        "",
+        "| Timestamp (UTC) | Trial ID | Mode | Gate Status | SNR (dB) | NCC | Peak Match | Notes |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for e in entries:
+        snr_s = f"{e['snr_db']:.1f}" if isinstance(e.get("snr_db"), (int, float)) else "N/A"
+        ncc_s = f"{e['ncc']:.3f}" if isinstance(e.get("ncc"), (int, float)) else "N/A"
+        mf_s = f"{e['match_fraction']*100:.1f}%" if isinstance(e.get("match_fraction"), (int, float)) else "N/A"
+        lines.append(
+            f"| {e.get('timestamp_utc')} | `{e.get('trial_id')}` | `{e.get('hardware_status')}` | **{e.get('gate_status')}** | {snr_s} | {ncc_s} | {mf_s} | {e.get('notes', '')} |"
+        )
+    index_md.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def run_quiet_baseline_session(
+    port: str,
+    output_dir: Path,
+    operator: str = "Kaan_Ozan_Ege",
+    notes: str = "Quiet baseline",
+    target_duration_s: float = 10.0,
+    target_sample_rate_hz: int = 48000,
+) -> dict[str, Any]:
+    """Acquire and verify a fresh 10s live INMP441 quiet baseline session."""
+    from pcg_app.wednesday_orchestrator import record_g2_session
+
+    target_samples = int(target_duration_s * target_sample_rate_hz)
+    sess_root = output_dir / "quiet_baselines"
+    sess_root.mkdir(parents=True, exist_ok=True)
+    res = record_g2_session(
+        root=ROOT,
+        port=port,
+        role="pcg_phantom_quiet",
+        target_samples=target_samples,
+        capture_timeout_s=target_duration_s + 15.0,
+        sessions_dir=sess_root,
+    )
+    raw_wav = Path(res["raw_wav_path"]).resolve()
+    sess_dir = Path(res["session_dir"]).resolve()
+    actual_sha = hashlib.sha256(raw_wav.read_bytes()).hexdigest()
+    if actual_sha != res.get("raw_wav_sha256"):
+        raise RuntimeError("CRITICAL_HASH_MISMATCH on quiet baseline WAV.")
+    return {
+        "status": "QUIET_BASELINE_VERIFIED",
+        "session_id": res["session_id"],
+        "session_json_path": str(sess_dir / "session.json"),
+        "raw_wav_path": str(raw_wav),
+        "raw_wav_sha256": actual_sha,
+        "samples": res["samples"],
+        "rms_fs": res["rms_fs"],
+        "peak_fs": res["peak_fs"],
+        "operator": operator,
+        "notes": notes,
+    }
 
 
 def compute_shannon_envelope(
@@ -463,7 +610,7 @@ def execute_phantom_pcg_experiment(
     """Execute complete reproducible acoustic phantom PCG feasibility trial."""
     now_utc = datetime.now(timezone.utc)
     timestamp_str = now_utc.strftime("%Y%m%d_%H%M%S")
-    trial_id = f"trial_{timestamp_str}"
+    trial_id = f"trial_{timestamp_str}_{uuid.uuid4().hex[:6]}"
     target_samples = int(target_duration_s * target_sample_rate_hz)
 
     run_dir = output_dir / trial_id
@@ -598,18 +745,40 @@ def execute_phantom_pcg_experiment(
         cap_wav_path = p_cap
         cap_sha256 = hashlib.sha256(p_cap.read_bytes()).hexdigest()
 
-        # Check if an accompanying session.json exists to verify provenance
+        # Check if an accompanying session.json exists and passes full cryptographic/telemetry provenance
         session_json_cand = p_cap.parent / "session.json"
         has_provenance = False
         provenance_detail: dict[str, Any] = {}
+        provenance_failure_reason = "No session.json found"
         if session_json_cand.is_file():
             try:
                 s_meta = json.loads(session_json_cand.read_text(encoding="utf-8"))
-                if s_meta.get("acquisition_mode") == "hardware" and s_meta.get("processing_profile", {}).get("source_mode") == 0:
+                sess_id = s_meta.get("session_id")
+                integrity = verify_session_integrity(sess_id, p_cap.parent.parent) if sess_id else {"is_valid": False}
+                hw_ok = (
+                    s_meta.get("acquisition_mode") == "hardware"
+                    and s_meta.get("processing_profile", {}).get("source_mode") == 0
+                )
+                hash_ok = (cap_sha256 == s_meta.get("raw_wav_sha256"))
+                fw_t = s_meta.get("firmware_telemetry") or {}
+                telem_ok = all(
+                    fw_t.get(k) is not None
+                    for k in ("generated_samples", "dropped_samples", "stop_reason")
+                ) and (
+                    (fw_t.get("dma_overflows") is not None and fw_t.get("ring_overflows") is not None)
+                    or (fw_t.get("dma_overflow_events") is not None and fw_t.get("ring_overflow_events") is not None)
+                )
+                dev_ok = bool(s_meta.get("device_id") or s_meta.get("hardware_identity"))
+                if integrity.get("is_valid") and hw_ok and hash_ok and telem_ok and dev_ok:
                     has_provenance = True
                     provenance_detail = s_meta
-            except Exception:
+                else:
+                    provenance_failure_reason = (
+                        f"integrity={integrity.get('is_valid')}, hw={hw_ok}, hash={hash_ok}, telem={telem_ok}, dev={dev_ok}"
+                    )
+            except Exception as exc:
                 has_provenance = False
+                provenance_failure_reason = f"Metadata parse error: {exc}"
 
         capture_meta = {
             "source": "OFFLINE_CAPTURE_WAV",
@@ -618,11 +787,12 @@ def execute_phantom_pcg_experiment(
             "raw_wav_sha256": cap_sha256,
             "original_fs": cap_fs,
             "has_provenance": has_provenance,
+            "provenance_failure_reason": None if has_provenance else provenance_failure_reason,
             "provenance": provenance_detail,
-            # In offline file mode without live engine, telemetry cannot be assumed 0
-            "dropped_frames": 0 if has_provenance else None,
-            "crc_failures": 0 if has_provenance else None,
-            "firmware_telemetry": provenance_detail.get("firmware_telemetry"),
+            # In offline file mode without verified provenance, telemetry cannot be assumed 0
+            "dropped_frames": provenance_detail.get("dropped_frames") if has_provenance else None,
+            "crc_failures": provenance_detail.get("crc_failures") if has_provenance else None,
+            "firmware_telemetry": provenance_detail.get("firmware_telemetry") if has_provenance else None,
         }
         is_physical = has_provenance
         hardware_status = "OFFLINE_PROVENANCED" if has_provenance else "OFFLINE_UNVERIFIED"
@@ -662,11 +832,16 @@ def execute_phantom_pcg_experiment(
             raise cap_err
 
         if playback_controller:
-            playback_controller.completed_event.wait(timeout=2.0)
-            if playback_controller.playback_error:
-                playback_status = f"FAILED: {playback_controller.playback_error}"
-                raise RuntimeError(f"AUDIO_PLAYBACK_ABORTED: {playback_controller.playback_error}")
-            playback_status = "COMPLETED"
+            completed = playback_controller.completed_event.wait(timeout=target_duration_s + 5.0)
+            if playback_controller.aborted:
+                playback_status = "FAILED_ABORTED"
+            elif playback_controller.playback_error:
+                playback_status = f"FAILED_ERROR: {playback_controller.playback_error}"
+            elif not completed or playback_controller.end_timestamp is None:
+                playback_controller.stop()
+                playback_status = "FAILED_TIMEOUT"
+            else:
+                playback_status = "COMPLETED"
 
         # STRICT RECORDING EXTRACTION: ONLY open through session_result["raw_wav_path"]
         raw_path_str = session_result.get("raw_wav_path")
@@ -724,44 +899,89 @@ def execute_phantom_pcg_experiment(
     cap_rms = float(rms(captured_samples))
     cap_peak = float(peak_abs(captured_samples))
 
-    # Evaluate data integrity & telemetry
+    # Evaluate data integrity & telemetry (NEVER default missing telemetry fields to 0)
     dropped_frames = capture_meta.get("dropped_frames")
     crc_failures = capture_meta.get("crc_failures")
     fw_telem = capture_meta.get("firmware_telemetry")
 
-    telemetry_valid = bool(fw_telem is not None and dropped_frames is not None and crc_failures is not None)
-    
-    # Assess firmware sample drops: only proven post-target drain (256 samples) allowed
-    in_stream_fw_drops = capture_meta.get("in_stream_dropped_samples")
-    if in_stream_fw_drops is None:
-        fw_drops = int(fw_telem.get("dropped_samples", 0)) if fw_telem else 0
-        if fw_drops == 256 and (not dropped_frames) and (not crc_failures):
-            in_stream_fw_drops = 0
-            post_drain = 256
+    fw_has_required = (
+        isinstance(fw_telem, dict)
+        and fw_telem.get("generated_samples") is not None
+        and fw_telem.get("dropped_samples") is not None
+        and fw_telem.get("stop_reason") is not None
+        and (
+            (fw_telem.get("dma_overflows") is not None and fw_telem.get("ring_overflows") is not None)
+            or (fw_telem.get("dma_overflow_events") is not None and fw_telem.get("ring_overflow_events") is not None)
+        )
+    )
+    telemetry_valid = bool(fw_has_required and dropped_frames is not None and crc_failures is not None)
+
+    fw_drops: Optional[int] = None
+    in_stream_fw_drops: Optional[int] = None
+    post_drain = 0
+    dma_ov = 0
+    ring_ov = 0
+
+    if telemetry_valid and isinstance(fw_telem, dict):
+        fw_drops = int(fw_telem["dropped_samples"])
+        fw_generated = int(fw_telem["generated_samples"])
+        dma_ov = int(fw_telem.get("dma_overflows") if fw_telem.get("dma_overflows") is not None else fw_telem["dma_overflow_events"])
+        ring_ov = int(fw_telem.get("ring_overflows") if fw_telem.get("ring_overflows") is not None else fw_telem["ring_overflow_events"])
+
+        explicit_in_stream = capture_meta.get("in_stream_dropped_samples")
+        if explicit_in_stream is not None:
+            in_stream_fw_drops = int(explicit_in_stream)
+            post_drain = int(capture_meta.get("post_target_drained_samples") or 0)
         else:
-            in_stream_fw_drops = fw_drops
-            post_drain = 0
-    else:
-        post_drain = int(capture_meta.get("post_target_drained_samples", 0))
+            is_proven_post_drain = (
+                len(captured_samples) >= target_samples
+                and int(dropped_frames) == 0
+                and int(crc_failures) == 0
+                and dma_ov == 0
+                and ring_ov == 0
+                and fw_drops == 256
+                and fw_generated >= target_samples + 256
+            )
+            if is_proven_post_drain:
+                in_stream_fw_drops = 0
+                post_drain = 256
+            else:
+                in_stream_fw_drops = fw_drops
+                post_drain = 0
 
-    in_stream_loss = bool((dropped_frames and dropped_frames > 0) or in_stream_fw_drops > 0)
-    crc_errors_present = bool(crc_failures and crc_failures > 0)
+    in_stream_loss = bool(
+        (dropped_frames is not None and int(dropped_frames) > 0)
+        or (in_stream_fw_drops is not None and in_stream_fw_drops > 0)
+        or dma_ov > 0
+        or ring_ov > 0
+    )
+    crc_errors_present = bool(crc_failures is not None and int(crc_failures) > 0)
 
-    gate_data_integrity = telemetry_valid and (not in_stream_loss) and (not crc_errors_present)
+    gate_data_integrity = telemetry_valid and (not in_stream_loss) and (not crc_errors_present) and (len(captured_samples) >= target_samples)
 
     if not telemetry_valid:
         data_integrity_status = "INCONCLUSIVE_MISSING_TELEMETRY"
-    elif dropped_frames and dropped_frames > 0:
+    elif len(captured_samples) < target_samples:
+        data_integrity_status = f"FAILED_INCOMPLETE_SAMPLES ({len(captured_samples)}/{target_samples})"
+    elif dropped_frames and int(dropped_frames) > 0:
         data_integrity_status = f"FAILED_SEQUENCE_GAPS ({dropped_frames} frames dropped)"
     elif crc_errors_present:
         data_integrity_status = f"FAILED_CRC_FAILURES ({crc_failures} packets corrupt)"
-    elif in_stream_fw_drops > 0:
+    elif dma_ov > 0 or ring_ov > 0:
+        data_integrity_status = f"FAILED_BUFFER_OVERFLOW (dma={dma_ov}, ring={ring_ov})"
+    elif in_stream_fw_drops and in_stream_fw_drops > 0:
         data_integrity_status = f"FAILED_FIRMWARE_DROPS ({in_stream_fw_drops} in-stream samples lost)"
     else:
         data_integrity_status = f"PASS (0 in-stream drops, 0 CRC errors, post_target_drain={post_drain})"
 
-    gate_clipping = bool(near_clip_frac < 0.0005 and cap_peak < 0.99)
-    clipping_status = "PASS" if gate_clipping else f"FAILED_CLIPPING (near_clipping={near_clip_frac*100:.3f}%, peak={cap_peak:.4f})"
+    is_silent_or_constant = bool(cap_rms <= 1e-6 or float(np.std(captured_samples)) <= 1e-6)
+    gate_clipping = bool((not is_silent_or_constant) and near_clip_frac < 0.0005 and cap_peak < 0.99)
+    if is_silent_or_constant:
+        clipping_status = "FAILED_SILENCE_OR_CONSTANT_SIGNAL"
+    elif gate_clipping:
+        clipping_status = "PASS"
+    else:
+        clipping_status = f"FAILED_CLIPPING (near_clipping={near_clip_frac*100:.3f}%, peak={cap_peak:.4f})"
 
     # 4. In-Band Acoustic SNR Evaluation (Strict Quiet Baseline Check)
     print("\n[4/6] Evaluating in-band acoustic SNR (20–500 Hz)...")
@@ -774,11 +994,11 @@ def execute_phantom_pcg_experiment(
 
     # 5. Bandpass Filtering & Time Alignment
     print("\n[5/6] Aligning source and captured signals via cross-correlation...")
-    aligned_ref, aligned_cap, alignment_res, latency_decomp = estimate_phantom_alignment(
+    aligned_ref, aligned_cap, alignment_res, _latency_decomp = estimate_phantom_alignment(
         reference=stim_samples,
         captured=captured_samples,
         sample_rate_hz=target_sample_rate_hz,
-        pipeline_buffer_delay_ms=25.0,
+        pipeline_buffer_delay_ms=0.0,
         target_band_hz=(20.0, 500.0),
     )
 
@@ -786,9 +1006,18 @@ def execute_phantom_pcg_experiment(
     filt_ref = scipy.signal.sosfiltfilt(sos_band, aligned_ref)
     filt_cap = scipy.signal.sosfiltfilt(sos_band, aligned_cap)
 
-    ncc = alignment_res.normalized_cross_correlation
-    gate_alignment = bool(ncc >= 0.35)
-    alignment_status = "PASS" if gate_alignment else f"FAILED_LOW_CORRELATION (NCC={ncc:.4f} < 0.35)"
+    min_required_overlap = int(0.5 * min(len(stim_samples), len(captured_samples)))
+    sufficient_overlap = bool(alignment_res.overlap_samples >= max(16, min_required_overlap))
+    ncc = alignment_res.normalized_cross_correlation if (not is_silent_or_constant and sufficient_overlap) else 0.0
+    gate_alignment = bool((not is_silent_or_constant) and sufficient_overlap and ncc >= 0.35)
+    if is_silent_or_constant:
+        alignment_status = "FAILED_SILENCE_OR_CONSTANT_SIGNAL"
+    elif not sufficient_overlap:
+        alignment_status = f"FAILED_INSUFFICIENT_OVERLAP ({alignment_res.overlap_samples} < {min_required_overlap} samples)"
+    elif not gate_alignment:
+        alignment_status = f"FAILED_LOW_CORRELATION (NCC={ncc:.4f} < 0.35)"
+    else:
+        alignment_status = "PASS"
 
     coherence_val = compute_coherence_pcg_band(
         filt_ref, filt_cap, sample_rate_hz=target_sample_rate_hz, band_hz=(20.0, 250.0)
@@ -896,8 +1125,13 @@ def execute_phantom_pcg_experiment(
         },
         "alignment_and_similarity": {
             "normalized_cross_correlation": round(ncc, 5),
-            "estimated_delay_ms": round(alignment_res.estimated_delay_ms, 3),
-            "estimated_delay_samples": alignment_res.estimated_delay_samples,
+            "estimated_recording_lag_ms": round(alignment_res.estimated_delay_ms, 3),
+            "estimated_recording_lag_samples": alignment_res.estimated_delay_samples,
+            "overlap_samples": alignment_res.overlap_samples,
+            "overlap_duration_s": round(alignment_res.overlap_duration_s, 3),
+            "is_hardware_synchronized": False,
+            "measured_end_to_end_latency_ms": None,
+            "latency_note": "estimated_recording_lag_ms reflects software/acoustic cross-correlation offset (not hardware-synchronized DAC-to-ADC end-to-end latency).",
             "least_squares_gain": round(alignment_res.least_squares_gain, 4),
             "rms_gain_ratio": round(alignment_res.rms_gain_ratio, 4),
             "mean_coherence_20_250hz": round(coherence_val, 4),
@@ -929,25 +1163,26 @@ def execute_phantom_pcg_experiment(
 | Ingest Route | `{cap_wav_path.name if cap_wav_path else 'None'}` | `record_g2_session["raw_wav_path"]` | {'PASS' if cap_wav_path else 'FAIL'} |
 | Packet Loss | `{dropped_frames} dropped frames` | Strictly 0 in-stream drops | {'PASS' if (dropped_frames == 0) else 'FAIL'} |
 | CRC Check | `{crc_failures} CRC failures` | Strictly 0 errors | {'PASS' if (crc_failures == 0) else 'FAIL'} |
-| FW Sample Drops | `{fw_drops} drops ({'post-target drain' if fw_drops == 256 else 'abnormal'})` | <= 256 post-target drain | {'PASS' if (fw_drops <= 256) else 'FAIL'} |
+| FW Sample Drops | `{f'{fw_drops} drops (post-target drain)' if (fw_drops == 256 and in_stream_fw_drops == 0) else (f'{fw_drops} drops (abnormal)' if fw_drops is not None else 'MISSING TELEMETRY')}` | <= 256 post-target drain | {'PASS' if (telemetry_valid and in_stream_fw_drops == 0) else 'FAIL'} |
 | Peak Amplitude | `{cap_peak:.4f} FS` | < 0.95 FS | {'PASS' if cap_peak < 0.95 else 'FAIL'} |
 | Near-Clipping Fraction | `{near_clip_frac * 100:.4f}%` | < 0.05% | {'PASS' if gate_clipping else 'FAIL'} |
 | Acoustic In-Band SNR | `{f'{snr_db:.1f} dB' if snr_db is not None else 'None (Missing Baseline)'}` | >= 12.0 dB in 20–500 Hz | {snr_status} |
 
 ## 2. Quantitative System Identification & Alignment
 
-- **Acoustic Channel Delay:** `{alignment_res.estimated_delay_ms:.3f} ms` ({alignment_res.estimated_delay_samples} samples)
+- **Estimated Recording Lag (Cross-Correlation):** `{alignment_res.estimated_delay_ms:.3f} ms` ({alignment_res.estimated_delay_samples} samples; not hardware-synchronized end-to-end latency)
+- **Overlap Window:** `{alignment_res.overlap_duration_s:.3f} s` ({alignment_res.overlap_samples} samples)
 - **Normalized Cross-Correlation (NCC):** **`{ncc:.5f}`** (Target: $\\ge 0.35$) → **{alignment_status}**
 - **Passband Coherence (20–250 Hz):** **`{coherence_val:.4f}`** (Target: $\\ge 0.40$) → **{coherence_status}**
 - **Signal-to-Error Ratio (SER):** `{alignment_res.signal_to_error_ratio_db:.2f} dB`
 
-## 3. S1/S2 Heart Sound Morphology & Rhythm Correspondence
+## 3. Envelope Burst Morphology & Rhythm Correspondence
 
-- **Reference Peaks Identified:** `{s1s2_detail.get('ref_peak_count', 0)}`
-- **Captured Peaks Identified:** `{s1s2_detail.get('cap_peak_count', 0)}`
+- **Reference Envelope Complexes Identified:** `{s1s2_detail.get('ref_peak_count', 0)}`
+- **Captured Envelope Complexes Identified:** `{s1s2_detail.get('cap_peak_count', 0)}`
 - **Peak Match Fraction:** **`{s1s2_detail.get('matched_fraction', 0.0) * 100:.1f}%`** (Target: $\\ge 70.0\\%$)
 - **Mean Timing Jitter:** **`{s1s2_detail.get('mean_timing_jitter_ms', 999.0):.1f} ms`** (Target: $\\le 45.0\\text{{ ms}}$)
-- **Estimated Heart Rate:** `{s1s2_detail.get('estimated_heart_rate_bpm', 0.0):.1f} bpm`
+- **Estimated Cadence (2 peaks/cycle assumption):** `{s1s2_detail.get('estimated_heart_rate_bpm', 0.0):.1f} bpm` *(Note: Generic Shannon-envelope bursts temporally matched to reference; independent S1 vs S2 valve labels require clinical/ECG ground truth.)*
 - **Morphology Gate Status:** **{s1s2_status}**
 
 ## 4. Academic Milestone & Gate Verification
@@ -962,6 +1197,7 @@ def execute_phantom_pcg_experiment(
 *Notice: {METROLOGICAL_DISCLAIMER_PHANTOM}*
 """
     report_md_path.write_text(md_content, encoding="utf-8")
+    _append_trial_index(output_dir, report)
 
     # Terminal Summary Banner
     print("\n" + "=" * 76)
@@ -989,9 +1225,24 @@ def main() -> int:
         description="AuscultaForge Automated Acoustic Phantom PCG Experiment Runner."
     )
     parser.add_argument(
+        "--discover-ports",
+        action="store_true",
+        help="List all serial ports and highlight Espressif USB CDC ports, then exit.",
+    )
+    parser.add_argument(
+        "--play-calibration-tone",
+        action="store_true",
+        help="Play a low-volume (-18 dBFS, 120 Hz) calibration tone to verify PC -> PAM8403 -> exciter routing, then exit.",
+    )
+    parser.add_argument(
+        "--quiet-baseline-only",
+        action="store_true",
+        help="Acquire and verify a 10s live INMP441 quiet baseline session on --port, then exit.",
+    )
+    parser.add_argument(
         "--port",
         default=None,
-        help="Espressif USB CDC COM port for live ESP32-S3 acquisition (must be dynamically discovered, e.g. COM3).",
+        help="Espressif USB CDC COM port for live ESP32-S3 acquisition (must be dynamically discovered, e.g. COM14).",
     )
     parser.add_argument(
         "--reference",
@@ -1045,6 +1296,29 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        if args.discover_ports:
+            ports = discover_usb_cdc_ports()
+            print(json.dumps({"ports": ports}, indent=2, ensure_ascii=False))
+            return 0
+
+        if args.play_calibration_tone:
+            res = play_calibration_tone()
+            print(json.dumps(res, indent=2, ensure_ascii=False))
+            return 0
+
+        if args.quiet_baseline_only:
+            if not args.port:
+                print("[ERROR] --quiet-baseline-only requires --port COMxx.", file=sys.stderr)
+                return 2
+            res = run_quiet_baseline_session(
+                port=args.port,
+                output_dir=args.output_dir,
+                operator=args.operator,
+                notes=args.notes or "Quiet baseline",
+            )
+            print(json.dumps(res, indent=2, ensure_ascii=False))
+            return 0
+
         report = execute_phantom_pcg_experiment(
             reference_wav_path=args.reference,
             output_dir=args.output_dir,

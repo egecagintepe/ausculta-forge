@@ -483,11 +483,12 @@ def record_g2_session(
                     on_capture_started()
                 except Exception as _cb_err:
                     get_flight_recorder().record(
-                        severity="WARN",
+                        severity="ERROR",
                         subsystem="G2_ACQUISITION",
                         event_type="ON_CAPTURE_STARTED_CALLBACK_ERROR",
                         message=f"on_capture_started callback raised: {_cb_err}",
                     )
+                    raise RuntimeError(f"ON_CAPTURE_STARTED_CALLBACK_FAILED: {_cb_err}") from _cb_err
         except Exception as exc:
             msg = str(exc)
             if "Unsupported source" in msg or "0x0002" in msg:
@@ -564,12 +565,20 @@ def record_g2_session(
 
     # Distinguish proven post-target DMA drain from in-stream data loss:
     # Firmware generates 256 samples beyond target (e.g. 480256) due to ring/DMA chunk boundaries.
-    # Exactly 256 dropped samples with 0 CRC errors, 0 frame sequence gaps, and 0 buffer overflows
-    # constitutes the verified post-target drain upon STOP boundary.
-    fw_dropped = int(telem_dict.get("dropped_samples", 0))
-    fw_generated = int(telem_dict.get("generated_samples", 0))
-    dma_overflows = int(telem_dict.get("dma_overflows", 0))
-    ring_overflows = int(telem_dict.get("ring_overflows", 0))
+    # Exactly 256 dropped samples with complete, consistent telemetry (0 CRC errors, 0 frame sequence gaps,
+    # 0 buffer overflows, and generated_samples >= target_samples + 256) constitutes proven post-target drain.
+    required_telem_keys = ("dropped_samples", "generated_samples", "dma_overflows", "ring_overflows")
+    if any(telem_dict.get(k) is None for k in required_telem_keys):
+        raise G2CaptureValidationError(
+            "G2_MISSING_FIRMWARE_TELEMETRY",
+            f"G2 {role} capture missing required firmware telemetry fields: {telem_dict}",
+            summary,
+        )
+
+    fw_dropped = int(telem_dict["dropped_samples"])
+    fw_generated = int(telem_dict["generated_samples"])
+    dma_overflows = int(telem_dict["dma_overflows"])
+    ring_overflows = int(telem_dict["ring_overflows"])
 
     is_proven_post_drain = (
         summary["samples"] >= target_samples
@@ -578,7 +587,7 @@ def record_g2_session(
         and dma_overflows == 0
         and ring_overflows == 0
         and fw_dropped == 256
-        and (fw_generated == 0 or fw_generated >= target_samples + 256)
+        and fw_generated >= target_samples + 256
     )
 
     if is_proven_post_drain:
