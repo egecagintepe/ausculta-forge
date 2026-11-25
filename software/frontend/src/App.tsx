@@ -13,7 +13,7 @@ import { DiagnosticsDrawer } from './components/DiagnosticsDrawer';
 import { ConfirmDiscardDialog, SaveAsDialog, ToastNotification, ToastInfo } from './components/Dialogs';
 import { audioEngine } from './audio/audioEngine';
 import { STARTER_SAMPLES, generateSyntheticHeartAudio } from './audio/samplesData';
-import { bridgeClient, SignalFrameData, DisplayFrameData, StreamStateData, RecordingStateData } from './api/bridgeClient';
+import { bridgeClient, SignalFrameData, DisplayFrameData, StreamStateData, RecordingStateData, LabCaptureCompleteData, LabExperimentType, LabDiagnosticMetrics } from './api/bridgeClient';
 import {
   NavigationDestination,
   AudioSourceType,
@@ -105,7 +105,13 @@ export default function App() {
   });
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordingElapsedSeconds, setRecordingElapsedSeconds] = useState<number>(0);
+  const [recordingSamples, setRecordingSamples] = useState<number>(0);
   const [recordingSessionId, setRecordingSessionId] = useState<string | null>(null);
+  const [labExperimentType, setLabExperimentType] = useState<LabExperimentType>('STETHOSCOPE_COUPLING_DIAGNOSTIC');
+  const [playReferenceP01, setPlayReferenceP01] = useState<boolean>(false);
+  const [labAckTimestampUtc, setLabAckTimestampUtc] = useState<string | null>(null);
+  const [labDiagnosticMetrics, setLabDiagnosticMetrics] = useState<LabDiagnosticMetrics | null>(null);
+  const [lastLabCapture, setLastLabCapture] = useState<LabCaptureCompleteData | null>(null);
   const [activeSourceName, setActiveSourceName] = useState<string>('None');
   const [spectralFrame, setSpectralFrame] = useState<SpectralFrameData | null>(null);
   useEffect(() => { setSpectralFrame(null); }, [sourceType, activeMetadata?.id]);
@@ -256,7 +262,59 @@ export default function App() {
         return rec.is_recording;
       });
       setRecordingElapsedSeconds(rec.elapsed_seconds);
+      setRecordingSamples(rec.samples_recorded);
       setRecordingSessionId(rec.session_id);
+    });
+
+    const unsubLabComplete = bridgeClient.onLabCaptureComplete(async (comp: LabCaptureCompleteData) => {
+      setLastLabCapture(comp);
+      setAnalysisTargetSessionId(comp.session_id);
+      if (comp.ack_timestamp_utc) {
+        setLabAckTimestampUtc(comp.ack_timestamp_utc);
+      }
+      addLog(
+        `Lab 10s capture complete [${comp.experiment_type}]: ${comp.samples_recorded}/${comp.target_samples} samples (${comp.termination_reason}, SHA: ${comp.raw_wav_sha256.slice(0, 10)}...)`,
+        comp.termination_reason === 'completed' ? 'info' : 'warning',
+        'LabCapture'
+      );
+      addToast(`Capture complete (${comp.experiment_type}): Loading WAV & metrics...`, 'success');
+      try {
+        const [blob, diagMetrics] = await Promise.all([
+          bridgeClient.getSessionWavBlob(comp.session_id),
+          bridgeClient.getLabDiagnosticMetrics(comp.session_id),
+        ]);
+        if (diagMetrics) {
+          setLabDiagnosticMetrics(diagMetrics);
+        }
+        if (blob) {
+          const file = new File([blob], `${comp.session_id}.wav`, { type: 'audio/wav' });
+          const decoded = await audioEngine.decodeUserFile(file);
+          currentSourceTypeRef.current = 'file';
+          setCurrentLocalFile(file);
+          setRawData(decoded.raw);
+          setFilteredData(decoded.filtered);
+          setSampleRate(decoded.sampleRate);
+          setDuration(decoded.duration);
+          setCurrentTime(0);
+          setIsPlaying(false);
+          setActiveSourceName(`${comp.experiment_type}: ${comp.session_id}`);
+          setSourceType('file');
+          setActiveMetadata({
+            id: comp.session_id,
+            title: `${comp.experiment_type} (${comp.port})`,
+            filename: `${comp.session_id}.wav`,
+            category: comp.is_simulated ? 'Software Simulation' : comp.experiment_type,
+            durationSeconds: decoded.duration,
+            sampleRateHz: decoded.sampleRate,
+            channels: 1,
+            description: `10s capture (${comp.samples_recorded} samples, SHA-256: ${comp.raw_wav_sha256})`,
+            sourceAttribution: comp.is_simulated ? 'SIMULATED_ESP32_S3 (Not Physical)' : `Physical INMP441 on ${comp.port}`,
+            quality: { rating: 'Optimal', score: 100, message: comp.termination_reason },
+          });
+        }
+      } catch (err) {
+        addLog(`Auto-load captured WAV failed: ${String(err)}`, 'warning', 'LabCapture');
+      }
     });
 
     const unsubDevState = bridgeClient.onDeviceState((dev) => {
@@ -417,6 +475,7 @@ export default function App() {
       unsubConn();
       unsubState();
       unsubRec();
+      unsubLabComplete();
       unsubDevState();
       unsubDevEvt();
       unsubDevStats();
@@ -614,14 +673,63 @@ export default function App() {
   }, [deviceRuntimeState, sampleRate, addLog, addToast]);
 
   const handleStartRecording = useCallback(() => {
-    bridgeClient.startRecording();
-    addLog('Initiating session recording...', 'info', 'Recorder');
-  }, [addLog]);
+    bridgeClient.startRecording(undefined, labExperimentType);
+    addLog(`Initiating session recording (${labExperimentType})...`, 'info', 'Recorder');
+  }, [addLog, labExperimentType]);
 
   const handleStopRecording = useCallback(() => {
     bridgeClient.stopRecording();
     addLog('Finalizing session recording...', 'info', 'Recorder');
   }, [addLog]);
+
+  const handleStartLab10s = useCallback(async () => {
+    try {
+      audioEngine.clear();
+      currentSourceTypeRef.current = 'device';
+      setLastLabCapture(null);
+      setLabDiagnosticMetrics(null);
+      setLabAckTimestampUtc(null);
+      setRecordingSamples(0);
+      setRecordingElapsedSeconds(0);
+      const res = await bridgeClient.startLab10sRecording({
+        experimentType: labExperimentType,
+        sourceMode: 0,
+        targetSamples: 480000,
+        playReference: labExperimentType === 'PHYSICAL_PHANTOM' && playReferenceP01,
+      });
+      setLabAckTimestampUtc(res.ack_timestamp_utc);
+      setSourceType('device');
+      setActiveSourceName(`${res.is_simulated ? 'SIMULATED' : 'INMP441'} · ${res.port} (${res.experiment_type})`);
+      addLog(`Started 10s ${res.experiment_type} capture on ${res.port} (StartAck: ${res.ack_timestamp_utc})`, 'info', 'LabCapture');
+      addToast(`Recording 10s (${res.experiment_type})...`, 'info');
+    } catch (err) {
+      addLog(`Failed to start 10s capture: ${String(err)}`, 'error', 'LabCapture');
+      addToast(`Capture error: ${err instanceof Error ? err.message : String(err)}`, 'warning');
+    }
+  }, [labExperimentType, playReferenceP01, addLog, addToast]);
+
+  const handleStopLab10s = useCallback(async () => {
+    try {
+      await bridgeClient.stopLab10sRecording();
+      addLog('Stopped 10s lab capture early (partial WAV preserved).', 'warning', 'LabCapture');
+    } catch (err) {
+      addLog(`Stop 10s capture failed: ${String(err)}`, 'error', 'LabCapture');
+    }
+  }, [addLog]);
+
+  const handleConnectLabPort = useCallback(async (port: string) => {
+    setDeviceConnecting(true);
+    try {
+      await bridgeClient.connectUsbDevice(port);
+      addLog(`Connected ESP32-S3 on ${port} (HELLO verified)`, 'info', 'Hardware');
+      addToast(`Connected to ${port}`, 'success');
+    } catch (err) {
+      addLog(`Failed to connect ${port}: ${String(err)}`, 'error', 'Hardware');
+      addToast(`Connect failed: ${err instanceof Error ? err.message : String(err)}`, 'warning');
+    } finally {
+      setDeviceConnecting(false);
+    }
+  }, [addLog, addToast]);
 
   const handleReplaySession = useCallback((sessionId: string) => {
     audioEngine.clear();
@@ -650,6 +758,22 @@ export default function App() {
       addToast('Failed to load session audio', 'warning');
     }
   }, [handleOpenFile, addLog, addToast]);
+
+  const handleOpenCliSession = useCallback(async (sessionDir: string, experimentType?: string) => {
+    try {
+      const imported = await bridgeClient.importCliSession(sessionDir, experimentType);
+      setAnalysisTargetSessionId(imported.session_id);
+      const [_, diag] = await Promise.all([
+        handleAuditionSession(imported.session_id),
+        bridgeClient.getLabDiagnosticMetrics(imported.session_id),
+      ]);
+      if (diag) setLabDiagnosticMetrics(diag);
+      addLog(`Imported CLI session ${imported.session_id} into UI`, 'info', 'LabImport');
+    } catch (err) {
+      addLog(`Failed to import CLI session: ${String(err)}`, 'error', 'LabImport');
+      addToast(`Import failed: ${err instanceof Error ? err.message : String(err)}`, 'warning');
+    }
+  }, [handleAuditionSession, addLog, addToast]);
 
   const handleAnalyzeSession = useCallback((sessionId: string) => {
     setAnalysisTargetSessionId(sessionId);
@@ -1026,6 +1150,23 @@ DSP Filter: Preset ${filterPreset} (Active DSP Pipeline)`;
               onStartRecording={handleStartRecording}
               onStopRecording={handleStopRecording}
               recordingElapsedSeconds={recordingElapsedSeconds}
+              recordingSamples={recordingSamples}
+              labExperimentType={labExperimentType}
+              onChangeLabExperimentType={setLabExperimentType}
+              playReferenceP01={playReferenceP01}
+              onChangePlayReferenceP01={setPlayReferenceP01}
+              labAckTimestampUtc={labAckTimestampUtc}
+              labDiagnosticMetrics={labDiagnosticMetrics}
+              deviceRuntimeState={deviceRuntimeState}
+              deviceStats={deviceStats}
+              deviceConnecting={deviceConnecting}
+              onConnectLabPort={handleConnectLabPort}
+              onDisconnectLabPort={handleDisconnectDevice}
+              onStartLab10s={handleStartLab10s}
+              onStopLab10s={handleStopLab10s}
+              lastLabCapture={lastLabCapture}
+              onOpenAnalysisSession={handleAnalyzeSession}
+              onOpenCliSession={handleOpenCliSession}
               droppedDisplayFrames={droppedDisplayFrames}
               spectralFrame={spectralFrame}
               displayPointsPerSec={sourceType === 'file' || sourceType === 'sample' ? sampleRate : 3200}

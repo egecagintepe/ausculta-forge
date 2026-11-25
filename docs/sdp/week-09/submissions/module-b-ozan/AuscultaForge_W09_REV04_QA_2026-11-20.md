@@ -1,7 +1,13 @@
+> [!NOTE]
+> **Tarihsel Belge Koruma ve Entegrasyon Notu (Historical Record & Integration Notice):**  
+> Bu belge, 20 Kasım 2026 tarihinde Ozan (Modül B) tarafından hazırlanan **REV04 / 04-QA nihai yerel inceleme ve denetim raporudur**.  
+> Belgedeki *"GitHub'a commit/push yapılmadı"* ve *"GitHub hedef yolu docs/sdp/week-09/submissions/module-b-ozan/"* ifadeleri yerel hazırlık anındaki tarihsel durumu yansıtmakta olup; bu belge PR #36 (`feature/rev04-evidence-integration`) dalına kanonik kaynak olarak dahil edilmiş ve `main` ile uzlaştırılmıştır.  
+> Aşağıda yer alan *"Kapanmamış GitHub WAV SHA-256 uyumsuzluğu"* bölümündeki gözlem, belgenin yazıldığı sırada `origin/main` üzerinde açık olan durumu belgelemektedir. Bu uyumsuzluk, PR #36 dalında ikinci laboratuvar ZIP'i (`100114Z.zip`, 148/148 `SHA256SUMS.txt` tam eşleşme), oturum JSON kanıtları ve orkestratör durum dosyasıyla doğrulanarak çözümlenmiştir (ayrıntılar için ilgili bölüm altındaki Entegrasyon Notuna bakınız). Düzeltilmiş SHA değerleri korunmaktadır.
+
 # AuscultaForge — REV04 / Week 09 QA Düzeltme ve Açık Kanıt Raporu
 
 **Tarih:** 20 Kasım 2026 — Week 09 (16–22 Kasım 2026)  
-**Durum:** 20 Kasım 2026 itibarıyla son QA onaylı yayın paketi; hedef GitHub yolu `docs/sdp/week-09/submissions/module-b-ozan/`. GitHub merge durumu, bu belgenin dosya içeriği oluşturulduğu sırada henüz doğrulanmamıştır.
+**Durum:** 20 Kasım 2026 itibarıyla son QA onaylı yayın paketi; hedef GitHub yolu `docs/sdp/week-09/submissions/module-b-ozan/`.
 
 ## Güncel dosyalar (tek geçerli QA seti)
 
@@ -53,6 +59,15 @@ Yerel laboratuvar ZIP içindeki listelenmiş **148/148** dosya SHA-256 kontrolü
 - `session_20261118_094939_4888e670`: ZIP `733de8fdd1f722a7a6be9e17d354261561da53852d9aa5a6c691cd9503c3c857`, GitHub özet `6662e737c3da3fe43fcbaab2be77648356a59960ff7b5d204787f71cbef8c1fa`.
 - `session_20261118_100102_4e58ac08`: ZIP `26c78582df26bcd209c1f051f09aca19c8462b9fc7067cd30a0a59eba57faa33`, GitHub özet `1381dcce8a1feefc0516709848f075da34bdf88f3957bf8e5c26f784e2ea4169`.
 
+> [!IMPORTANT]
+> **Entegrasyon Sonrası Durum Notu (PR #36 Çözümü):**  
+> Ozan'ın yukarıdaki tespiti, belgenin yazıldığı tarihte `main` dalındaki (`8445eea`) `RETURN_EVIDENCE_SUMMARY.json` dosyasında bulunan kopyalama hatasını doğru biçimde yakalamıştır.  
+> Bu PR (#36) kapsamında yapılan bağımsız adli denetimde:
+> 1. `AuscultaForge_Lab_Return_Kaan_Ozan_20261118_100114Z.zip` paketi 148/148 dosya bazında bit-for-bit doğrulanmıştır.
+> 2. `RETURN_PACKAGE_MANIFEST.json` dosyasının yalnızca ilk iki oturumu (`091909` ve `093225`) kapsadığı; 3. ve 4. oturumların (`094939` ve `100102`) ise laboratuvar akışında sonradan alındığı tespit edilmiştir.
+> 3. Bu son iki oturumun gerçek fiziksel WAV dosyalarının SHA-256 değerlerinin ZIP içindeki `SHA256SUMS.txt`, oturum JSON dosyaları (`session_stimulus_4888e670.json` ve `session_stimulus_4e58ac08.json`) ve orkestratör durum dosyası (`wednesday_20261118_state.json`) ile tam olarak uyuşan **`733de8fdd1f722a7a6be9e17d354261561da53852d9aa5a6c691cd9503c3c857`** ve **`26c78582df26bcd209c1f051f09aca19c8462b9fc7067cd30a0a59eba57faa33`** olduğu kanıtlanmıştır.
+> 4. Dolayısıyla PR dalında `RETURN_EVIDENCE_SUMMARY.json` ve `PHYSICAL_G2_ACCEPTANCE_REPORT.md` dosyalarındaki hatalı değerler düzeltilmiş olup, düzeltilmiş gerçek SHA değerleri korunmaktadır.
+
 ## QA kontrolleri ve teslim sınırı
 
 - Excel **17 sekme ve 57 formül**; `Sipariş_Kayıt!G18=35,35`, `G19=90`, `Gerçek_Sipariş_Rev04!D17=4.246,21`, `D18=4.156,21`, `Test_Matrisi!I14` ile `W09_Durum!D14` uyumlu. 20 Kasım son kontrolünde `Test_Matrisi!I8/I10/I16/I17` de Week 8'den sarkan ve yalnız kısa akışla kısmen doğrulanan deneyleri açıkça belirtir.
@@ -61,8 +76,3 @@ Yerel laboratuvar ZIP içindeki listelenmiş **148/148** dosya SHA-256 kontrolü
 - GitHub Week 09 yayın hedefi: `docs/sdp/week-09/submissions/module-b-ozan/`. Yayınlanan commit/PR bilgisi bu statik QA notundan ayrı doğrulanacaktır.
 
 **Onay öncesi dört açık teyit:** 7×9 cm plaketlerin nihai fiyat/dekontu, Galena/RTV-2 gerçek ödeme ve teslim bilgileri, fiziksel fantom montaj/PCG testi, GitHub son iki WAV hash uzlaşması. Bu kanıtlar gelmedikçe `ALINDIĞI BİLDİRİLDİ` / `PENDING` notları bilinçli olarak korunur.
-
-## Son teknik açıklama
-
-- Word Bölüm 5'te ESP32-S3 native USB D−/D+ işlevinin GPIO19/20 ile ilişkisi silikon pin tanımı olarak ayrıldı. 18.11'de USB CDC aktarımı fiziksel olarak doğrulandı, fakat **hatların bireysel sinyal dalga biçimleri osiloskopla ayrıca ölçülmedi**.
-- Week 8'e ait `T-USB-01`, `T-AUD-01`, `T-LAT-01` ve `T-PKT-01` artık `Test_Matrisi` içinde gecikmiş, yapılmamış veya kısmi doğrulama olarak görünür. G1/G2 10 saniyelik oturumları 30 dakikalık deney veya bağımsız donanım gecikme ölçümü sayılmaz.

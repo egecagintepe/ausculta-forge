@@ -85,6 +85,13 @@ def collect_return_entries(
                     if p.is_file():
                         add_file(p, p.relative_to(root).as_posix())
 
+    # 2b. experiments/phantom/** (includes trial folders, raw WAVs, JSON/MD reports, plots, TRIAL_INDEX)
+    phantom_dir = root / "experiments/phantom"
+    if phantom_dir.is_dir():
+        for p in sorted(phantom_dir.rglob("*")):
+            if p.is_file():
+                add_file(p, p.relative_to(root).as_posix())
+
     # 3. Release attestations & local flash logs (never alters source or rollback files)
     for rel in (
         "firmware/releases/g2_candidate_20261117/g2_physical_attestation.json",
@@ -97,14 +104,14 @@ def collect_return_entries(
         if p.is_file():
             add_file(p, rel)
 
-    # 4. SDP weekly reports and Week 1-9 submissions
+    # 4. SDP weekly reports and Week 1-10 submissions
     sdp_dir = root / "docs/sdp"
     if sdp_dir.is_dir():
         for fixed in ("SDP4_WEEK01_06_DRAFT_PROGRESS_REPORT.md", "PROGRESS_ASOF_2026-11-17.md", "README.md"):
             fp = sdp_dir / fixed
             if fp.is_file():
                 add_file(fp, fp.relative_to(root).as_posix())
-        for wk in range(1, 10):
+        for wk in range(1, 11):
             wk_dir = sdp_dir / f"week-{wk:02d}"
             if wk_dir.is_dir():
                 for p in sorted(wk_dir.rglob("*")):

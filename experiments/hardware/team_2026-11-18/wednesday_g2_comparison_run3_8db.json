@@ -1,0 +1,149 @@
+{
+  "schema_version": "1.0.0",
+  "created_utc": "2026-11-18T10:01:14.498091+00:00",
+  "provenance_separation": {
+    "g1_source_mode": 1,
+    "g1_origin": "physical_deterministic_g1",
+    "g2_source_mode": 0,
+    "g2_origin": "physical_i2s_inmp441"
+  },
+  "g1_reference": {
+    "conclusion": "PHYSICAL_G1_PASSED",
+    "verification_result": "PASS",
+    "host_samples_accepted": 480000,
+    "host_sample_value_errors": 0,
+    "firmware_samples_dropped": 0,
+    "sha256_hash": "08f55010ada204d8f4631749b2976afd432a29167c3a8a2220a46fad6386ce96",
+    "source_mode": 1,
+    "bundle_dir": "C:\\Users\\User\\Desktop\\bitirme projesi\\experiments\\hardware\\20261118T091801Z_750cfd3e",
+    "device_uid_low": "0xb1aa7cc4",
+    "firmware_version": "1.1.0",
+    "manifest_role": "g2_post_flash",
+    "manifest_path": "C:\\Users\\User\\Desktop\\bitirme projesi\\firmware\\releases\\g2_candidate_20261117\\firmware_build_manifest.json",
+    "manifest_sdkconfig_sha256": "fc56de3b431da13d219b1a1a99acc783834760ab8fb59283eb78ab0a60f1ef71",
+    "flash_evidence_sha256": "651e7d6e09ba7458f85c920375b8c5fbf7e45a409237944b8cc599725abcb49e",
+    "post_g2_flash_verified": true,
+    "failure_reasons": []
+  },
+  "g2_quiet_capture": {
+    "role": "quiet",
+    "session_id": "session_20261118_091909_9e6baa63",
+    "session_dir": "C:\\Users\\User\\Desktop\\bitirme projesi\\experiments\\sessions\\session_20261118_091909_9e6baa63",
+    "raw_wav_path": "C:\\Users\\User\\Desktop\\bitirme projesi\\experiments\\sessions\\session_20261118_091909_9e6baa63\\raw.wav",
+    "raw_wav_sha256": "eb4f218c3a22158430993b2180cc28618b5e426d7588b1d3da1ca59fcdf3d903",
+    "source_mode": 0,
+    "acquisition_origin": "physical_i2s_inmp441",
+    "sample_rate_hz": 48000,
+    "samples": 480000,
+    "duration_s": 10.0,
+    "constant_zero": false,
+    "constant_signal": false,
+    "rms_fs": 0.08277282001285878,
+    "peak_fs": 0.6374626159667969,
+    "steady_rms_fs": 0.011630662,
+    "steady_peak_fs": 0.06877971,
+    "dc_fs": 0.0018097665329774222,
+    "saturation_fraction": 0.0,
+    "clipping_detected": false,
+    "mains_hum_prominent": false,
+    "welch_peak_freq_hz_20_500": 433.594,
+    "welch_band_power_20_500": 2.4203538208118126e-05,
+    "crc_failures": 0,
+    "dropped_frames": 0,
+    "firmware_telemetry": {
+      "generated_samples": 480256,
+      "fully_queued_samples": 480000,
+      "dropped_samples": 256,
+      "post_target_drained_samples": 256,
+      "in_stream_dropped_samples": 0,
+      "dma_overflows": 0,
+      "ring_overflows": 0,
+      "stop_reason": 1
+    }
+  },
+  "g2_stimulus_capture": {
+    "role": "stimulus",
+    "session_id": "session_20261118_100102_4e58ac08",
+    "session_dir": "C:\\Users\\User\\Desktop\\bitirme projesi\\experiments\\sessions\\session_20261118_100102_4e58ac08",
+    "raw_wav_path": "C:\\Users\\User\\Desktop\\bitirme projesi\\experiments\\sessions\\session_20261118_100102_4e58ac08\\raw.wav",
+    "raw_wav_sha256": "26c78582df26bcd209c1f051f09aca19c8462b9fc7067cd30a0a59eba57faa33",
+    "source_mode": 0,
+    "acquisition_origin": "physical_i2s_inmp441",
+    "sample_rate_hz": 48000,
+    "samples": 480000,
+    "duration_s": 10.0,
+    "constant_zero": false,
+    "constant_signal": false,
+    "rms_fs": 0.10533738720406452,
+    "peak_fs": 0.999967098236084,
+    "steady_rms_fs": 0.021875663635470076,
+    "steady_peak_fs": 0.16667556762695312,
+    "dc_fs": -0.0008877021700143815,
+    "saturation_fraction": 0.0,
+    "clipping_detected": true,
+    "mains_hum_prominent": false,
+    "welch_peak_freq_hz_20_500": 23.438,
+    "welch_band_power_20_500": 0.0014662375820398935,
+    "crc_failures": 0,
+    "dropped_frames": 0,
+    "firmware_telemetry": {
+      "generated_samples": 480256,
+      "fully_queued_samples": 480000,
+      "dropped_samples": 256,
+      "post_target_drained_samples": 256,
+      "in_stream_dropped_samples": 0,
+      "dma_overflows": 0,
+      "ring_overflows": 0,
+      "stop_reason": 1
+    }
+  },
+  "stimulus_vs_quiet_snr_20_500hz_db": 8.0,
+  "snr_measurement_detail": {
+    "status": "BENCH_MEASURED",
+    "active_rms_fs": 0.010564,
+    "quiescent_rms_fs": 0.004206,
+    "active_to_quiescent_ratio_db": 8.0,
+    "filter_band_hz": [
+      20.0,
+      500.0
+    ],
+    "room_acoustic_condition": "Wednesday bench quiet capture",
+    "exciter_drive_level": "Controlled bench acoustic stimulus",
+    "sensor_config": {
+      "sensor_model": "INMP441",
+      "interface_type": "I2S_DIGITAL",
+      "nominal_sensitivity_declared": "-26 dBFS @ 94 dB SPL",
+      "preamp_gain_db": 0.0,
+      "analog_filter_notes": "None",
+      "notes": "Declared hardware configuration; not calibrated physical acoustic equivalent."
+    },
+    "notes": "Calculated as 20*log10(RMS_active / RMS_quiescent) over 20–500 Hz. Represents active-to-quiescent level ratio under declared gain and acoustic conditions."
+  },
+  "acceptance_evaluation": {
+    "verdict": "PASSED",
+    "thresholds": {
+      "min_snr_20_500hz_db": 6.0,
+      "min_fullband_rms_ratio": 1.8,
+      "min_peak_ratio": 1.5,
+      "max_stimulus_saturation_fraction": 0.01
+    },
+    "observed": {
+      "snr_20_500hz_db": 8.0,
+      "quiet_rms_fs": 0.011631,
+      "stimulus_rms_fs": 0.021876,
+      "fullband_rms_ratio": 1.8809,
+      "quiet_peak_fs": 0.06878,
+      "stimulus_peak_fs": 0.166676,
+      "peak_ratio": 2.4233,
+      "stimulus_saturation_fraction": 0.0
+    },
+    "criteria": {
+      "distinct_wav_sha256": true,
+      "snr_20_500hz_db_min_6db": true,
+      "fullband_rms_ratio_min_1_8x": true,
+      "peak_ratio_min_1_5x": true,
+      "no_excessive_saturation": true
+    },
+    "reasons": []
+  }
+}

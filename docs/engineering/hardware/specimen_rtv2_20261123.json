@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0.0",
+  "specimen_id": "SPECIMEN-RTV2-20261123-01",
+  "material": {
+    "trade_name": "AnkaHobiMarket RTV-2 Kalip Silikonu",
+    "cure_type": "condensation_tin_catalyst",
+    "nominal_shore_hardness": "5 Shore (scale to verify)",
+    "lot_or_batch": "UNRECORDED",
+    "base_appearance": "semi_translucent_liquid",
+    "catalyst_appearance": "clear_liquid"
+  },
+  "fabrication_metadata": {
+    "fabrication_timestamp_utc": "2026-11-23T19:00:00Z",
+    "operator": "Team Member (Module A/B)",
+    "ambient_temperature_c": 21.0,
+    "mold_type": "Borcam circular glass dish",
+    "mold_diameter_mm": 120.0,
+    "target_thickness_mm": 10.0,
+    "calculated_target_volume_ml": 113.1
+  },
+  "dosing_accounting": {
+    "method": "volumetric_kitchen_spoons",
+    "base_tablespoons_est": 7.0,
+    "base_volume_ml_est": 105.0,
+    "catalyst_teaspoons_est": 0.75,
+    "catalyst_volume_ml_est": 3.75,
+    "nominal_volumetric_ratio_pct": 3.57,
+    "illustrative_mass_ratio_pct": 3.25,
+    "mass_measured_with_calibrated_balance": false,
+    "notes": "Initial 6 tbsp base poured (~7 mm depth); 1 extra tbsp added to reach ~10 mm target; ~0.75 tsp catalyst added. Mixed directly in mold."
+  },
+  "cure_monitoring": [
+    {
+      "timestamp_utc": "2026-11-23T19:00:00Z",
+      "elapsed_hours": 0.0,
+      "state": "liquid_mixed",
+      "tackiness": "liquid",
+      "verdict": "POURED"
+    },
+    {
+      "timestamp_utc": "2026-11-24T04:20:00Z",
+      "elapsed_hours": 9.33,
+      "state": "viscous_tacky",
+      "tackiness": "wet_tacky_no_firm_set",
+      "verdict": "CURE_NOT_VERIFIED_IN_PROGRESS"
+    }
+  ],
+  "physical_dimensions_after_cure": {
+    "measured": false,
+    "thickness_center_mm": null,
+    "thickness_north_mm": null,
+    "thickness_south_mm": null,
+    "thickness_east_mm": null,
+    "thickness_west_mm": null,
+    "mass_grams": null
+  },
+  "acceptance_gate": {
+    "status": "PENDING_PHYSICAL_INSPECTION",
+    "pre_lab_check_scheduled_utc": "2026-11-25T05:30:00Z"
+  }
+}

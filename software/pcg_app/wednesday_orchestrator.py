@@ -387,6 +387,7 @@ def record_g2_session(
     capture_timeout_s: float = 25.0,
     sessions_dir: Optional[Path] = None,
     engine_factory: Callable[..., Any] = CanonicalSessionEngine,
+    on_capture_started: Optional[Callable[[], None]] = None,
 ) -> dict[str, Any]:
     """Record a bounded physical source_mode=0 (INMP441) WAV session with strict silence/loss validation."""
     if target_samples <= 0 or (target_samples % 256) != 0:
@@ -477,6 +478,17 @@ def record_g2_session(
                 channels=1,
                 timeout_s=4.0,
             ).result(timeout=6.0)
+            if on_capture_started is not None:
+                try:
+                    on_capture_started()
+                except Exception as _cb_err:
+                    get_flight_recorder().record(
+                        severity="ERROR",
+                        subsystem="G2_ACQUISITION",
+                        event_type="ON_CAPTURE_STARTED_CALLBACK_ERROR",
+                        message=f"on_capture_started callback raised: {_cb_err}",
+                    )
+                    raise RuntimeError(f"ON_CAPTURE_STARTED_CALLBACK_FAILED: {_cb_err}") from _cb_err
         except Exception as exc:
             msg = str(exc)
             if "Unsupported source" in msg or "0x0002" in msg:
@@ -551,16 +563,53 @@ def record_g2_session(
     dropped_frames = int(engine.session.decoder.total_sequence_gaps) + expected_gaps
     summary = _summarize_capture_session(session_dir, role, total_crc, dropped_frames, telem_dict)
 
+    # Distinguish proven post-target DMA drain from in-stream data loss:
+    # Firmware generates 256 samples beyond target (e.g. 480256) due to ring/DMA chunk boundaries.
+    # Exactly 256 dropped samples with complete, consistent telemetry (0 CRC errors, 0 frame sequence gaps,
+    # 0 buffer overflows, and generated_samples >= target_samples + 256) constitutes proven post-target drain.
+    required_telem_keys = ("dropped_samples", "generated_samples", "dma_overflows", "ring_overflows")
+    if any(telem_dict.get(k) is None for k in required_telem_keys):
+        raise G2CaptureValidationError(
+            "G2_MISSING_FIRMWARE_TELEMETRY",
+            f"G2 {role} capture missing required firmware telemetry fields: {telem_dict}",
+            summary,
+        )
+
+    fw_dropped = int(telem_dict["dropped_samples"])
+    fw_generated = int(telem_dict["generated_samples"])
+    dma_overflows = int(telem_dict["dma_overflows"])
+    ring_overflows = int(telem_dict["ring_overflows"])
+
+    is_proven_post_drain = (
+        summary["samples"] >= target_samples
+        and dropped_frames == 0
+        and total_crc == 0
+        and dma_overflows == 0
+        and ring_overflows == 0
+        and fw_dropped == 256
+        and fw_generated >= target_samples + 256
+    )
+
+    if is_proven_post_drain:
+        in_stream_dropped = 0
+        post_drain = 256
+    else:
+        in_stream_dropped = fw_dropped
+        post_drain = 0
+
+    summary["in_stream_dropped_samples"] = in_stream_dropped
+    summary["post_target_drained_samples"] = post_drain
+
     if summary["constant_zero"] or summary["constant_signal"]:
         raise G2CaptureValidationError(
             "DIGITAL_SILENCE_OR_CONSTANT_SIGNAL",
             f"DIGITAL_SILENCE_OR_CONSTANT_SIGNAL: G2 {role} capture produced constant_zero={summary['constant_zero']}, constant_signal={summary['constant_signal']}. Never claiming PASS on silent/constant I2S data; check INMP441 VDD (3.3V), GND, L/R slot, SCK/WS/SD, and solder joints.",
             summary,
         )
-    if summary["samples"] < target_samples or telem_dict.get("dropped_samples", 0) > 0 or total_crc > 0:
+    if summary["samples"] < target_samples or in_stream_dropped > 0 or total_crc > 0 or dropped_frames > 0:
         raise G2CaptureValidationError(
             "G2_CAPTURE_INTEGRITY_FAILED",
-            f"G2 {role} capture integrity failed: samples={summary['samples']}/{target_samples}, fw_dropped={telem_dict.get('dropped_samples')}, crc_errors={total_crc}.",
+            f"G2 {role} capture integrity failed: samples={summary['samples']}/{target_samples}, in_stream_dropped={in_stream_dropped}, post_drain={post_drain}, crc_errors={total_crc}, dropped_frames={dropped_frames}.",
             summary,
         )
 

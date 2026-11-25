@@ -1,0 +1,232 @@
+{
+  "manifest_version": "1.0.0",
+  "generated_utc": "2026-11-25T10:19:06.580324+00:00",
+  "milestone": "AuscultaForge \u2014 First Successful Physical PCG Phantom Proof of Concept | 25 November 2026",
+  "classifications": {
+    "PROTOTYPE_POC_ACCEPTED": "YES \u2014 internal engineering milestone",
+    "PHYSICAL_PCG_TRANSMISSION_DEMONSTRATED": "YES \u2014 supported by exploratory trial_20261125_095717_275ae8 (1-10s)",
+    "DIGITAL_CAPTURE_INTEGRITY": "PASS for successful sessions",
+    "STETHOSCOPE_COUPLING_DIAGNOSTIC": "PASS (3/3 taps in session_20261125_083848_02ff521c & session_20261125_100542_a818e843)",
+    "OFFICIAL_Q01": "FAIL \u2014 startup transient (session_20261125_093843_959d7eb0)",
+    "OFFICIAL_P01": "NOT YET ACCEPTED",
+    "DIRECT_SILICONE_SIDEQUEST": "INCONCLUSIVE \u2014 all-zero I2S captures",
+    "CLINICAL_VALIDATION": "NOT CLAIMED"
+  },
+  "media_publication_policy": "Raw WAVs and CirCor 40058_AV.wav are excluded from public GitHub via .gitignore (privacy/licensing/binary size). Metadata JSONs, Markdown reports, SHA-256 hashes, and derived SVG figures are published.",
+  "artifacts": [
+    {
+      "kind": "mic_or_coupling_or_q01",
+      "session_id": "session_20261125_074126_5317e121",
+      "role": "pcg_phantom_quiet",
+      "started_at_utc": "2026-11-25T07:41:26.577561+00:00",
+      "total_samples": 480000,
+      "sample_rate_hz": 48000,
+      "raw_wav_relpath_local_only": "experiments/phantom/quiet_baselines/session_20261125_074126_5317e121/raw.wav",
+      "raw_wav_bytes": 1920058,
+      "raw_wav_sha256": "cc1955f23bb2c1a2214ace1815ba7c33107fc0059bcac39141d2f7a7b87daa98",
+      "session_json_relpath": "experiments/phantom/quiet_baselines/session_20261125_074126_5317e121/session.json",
+      "stream_quality": {
+        "total_blocks": 1875,
+        "dropped_blocks": 0,
+        "repeated_sequences": 0,
+        "sequence_discontinuities": 0,
+        "timestamp_regressions": 0,
+        "sample_rate_changes": 0,
+        "is_healthy": true
+      },
+      "git_commit_sha": "05ced44e21babdc93c04bc2d468d998f25a2aaff"
+    },
+    {
+      "kind": "mic_or_coupling_or_q01",
+      "session_id": "session_20261125_075205_9923da49",
+      "role": "pcg_phantom_quiet",
+      "started_at_utc": "2026-11-25T07:52:05.086399+00:00",
+      "total_samples": 480000,
+      "sample_rate_hz": 48000,
+      "raw_wav_relpath_local_only": "experiments/phantom/quiet_baselines/session_20261125_075205_9923da49/raw.wav",
+      "raw_wav_bytes": 1920058,
+      "raw_wav_sha256": "d9c81d655b053adeadbd68b7064fda80c9b1e391208509d08ec608d574d5bcd8",
+      "session_json_relpath": "experiments/phantom/quiet_baselines/session_20261125_075205_9923da49/session.json",
+      "stream_quality": {
+        "total_blocks": 1875,
+        "dropped_blocks": 0,
+        "repeated_sequences": 0,
+        "sequence_discontinuities": 0,
+        "timestamp_regressions": 0,
+        "sample_rate_changes": 0,
+        "is_healthy": true
+      },
+      "git_commit_sha": "05ced44e21babdc93c04bc2d468d998f25a2aaff"
+    },
+    {
+      "kind": "mic_or_coupling_or_q01",
+      "session_id": "session_20261125_082614_a84648cb",
+      "role": "pcg_phantom_quiet",
+      "started_at_utc": "2026-11-25T08:26:14.462880+00:00",
+      "total_samples": 480000,
+      "sample_rate_hz": 48000,
+      "raw_wav_relpath_local_only": "experiments/phantom/quiet_baselines/session_20261125_082614_a84648cb/raw.wav",
+      "raw_wav_bytes": 1920058,
+      "raw_wav_sha256": "9ef7d9764f348e2a86e186f7ab16030150441d8ff9ec4609d49e10a38e673b45",
+      "session_json_relpath": "experiments/phantom/quiet_baselines/session_20261125_082614_a84648cb/session.json",
+      "stream_quality": {
+        "total_blocks": 1875,
+        "dropped_blocks": 0,
+        "repeated_sequences": 0,
+        "sequence_discontinuities": 0,
+        "timestamp_regressions": 0,
+        "sample_rate_changes": 0,
+        "is_healthy": true
+      },
+      "git_commit_sha": "05ced44e21babdc93c04bc2d468d998f25a2aaff"
+    },
+    {
+      "kind": "mic_or_coupling_or_q01",
+      "session_id": "session_20261125_083848_02ff521c",
+      "role": "STETHOSCOPE_COUPLING_DIAGNOSTIC",
+      "started_at_utc": "2026-11-25T08:38:48.773288+00:00",
+      "total_samples": 480000,
+      "sample_rate_hz": 48000,
+      "raw_wav_relpath_local_only": "experiments/phantom/quiet_baselines/session_20261125_083848_02ff521c/raw.wav",
+      "raw_wav_bytes": 1920058,
+      "raw_wav_sha256": "ee30dae390a931230d90e80011fe2a52b80b2c28c77d8a6d4492093e5aff2517",
+      "session_json_relpath": "experiments/phantom/quiet_baselines/session_20261125_083848_02ff521c/session.json",
+      "stream_quality": {
+        "total_blocks": 1875,
+        "dropped_blocks": 0,
+        "repeated_sequences": 0,
+        "sequence_discontinuities": 0,
+        "timestamp_regressions": 0,
+        "sample_rate_changes": 0,
+        "is_healthy": true
+      },
+      "git_commit_sha": "05ced44e21babdc93c04bc2d468d998f25a2aaff"
+    },
+    {
+      "kind": "mic_or_coupling_or_q01",
+      "session_id": "session_20261125_093843_959d7eb0",
+      "role": "pcg_phantom_quiet",
+      "started_at_utc": "2026-11-25T09:38:43.847346+00:00",
+      "total_samples": 480000,
+      "sample_rate_hz": 48000,
+      "raw_wav_relpath_local_only": "experiments/phantom/quiet_baselines/session_20261125_093843_959d7eb0/raw.wav",
+      "raw_wav_bytes": 1920058,
+      "raw_wav_sha256": "a6a90141759e0dd11745bca9b18f2f546b70475b99d9efadd8479fca6939de27",
+      "session_json_relpath": "experiments/phantom/quiet_baselines/session_20261125_093843_959d7eb0/session.json",
+      "stream_quality": {
+        "total_blocks": 1875,
+        "dropped_blocks": 0,
+        "repeated_sequences": 0,
+        "sequence_discontinuities": 0,
+        "timestamp_regressions": 0,
+        "sample_rate_changes": 0,
+        "is_healthy": true
+      },
+      "git_commit_sha": "05ced44e21babdc93c04bc2d468d998f25a2aaff"
+    },
+    {
+      "kind": "mic_or_coupling_or_q01",
+      "session_id": "session_20261125_100347_bec2d02b",
+      "role": "STETHOSCOPE_COUPLING_DIAGNOSTIC",
+      "started_at_utc": "2026-11-25T10:03:47.134826+00:00",
+      "total_samples": 480000,
+      "sample_rate_hz": 48000,
+      "raw_wav_relpath_local_only": "experiments/phantom/quiet_baselines/session_20261125_100347_bec2d02b/raw.wav",
+      "raw_wav_bytes": 1920058,
+      "raw_wav_sha256": "cc1955f23bb2c1a2214ace1815ba7c33107fc0059bcac39141d2f7a7b87daa98",
+      "session_json_relpath": "experiments/phantom/quiet_baselines/session_20261125_100347_bec2d02b/session.json",
+      "stream_quality": {
+        "total_blocks": 1875,
+        "dropped_blocks": 0,
+        "repeated_sequences": 0,
+        "sequence_discontinuities": 0,
+        "timestamp_regressions": 0,
+        "sample_rate_changes": 0,
+        "is_healthy": true
+      },
+      "git_commit_sha": "05ced44e21babdc93c04bc2d468d998f25a2aaff"
+    },
+    {
+      "kind": "mic_or_coupling_or_q01",
+      "session_id": "session_20261125_100542_a818e843",
+      "role": "STETHOSCOPE_COUPLING_DIAGNOSTIC",
+      "started_at_utc": "2026-11-25T10:05:42.057581+00:00",
+      "total_samples": 480000,
+      "sample_rate_hz": 48000,
+      "raw_wav_relpath_local_only": "experiments/phantom/quiet_baselines/session_20261125_100542_a818e843/raw.wav",
+      "raw_wav_bytes": 1920058,
+      "raw_wav_sha256": "78754c669a71d984b7ce58e94ea3d25f3f3a526156bcf27333e41a4d45cc5eb8",
+      "session_json_relpath": "experiments/phantom/quiet_baselines/session_20261125_100542_a818e843/session.json",
+      "stream_quality": {
+        "total_blocks": 1875,
+        "dropped_blocks": 0,
+        "repeated_sequences": 0,
+        "sequence_discontinuities": 0,
+        "timestamp_regressions": 0,
+        "sample_rate_changes": 0,
+        "is_healthy": true
+      },
+      "git_commit_sha": "05ced44e21babdc93c04bc2d468d998f25a2aaff"
+    },
+    {
+      "kind": "phantom_trial",
+      "trial_id": "trial_20261125_094357_0309bb",
+      "session_id": "session_20261125_094358_f9926dad",
+      "notes": "P01_EXPLORATORY_PHYSICAL_PHANTOM",
+      "timestamp_utc": "2026-11-25T09:43:57.219512+00:00",
+      "gate_status": "PHYSICAL_GATE_INCONCLUSIVE",
+      "raw_wav_relpath_local_only": "experiments/phantom/trial_20261125_094357_0309bb/session_20261125_094358_f9926dad/raw.wav",
+      "raw_wav_bytes": 1920058,
+      "raw_wav_sha256": "1ec5dca3cb04a4fa8b6a9487199600ad85e20e2c3f413f48d06f93c93bca479b",
+      "report_json_relpath": "experiments/phantom/trial_20261125_094357_0309bb/phantom_pcg_experiment_report.json"
+    },
+    {
+      "kind": "phantom_trial",
+      "trial_id": "trial_20261125_094850_1d84e4",
+      "session_id": "session_20261125_094851_d2fc49f1",
+      "notes": "P01_EXPLORATORY_RETEST_02_VOLUME_10",
+      "timestamp_utc": "2026-11-25T09:48:50.252533+00:00",
+      "gate_status": "PHYSICAL_GATE_INCONCLUSIVE",
+      "raw_wav_relpath_local_only": "experiments/phantom/trial_20261125_094850_1d84e4/session_20261125_094851_d2fc49f1/raw.wav",
+      "raw_wav_bytes": 1920058,
+      "raw_wav_sha256": "2887d9fe83dea6e264d48f68fff9e91e695b848f97bcf1da262ee7afd8916867",
+      "report_json_relpath": "experiments/phantom/trial_20261125_094850_1d84e4/phantom_pcg_experiment_report.json"
+    },
+    {
+      "kind": "phantom_trial",
+      "trial_id": "trial_20261125_095717_275ae8",
+      "session_id": "session_20261125_095718_2d385ca8",
+      "notes": "P01_EXPLORATORY_RETEST_03_VOLUME_20",
+      "timestamp_utc": "2026-11-25T09:57:17.276772+00:00",
+      "gate_status": "PHYSICAL_GATE_INCONCLUSIVE",
+      "raw_wav_relpath_local_only": "experiments/phantom/trial_20261125_095717_275ae8/session_20261125_095718_2d385ca8/raw.wav",
+      "raw_wav_bytes": 1920058,
+      "raw_wav_sha256": "748e867842924f0db2ab3e48efe4ac5d45ddae4534c650c8b3869436b8915afb",
+      "report_json_relpath": "experiments/phantom/trial_20261125_095717_275ae8/phantom_pcg_experiment_report.json"
+    },
+    {
+      "kind": "phantom_trial",
+      "trial_id": "trial_20261125_100205_921544",
+      "session_id": "session_20261125_100207_7928af69",
+      "notes": "FAILED_DIGITAL_SILENCE",
+      "timestamp_utc": "2026-11-25T10:02:07.359868+00:00",
+      "gate_status": "FAILED_DIGITAL_SILENCE",
+      "raw_wav_relpath_local_only": "experiments/phantom/trial_20261125_100205_921544/session_20261125_100207_7928af69/raw.wav",
+      "raw_wav_bytes": 1920058,
+      "raw_wav_sha256": "cc1955f23bb2c1a2214ace1815ba7c33107fc0059bcac39141d2f7a7b87daa98",
+      "report_json_relpath": null
+    },
+    {
+      "kind": "phantom_trial",
+      "trial_id": "trial_20261125_100747_443db6",
+      "session_id": "session_20261125_100748_111817a0",
+      "notes": "FAILED_DIGITAL_SILENCE",
+      "timestamp_utc": "2026-11-25T10:07:48.828761+00:00",
+      "gate_status": "FAILED_DIGITAL_SILENCE",
+      "raw_wav_relpath_local_only": "experiments/phantom/trial_20261125_100747_443db6/session_20261125_100748_111817a0/raw.wav",
+      "raw_wav_bytes": 1920058,
+      "raw_wav_sha256": "cc1955f23bb2c1a2214ace1815ba7c33107fc0059bcac39141d2f7a7b87daa98",
+      "report_json_relpath": null
+    }
+  ]
+}

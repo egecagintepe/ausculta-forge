@@ -1,0 +1,9 @@
+# Known Issues & Next Engineering Steps
+
+| Priority | Issue | Evidence | Corrective Action | Objective Verification Criterion |
+| :--- | :--- | :--- | :--- | :--- |
+| **P0** | **First-second I²S startup transient** | `session_20261125_093843_959d7eb0` (`0–1 s` clip=254, `0.0529%`, `0–10 s` RMS `0.0453 FS` vs `1–10 s` `0.001469 FS`) | Increase `G1_TARGET_SAMPLES` in `firmware/components/g1/include/g1.h` (e.g. `576000U` for 2 s warm-up + 10 s capture) or keep I²S clocks running continuously after `af_i2s_init()` | Full 10 s Q01 capture achieves `< 0.005 FS` RMS and `< 0.05%` clipping without discarding samples |
+| **P0** | **Intermittent all-zero I²S captures** | `trial_20261125_100205_921544`, `session_20261125_100347_bec2d02b`, `trial_20261125_100747_443db6` | Solder INMP441 leads / add mechanical strain relief; run Test A/B/C isolation sequence (`PAM OFF` vs `PAM ON muted`) | 5 consecutive 10 s captures with `>99%` nonzero samples and `0` digital-silence aborts |
+| **P1** | **Low NCC (`0.1772`) & S1/S2 (`62.5%`)** | `trial_20261125_095717_275ae8` (`1–10 s` `coh=0.8820`, `NCC=0.1772 < 0.35`, `S1/S2=10/16 < 70%`) | Tune stimulus level (`25–35%` Windows vol) with warm-up; characterize phase delay and rigid vs compliant coupling | `NCC >= 0.35`, `Coherence >= 0.40`, `S1/S2 >= 70%`, `SNR >= 12 dB`, `clip < 0.05%` |
+| **P1** | **Unresolved direct-silicone A/B comparison** | Direct-silicone trials failed with digital zero | Repeat controlled cardboard vs direct-silicone A/B test once wiring is stabilized | Valid nonzero `1–10 s` metrics for both configurations under identical volume |
+| **P2** | **Uncalibrated silicone phantom & future AFE** | All metrics are relative `FS` | Document phantom dimensions/durometer; integrate B-01a/B-01b PCBs and analog front-end in next hardware phase | Calibrated SPL/transfer function `H1(f)` and PCB bring-up sign-off |

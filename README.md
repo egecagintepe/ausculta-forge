@@ -11,6 +11,15 @@ Authoritative Showcase Branch: `main`
 
 ---
 
+## Latest Milestone — 25 November 2026 Physical Phantom Proof of Concept
+
+> **Accepted Engineering Milestone (`PROTOTYPE_POC_ACCEPTED: YES`, Non-Clinical):**
+> On November 25, 2026, the AuscultaForge team successfully demonstrated an integrated physical PCG phantom proof of concept (`40058_AV.wav` $\rightarrow$ Realtek AUX $\rightarrow$ PAM8403 (5V) $\rightarrow$ 12 $\Omega$ exciter $\rightarrow$ cardboard plate $\rightarrow$ RTV-2 silicone phantom $\rightarrow$ stethoscope $\rightarrow$ INMP441 $\rightarrow$ ESP32-S3 `COM10`). In exploratory trial `trial_20261125_095717_275ae8` (`1–10 s` stable window), the system achieved **`0.8820` coherence (20–250 Hz)**, **`+17.30 dB` contextual SNR**, and **`10/16` (62.5%) S1/S2 matches** with `0` packet loss and `0` CRC errors. Official `Q01` (`0–1 s` startup transient) and official `P01` acceptance remain open engineering tasks.
+>
+> See: [Lab Milestone Report](docs/lab/2026-11-25/LAB_MILESTONE_REPORT.md) · [Session Summary](docs/lab/2026-11-25/LAB_SESSION_SUMMARY.md) · [Experiment Results](docs/lab/2026-11-25/EXPERIMENT_RESULTS.md)
+
+---
+
 ## 1. Project Scope & Purpose
 
 AuscultaForge investigates a complete, reproducible digital stethoscope pipeline from physical acoustic transduction to quantitative quality control:
@@ -142,6 +151,7 @@ For **Kaan** (Module A) and **Ozan** (Module B) running physical bench integrati
 | Deliverable | Scope & Period | Direct Link |
 | :--- | :--- | :--- |
 | **Advisor Progress Report (Weeks 1–6, EN Word/PDF)** | Formal English academic report (`21 Sep – 1 Nov` core period + `18 Nov` post-period appendix, 5 pages) | [`EEE495_AuscultaForge_Weeks01-06_Progress_Report_2026-11-18.docx`](docs/sdp/reports/EEE495_AuscultaForge_Weeks01-06_Progress_Report_2026-11-18.docx) · [PDF](docs/sdp/reports/EEE495_AuscultaForge_Weeks01-06_Progress_Report_2026-11-18.pdf) |
+| **REV04 Evidence Integration Report (20 Nov 2026)** | Audit of 18 Nov second package, WAV SHA-256 corrections, 23.2 vs 8.0 dB, and REV04 BOM | [`docs/engineering/release/REV04_EVIDENCE_INTEGRATION_REPORT_2026-11-20.md`](docs/engineering/release/REV04_EVIDENCE_INTEGRATION_REPORT_2026-11-20.md) |
 | **Instructor Progress Brief (Weeks 7–9, 18 Nov 2026)** | Concise weekly progress brief, meeting matrix, and 18 Nov lab summary for instructor discussion | [`docs/sdp/reports/EEE495_AuscultaForge_Weeks07-09_Progress_Brief_2026-11-18.md`](docs/sdp/reports/EEE495_AuscultaForge_Weeks07-09_Progress_Brief_2026-11-18.md) |
 | **Next Lab Inventory & Experiment Backlog** | YES/NO/UNKNOWN checklist, approved alternatives, safety checks, and prioritized physical backlog | [`docs/engineering/hardware/NEXT_LAB_INVENTORY_CONFIRMATION.md`](docs/engineering/hardware/NEXT_LAB_INVENTORY_CONFIRMATION.md) |
 | **Advisor Progress Draft (Markdown)** | Historical Weeks 1–6 tables + 18 Nov physical lab measurement addendum | [`docs/sdp/SDP4_WEEK01_06_DRAFT_PROGRESS_REPORT.md`](docs/sdp/SDP4_WEEK01_06_DRAFT_PROGRESS_REPORT.md) |
