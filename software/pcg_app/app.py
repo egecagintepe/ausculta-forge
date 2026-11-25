@@ -6,6 +6,7 @@ device runtime foundation, and the React frontend desktop client.
 
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -165,6 +166,20 @@ def create_app(
 
     class RecordingStartRequest(BaseModel):
         source: Optional[str] = None
+        experiment_type: Optional[str] = None
+        notes: Optional[str] = None
+
+    class LabRecord10sStartRequest(BaseModel):
+        experiment_type: str = "MIC_DIAGNOSTIC"
+        notes: Optional[str] = None
+        target_samples: int = 480000
+        source_mode: int = 0
+        play_reference: bool = False
+        reference_path: Optional[str] = "data/raw/week6_real_pcg_20261026/circor/40058_AV.wav"
+
+    class LabImportCliSessionRequest(BaseModel):
+        session_dir: str
+        experiment_type: Optional[str] = None
 
     class CompareRequest(BaseModel):
         asset_id: str
@@ -595,6 +610,441 @@ def create_app(
             operator="Kaan_Ozan_UI",
             notes="Packaged from Device Center Lab Mode",
         )
+
+    @app.post("/api/lab/record-10s/start")
+    async def api_lab_record_10s_start(req: LabRecord10sStartRequest) -> dict[str, Any]:
+        allowed_exp = {"MIC_DIAGNOSTIC", "STETHOSCOPE_COUPLING_DIAGNOSTIC", "QUIET_BASELINE", "PHYSICAL_PHANTOM"}
+        if req.experiment_type not in allowed_exp:
+            raise HTTPException(status_code=400, detail=f"Invalid experiment_type '{req.experiment_type}'.")
+
+        engine = manager.device_runtime.canonical_engine
+        if not engine or not engine.is_running or engine.state.value not in ("READY", "COMPLETE"):
+            raise HTTPException(
+                status_code=400,
+                detail="Device is not connected/ready. Connect COM port (e.g. COM10) first.",
+            )
+        if manager.recorder.is_recording:
+            raise HTTPException(status_code=409, detail="A recording session is already active.")
+
+        rate = 48000
+        manager.source_type = "hardware"
+        manager.active_source_name = ("SOFTWARE SIMULATION: " if engine.is_simulated else "Physical USB: ") + str(engine.port_name)
+        manager.is_streaming = True
+        manager.is_paused = False
+        manager.sample_rate_hz = rate
+
+        try:
+            sid = manager.start_recording(
+                source_label=manager.active_source_name,
+                experiment_type=req.experiment_type,
+                notes=req.notes,
+            )
+        except Exception as e:
+            manager.is_streaming = False
+            raise HTTPException(status_code=400, detail=f"Failed to start session recorder: {e}")
+
+        try:
+            fut = engine.start_acquisition(
+                target_samples=req.target_samples,
+                source_mode=req.source_mode,
+                sample_rate_hz=rate,
+                encoding=1,
+                channels=1,
+                timeout_s=4.0,
+            )
+            ack = await asyncio.wrap_future(fut)
+        except Exception as e:
+            if manager.recorder.is_recording:
+                try:
+                    manager.stop_recording(termination_reason="start_failed")
+                except Exception:
+                    pass
+            manager.is_streaming = False
+            raise HTTPException(status_code=400, detail=f"Failed to start 10s hardware acquisition: {e}")
+
+        ack_timestamp_utc = datetime.now(timezone.utc).isoformat()
+        playback_active = False
+        if req.experiment_type == "PHYSICAL_PHANTOM" and req.play_reference and not engine.is_simulated:
+            from .hardware_workflow import ROOT
+            ref_path = (ROOT / (req.reference_path or "data/raw/week6_real_pcg_20261026/circor/40058_AV.wav")).resolve()
+            if ref_path.is_file():
+                try:
+                    import winsound
+                    winsound.PlaySound(str(ref_path), winsound.SND_FILENAME | winsound.SND_ASYNC)
+                    playback_active = True
+                except Exception:
+                    playback_active = False
+
+        manager.device_runtime._state = DeviceState.STREAMING
+
+        await manager.broadcast(make_device_state_message(manager.device_runtime.get_state_dict()))
+        await manager.broadcast(make_stream_state_message(manager.get_state_dict()))
+        await manager.broadcast(
+            make_recording_state_message(
+                is_recording=True,
+                session_id=sid,
+                elapsed_seconds=0.0,
+                samples_recorded=0,
+                blocks_recorded=0,
+                source=manager.active_source_name,
+                sample_rate_hz=rate,
+            )
+        )
+
+        async def _monitor_bounded_capture() -> None:
+            term_reason = "completed"
+            try:
+                while True:
+                    await asyncio.sleep(0.1)
+                    if not manager.recorder.is_recording:
+                        return
+                    accepted = engine.session.counters.host_samples_accepted
+                    if accepted >= req.target_samples:
+                        term_reason = "completed"
+                        break
+                    if engine.state.value not in ("STREAMING", "START_PENDING"):
+                        term_reason = "incomplete_stream_ended"
+                        break
+            except Exception:
+                term_reason = "error"
+
+            if playback_active:
+                try:
+                    import winsound
+                    winsound.PlaySound(None, winsound.SND_PURGE)
+                except Exception:
+                    pass
+
+            meta = None
+            if manager.recorder.is_recording:
+                try:
+                    meta = manager.stop_recording(termination_reason=term_reason)
+                except Exception:
+                    meta = None
+
+            if engine.is_running and engine.state.value == "STREAMING":
+                try:
+                    await asyncio.wrap_future(engine.stop_acquisition(timeout_s=4.0))
+                except Exception:
+                    pass
+
+            manager.is_streaming = False
+            if manager.device_runtime.state == DeviceState.STREAMING:
+                manager.device_runtime._state = DeviceState.READY
+
+            await manager.broadcast(make_device_state_message(manager.device_runtime.get_state_dict()))
+            await manager.broadcast(make_stream_state_message(manager.get_state_dict()))
+            if meta is not None:
+                await manager.broadcast(
+                    make_recording_state_message(
+                        is_recording=False,
+                        session_id=meta.session_id,
+                        elapsed_seconds=meta.duration_s,
+                        samples_recorded=meta.total_samples,
+                        blocks_recorded=meta.total_blocks,
+                        source=meta.source,
+                        sample_rate_hz=meta.sample_rate_hz,
+                    )
+                )
+                await manager.broadcast({
+                    "type": "lab_capture_complete",
+                    "session_id": meta.session_id,
+                    "experiment_type": "SIMULATED" if engine.is_simulated else req.experiment_type,
+                    "samples_recorded": meta.total_samples,
+                    "target_samples": req.target_samples,
+                    "termination_reason": meta.termination_reason,
+                    "raw_wav_sha256": meta.raw_wav_sha256,
+                    "is_simulated": engine.is_simulated,
+                    "port": engine.port_name,
+                    "ack_timestamp_utc": ack_timestamp_utc,
+                    "playback_active": playback_active,
+                })
+
+        asyncio.create_task(_monitor_bounded_capture())
+        return {
+            "status": "recording_10s_started",
+            "session_id": sid,
+            "usb_session_id": f"0x{ack.session_id:08x}",
+            "experiment_type": "SIMULATED" if engine.is_simulated else req.experiment_type,
+            "target_samples": req.target_samples,
+            "source_mode": req.source_mode,
+            "is_simulated": engine.is_simulated,
+            "port": engine.port_name,
+            "ack_timestamp_utc": ack_timestamp_utc,
+            "ack_session_reference_time_us": int(ack.session_reference_time_us),
+            "playback_active": playback_active,
+        }
+
+    @app.post("/api/lab/record-10s/stop")
+    async def api_lab_record_10s_stop() -> dict[str, Any]:
+        try:
+            import winsound
+            winsound.PlaySound(None, winsound.SND_PURGE)
+        except Exception:
+            pass
+        meta = None
+        if manager.recorder.is_recording:
+            meta = manager.stop_recording(termination_reason="operator_stopped")
+        engine = manager.device_runtime.canonical_engine
+        if engine and engine.is_running and engine.state.value == "STREAMING":
+            try:
+                await asyncio.wrap_future(engine.stop_acquisition(timeout_s=4.0))
+            except Exception:
+                pass
+        manager.is_streaming = False
+        if manager.device_runtime.state == DeviceState.STREAMING:
+            manager.device_runtime._state = DeviceState.READY
+
+        await manager.broadcast(make_device_state_message(manager.device_runtime.get_state_dict()))
+        await manager.broadcast(make_stream_state_message(manager.get_state_dict()))
+        if meta is not None:
+            await manager.broadcast(
+                make_recording_state_message(
+                    is_recording=False,
+                    session_id=meta.session_id,
+                    elapsed_seconds=meta.duration_s,
+                    samples_recorded=meta.total_samples,
+                    blocks_recorded=meta.total_blocks,
+                    source=meta.source,
+                    sample_rate_hz=meta.sample_rate_hz,
+                )
+            )
+            return meta.to_dict()
+        return {"status": "stopped"}
+
+    @app.get("/api/lab/session/{session_id}/diagnostic-metrics")
+    def api_lab_session_diagnostic_metrics(session_id: str) -> dict[str, Any]:
+        try:
+            valid_id = validate_session_id(session_id, manager.sessions_dir)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid session ID")
+        sess = get_session(valid_id, manager.sessions_dir)
+        if not sess:
+            raise HTTPException(status_code=404, detail="Session not found")
+        wav_path = Path(manager.sessions_dir).resolve() / valid_id / "raw.wav"
+        if not wav_path.is_file():
+            raise HTTPException(status_code=404, detail="Session WAV file not found")
+
+        from scipy.io import wavfile as _wf
+        from scipy.signal import butter as _butter, sosfiltfilt as _sosfiltfilt
+        import numpy as _np
+
+        sr, arr = _wf.read(str(wav_path))
+        x = arr.astype(_np.float64)
+        if x.ndim > 1:
+            x = x[:, 0]
+        n = int(len(x))
+        rms_fs = float(_np.sqrt(_np.mean(x ** 2))) if n > 0 else 0.0
+        peak_fs = float(_np.max(_np.abs(x))) if n > 0 else 0.0
+        clip_count = int(_np.sum(_np.abs(x) > 0.98)) if n > 0 else 0
+        clip_pct = round(clip_count / max(n, 1) * 100.0, 4)
+
+        if n > 32 and sr > 1000:
+            sos = _butter(4, [20.0, min(500.0, sr * 0.45)], btype="bandpass", fs=sr, output="sos")
+            y = _sosfiltfilt(sos, x)
+        else:
+            y = x
+        bp_rms = float(_np.sqrt(_np.mean(y ** 2))) if n > 0 else 0.0
+        bp_peak = float(_np.max(_np.abs(y))) if n > 0 else 0.0
+
+        # PSD top peaks in 20-500 Hz
+        psd_peaks: list[dict[str, float]] = []
+        if n >= 512:
+            freqs = _np.fft.rfftfreq(n, 1.0 / sr)
+            mag2 = _np.abs(_np.fft.rfft(y)) ** 2
+            mask = (freqs >= 20.0) & (freqs <= 500.0)
+            f_sub = freqs[mask]
+            m_sub = mag2[mask]
+            if len(f_sub) > 0:
+                top_idx = _np.argsort(m_sub)[-5:][::-1]
+                psd_peaks = [{"freq_hz": round(float(f_sub[i]), 2), "power": round(float(m_sub[i]), 2)} for i in top_idx]
+
+        # Local transient tap-window analysis (2-3s, 4-5s, 6-7s vs silence windows)
+        silence_segs = []
+        silence_peaks = []
+        for s0, s1 in [(0.5, 2.0), (3.0, 4.0), (5.0, 6.0), (7.0, 10.0)]:
+            i0, i1 = min(n, int(s0 * sr)), min(n, int(s1 * sr))
+            if i1 > i0:
+                seg = y[i0:i1]
+                silence_peaks.append(float(_np.max(_np.abs(seg))))
+                w = max(1, sr // 4)
+                for k in range(0, len(seg) - w + 1, w):
+                    silence_segs.append(float(_np.sqrt(_np.mean(seg[k:k + w] ** 2))))
+        silence_baseline_rms = float(_np.median(silence_segs)) if silence_segs else 0.0
+        silence_max_peak = float(_np.max(silence_peaks)) if silence_peaks else 0.0
+
+        tap_windows = []
+        all_taps_detected = True
+        for label, t0, t1 in [("TAP 1", 2.0, 3.0), ("TAP 2", 4.0, 5.0), ("TAP 3", 6.0, 7.0)]:
+            i0, i1 = min(n, int(t0 * sr)), min(n, int(t1 * sr))
+            if i1 > i0:
+                seg = y[i0:i1]
+                l_peak = float(_np.max(_np.abs(seg)))
+                l_rms = float(_np.sqrt(_np.mean(seg ** 2)))
+            else:
+                l_peak, l_rms = 0.0, 0.0
+            ratio = l_peak / max(silence_baseline_rms, 1e-9)
+            vs_silence_peak = l_peak / max(silence_max_peak, 1e-9)
+            detected = bool(ratio >= 4.0 and vs_silence_peak >= 2.0 and l_peak >= 0.02 and n >= int(t1 * sr))
+            if not detected:
+                all_taps_detected = False
+            tap_windows.append({
+                "label": label,
+                "start_s": t0,
+                "end_s": t1,
+                "local_peak_fs": round(l_peak, 6),
+                "local_rms_fs": round(l_rms, 6),
+                "peak_to_baseline_ratio": round(ratio, 2),
+                "detected": detected,
+            })
+
+        is_sim = sess.get("acquisition_mode") == "software_simulated"
+        exp_type = sess.get("processing_profile", {}).get("experiment_type") or sess.get("processing_profile", {}).get("capture_role") or "UNKNOWN"
+        is_healthy = bool(sess.get("stream_quality", {}).get("is_healthy", False))
+        coupling_verified = bool(
+            not is_sim
+            and n >= 480000
+            and is_healthy
+            and all_taps_detected
+            and silence_baseline_rms < 0.02
+        )
+
+        return {
+            "session_id": valid_id,
+            "experiment_type": exp_type,
+            "is_simulated": is_sim,
+            "sample_rate_hz": int(sr),
+            "total_samples": n,
+            "duration_s": round(float(n / sr), 4) if sr > 0 else 0.0,
+            "rms_fs": round(rms_fs, 6),
+            "peak_fs": round(peak_fs, 6),
+            "clipping_count": clip_count,
+            "clipping_pct": clip_pct,
+            "band_20_500_rms_fs": round(bp_rms, 6),
+            "band_20_500_peak_fs": round(bp_peak, 6),
+            "silence_baseline_rms_fs": round(silence_baseline_rms, 6),
+            "tap_windows": tap_windows,
+            "coupling_verified": coupling_verified,
+            "psd_top_peaks": psd_peaks,
+            "stream_quality": sess.get("stream_quality", {}),
+            "raw_wav_sha256": sess.get("raw_wav_sha256", ""),
+            "started_at_utc": sess.get("started_at_utc", ""),
+            "termination_reason": sess.get("termination_reason", ""),
+        }
+
+    @app.get("/api/lab/cli-sessions")
+    def api_list_cli_sessions() -> list[dict[str, Any]]:
+        import json as _json
+        from .hardware_workflow import ROOT
+        results: list[dict[str, Any]] = []
+        qb_root = ROOT / "experiments" / "phantom" / "quiet_baselines"
+        if qb_root.is_dir():
+            for d in sorted(qb_root.glob("session_*"), reverse=True):
+                sess_file = d / "session.json"
+                wav_file = d / "raw.wav"
+                if sess_file.is_file() and wav_file.is_file():
+                    try:
+                        meta = _json.loads(sess_file.read_text(encoding="utf-8"))
+                        results.append({
+                            "session_dir": str(d.relative_to(ROOT)).replace("\\", "/"),
+                            "session_id": meta.get("session_id", d.name),
+                            "experiment_type": meta.get("processing_profile", {}).get("capture_role", "QUIET_BASELINE"),
+                            "source": meta.get("source", "CLI Recording"),
+                            "samples": meta.get("total_samples", 0),
+                            "duration_s": meta.get("duration_s", 0.0),
+                            "sample_rate_hz": meta.get("sample_rate_hz", 48000),
+                            "sha256": meta.get("raw_wav_sha256", ""),
+                            "started_at_utc": meta.get("started_at_utc", ""),
+                            "is_healthy": meta.get("stream_quality", {}).get("is_healthy", True),
+                        })
+                    except Exception:
+                        pass
+        trial_root = ROOT / "experiments" / "phantom"
+        if trial_root.is_dir():
+            for d in sorted(trial_root.glob("trial_*"), reverse=True):
+                rep_file = d / "phantom_pcg_experiment_report.json"
+                wav_file = d / "captured_pcg_48000hz.wav"
+                if rep_file.is_file() and wav_file.is_file():
+                    try:
+                        rep = _json.loads(rep_file.read_text(encoding="utf-8"))
+                        results.append({
+                            "session_dir": str(d.relative_to(ROOT)).replace("\\", "/"),
+                            "session_id": rep.get("trial_id", d.name),
+                            "experiment_type": rep.get("execution_mode", "PHYSICAL_PHANTOM"),
+                            "source": f"Phantom Trial ({rep.get('overall_gate', 'UNKNOWN')})",
+                            "samples": rep.get("capture_samples", 480000),
+                            "duration_s": 10.0,
+                            "sample_rate_hz": 48000,
+                            "sha256": rep.get("captured_wav_sha256", ""),
+                            "started_at_utc": rep.get("timestamp_utc", ""),
+                            "is_healthy": True,
+                        })
+                    except Exception:
+                        pass
+        return results
+
+    @app.post("/api/lab/import-cli-session")
+    def api_import_cli_session(req: LabImportCliSessionRequest) -> dict[str, Any]:
+        import json as _json
+        import shutil
+        from .hardware_workflow import ROOT
+        from pcg_core.experiment import compute_file_sha256
+
+        src_dir = (ROOT / req.session_dir).resolve()
+        exp_root = (ROOT / "experiments" / "phantom").resolve()
+        if not src_dir.is_dir() or not str(src_dir).startswith(str(exp_root)):
+            raise HTTPException(status_code=400, detail="Invalid CLI session directory.")
+
+        raw_wav = src_dir / "raw.wav"
+        if not raw_wav.is_file():
+            raw_wav = src_dir / "captured_pcg_48000hz.wav"
+        if not raw_wav.is_file():
+            raise HTTPException(status_code=404, detail="No WAV file found in CLI session directory.")
+
+        target_id = src_dir.name
+        dest_dir = (Path(manager.sessions_dir).resolve() / target_id)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_wav = dest_dir / "raw.wav"
+        shutil.copy2(raw_wav, dest_wav)
+
+        src_sess = src_dir / "session.json"
+        if src_sess.is_file():
+            meta = _json.loads(src_sess.read_text(encoding="utf-8"))
+            meta["session_id"] = target_id
+            if req.experiment_type:
+                meta.setdefault("processing_profile", {})["experiment_type"] = req.experiment_type
+            (dest_dir / "session.json").write_text(_json.dumps(meta, indent=2), encoding="utf-8")
+        else:
+            sha = compute_file_sha256(dest_wav)
+            from scipy.io import wavfile as _wf
+            sr, arr = _wf.read(str(dest_wav))
+            meta = {
+                "session_id": target_id,
+                "started_at_utc": datetime.now(timezone.utc).isoformat(),
+                "ended_at_utc": datetime.now(timezone.utc).isoformat(),
+                "source": f"Imported CLI ({src_dir.name})",
+                "sample_rate_hz": int(sr),
+                "total_blocks": int(len(arr) // 256),
+                "total_samples": int(len(arr)),
+                "duration_s": round(float(len(arr) / sr), 4),
+                "raw_wav_relpath": "raw.wav",
+                "raw_wav_sha256": sha,
+                "stream_quality": {"is_healthy": True, "dropped_blocks": 0},
+                "acquisition_mode": "hardware",
+                "termination_reason": "completed",
+                "processing_profile": {
+                    "experiment_type": req.experiment_type or "CLI_IMPORT",
+                    "imported_from": req.session_dir,
+                },
+                "status": "finalized",
+            }
+            (dest_dir / "session.json").write_text(_json.dumps(meta, indent=2), encoding="utf-8")
+
+        src_manifest = src_dir / "manifest.json"
+        if src_manifest.is_file():
+            shutil.copy2(src_manifest, dest_dir / "manifest.json")
+
+        return {"status": "imported", "session_id": target_id}
 
     # ML Research Lab Endpoints
     ml_registry = ResearchModelRegistry()
@@ -1230,7 +1680,11 @@ def create_app(
     @app.post("/api/recording/start")
     async def api_start_recording(req: RecordingStartRequest) -> dict[str, Any]:
         try:
-            sid = manager.start_recording(source_label=req.source)
+            sid = manager.start_recording(
+                source_label=req.source,
+                experiment_type=req.experiment_type,
+                notes=req.notes,
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -1441,7 +1895,11 @@ def create_app(
                 elif action == "start_recording":
                     try:
                         source_label = data.get("source")
-                        sid = manager.start_recording(source_label=source_label)
+                        sid = manager.start_recording(
+                            source_label=source_label,
+                            experiment_type=data.get("experiment_type"),
+                            notes=data.get("notes"),
+                        )
                         rec_msg = make_recording_state_message(
                             is_recording=True,
                             session_id=sid,

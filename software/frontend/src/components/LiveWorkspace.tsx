@@ -18,7 +18,12 @@ import {
   Activity,
   Layers,
   Radio,
-  Disc
+  Disc,
+  Cpu,
+  RefreshCw,
+  PowerOff,
+  FolderArchive,
+  BarChart2
 } from 'lucide-react';
 import {
   AudioSourceType,
@@ -27,9 +32,13 @@ import {
   ListeningTrack,
   HeartSoundMetadata,
   SpectralFrameData,
+  DeviceRuntimeState,
+  DeviceIntegrityStats,
+  UsbPortDescriptorItem,
 } from '../types';
 import { resolveStreamHealthState } from './FooterStatus';
 import { appendSpectrum, spectrumColumn, spectralMaxFrequency, spectrumOrigin } from '../api/spectralHistory';
+import { bridgeClient, LabCaptureCompleteData, CliSessionItem, LabExperimentType, LabDiagnosticMetrics } from '../api/bridgeClient';
 
 interface LiveWorkspaceProps {
   activeSourceName?: string;
@@ -71,6 +80,23 @@ interface LiveWorkspaceProps {
   onStartRecording?: () => void;
   onStopRecording?: () => void;
   recordingElapsedSeconds?: number;
+  recordingSamples?: number;
+  labExperimentType?: LabExperimentType;
+  onChangeLabExperimentType?: (t: LabExperimentType) => void;
+  playReferenceP01?: boolean;
+  onChangePlayReferenceP01?: (v: boolean) => void;
+  labAckTimestampUtc?: string | null;
+  labDiagnosticMetrics?: LabDiagnosticMetrics | null;
+  deviceRuntimeState?: DeviceRuntimeState | null;
+  deviceStats?: DeviceIntegrityStats | null;
+  deviceConnecting?: boolean;
+  onConnectLabPort?: (port: string) => void;
+  onDisconnectLabPort?: () => void;
+  onStartLab10s?: () => void;
+  onStopLab10s?: () => void;
+  lastLabCapture?: LabCaptureCompleteData | null;
+  onOpenAnalysisSession?: (sessionId: string) => void;
+  onOpenCliSession?: (sessionDir: string, experimentType?: string) => void;
   droppedDisplayFrames?: number;
   spectralFrame?: SpectralFrameData | null;
   displayPointsPerSec?: number;
@@ -117,6 +143,23 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
   onStartRecording,
   onStopRecording,
   recordingElapsedSeconds,
+  recordingSamples = 0,
+  labExperimentType = 'STETHOSCOPE_COUPLING_DIAGNOSTIC',
+  onChangeLabExperimentType,
+  playReferenceP01 = false,
+  onChangePlayReferenceP01,
+  labAckTimestampUtc = null,
+  labDiagnosticMetrics = null,
+  deviceRuntimeState,
+  deviceStats,
+  deviceConnecting = false,
+  onConnectLabPort,
+  onDisconnectLabPort,
+  onStartLab10s,
+  onStopLab10s,
+  lastLabCapture,
+  onOpenAnalysisSession,
+  onOpenCliSession,
   droppedDisplayFrames = 0,
   spectralFrame = null,
   displayPointsPerSec,
@@ -125,6 +168,12 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
   const [viewMode, setViewMode] = useState<'oscilloscope' | 'fft'>('oscilloscope');
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [rawMuted, setRawMuted] = useState(false);
+  const [labPorts, setLabPorts] = useState<UsbPortDescriptorItem[]>([]);
+  const [selectedLabPort, setSelectedLabPort] = useState<string>('');
+  const [scanningLabPorts, setScanningLabPorts] = useState<boolean>(false);
+  const [cliSessions, setCliSessions] = useState<CliSessionItem[]>([]);
+  const [selectedCliDir, setSelectedCliDir] = useState<string>('');
+  const [importingCli, setImportingCli] = useState<boolean>(false);
   const filterDropdownRef = useRef<HTMLDivElement>(null);
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const rawCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -134,8 +183,39 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
   const [spectralHistory, setSpectralHistory] = useState<SpectralFrameData[]>([]);
   const maxSpectralHz = spectralMaxFrequency(sampleRate);
   const localAudition = sourceType === 'file' || sourceType === 'sample';
-  const canRecord = backendConnected && !localAudition && sourceType !== 'none' && isPlaying;
+  const isHwConnected = Boolean(deviceRuntimeState?.connected);
+  const canLabRecord10s = Boolean(backendConnected && isHwConnected && onStartLab10s && !isRecording);
+  const canRecord = (backendConnected && !localAudition && sourceType !== 'none' && isPlaying) || canLabRecord10s;
   useEffect(() => { setSpectralHistory([]); }, [sourceType, activeMetadata?.id, sampleRate]);
+
+  const refreshLabDiscovery = useCallback(async () => {
+    if (!backendConnected) return;
+    setScanningLabPorts(true);
+    try {
+      const [ports, cliList] = await Promise.all([
+        bridgeClient.getUsbPorts(),
+        bridgeClient.listCliSessions(),
+      ]);
+      setLabPorts(ports);
+      setSelectedLabPort(prev => {
+        if (prev && ports.some(p => p.port_name === prev)) return prev;
+        const esp = ports.find(p => p.is_espressif_candidate && p.port_name !== 'SIMULATED_ESP32_S3');
+        return esp ? esp.port_name : (ports[0]?.port_name || '');
+      });
+      setCliSessions(cliList);
+      if (cliList.length > 0) {
+        setSelectedCliDir(prev => prev || cliList[0].session_dir);
+      }
+    } finally {
+      setScanningLabPorts(false);
+    }
+  }, [backendConnected]);
+
+  useEffect(() => {
+    if (backendConnected) {
+      void refreshLabDiscovery();
+    }
+  }, [backendConnected, refreshLabDiscovery]);
 
   // Close filter menu when clicking outside
   useEffect(() => {
@@ -786,6 +866,354 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
             </button>
           </div>
         </div>
+
+        {/* 1B. Laboratory Live Recording & Hardware Control Strip */}
+        {backendConnected && (
+          <div
+            id="lab-recording-strip"
+            className="flex flex-col gap-2.5 rounded-xl p-3.5 shadow-xs border font-mono-code text-xs"
+            style={{
+              backgroundColor: 'var(--surface-card)',
+              borderColor: isHwConnected ? 'var(--status-success)' : 'var(--border-subtle)',
+            }}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {/* Hardware Connection & Source Identity */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex items-center gap-1.5">
+                  <Cpu size={14} className={isHwConnected ? 'text-[var(--status-success)]' : 'text-[var(--accent-metal)]'} />
+                  <span className="font-bold uppercase tracking-wider text-[11px] text-[var(--on-surface)]">
+                    Lab Hardware
+                  </span>
+                </div>
+
+                <select
+                  id="lab-port-select"
+                  value={selectedLabPort}
+                  onChange={(e) => setSelectedLabPort(e.target.value)}
+                  disabled={isHwConnected || deviceConnecting || isRecording}
+                  className="px-2 py-1 rounded bg-[var(--surface-muted)] border border-[var(--border-subtle)] text-[11px] text-[var(--on-surface)] disabled:opacity-60"
+                >
+                  <option value="">Select COM port...</option>
+                  {labPorts.map((p) => (
+                    <option key={p.port_name} value={p.port_name}>
+                      {p.port_name} {p.is_espressif_candidate && p.port_name !== 'SIMULATED_ESP32_S3' ? '★ [ESP32-S3]' : ''} — {p.description}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  id="btn-lab-scan-ports"
+                  onClick={() => void refreshLabDiscovery()}
+                  disabled={scanningLabPorts || isRecording}
+                  title="Scan USB CDC ports & CLI recordings"
+                  className="px-2 py-1 rounded bg-[var(--surface-muted)] hover:bg-[var(--border-subtle)] text-[11px] text-[var(--on-surface)] border border-[var(--border-subtle)] flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw size={11} className={scanningLabPorts ? 'animate-spin' : ''} />
+                  <span>Scan</span>
+                </button>
+
+                {!isHwConnected ? (
+                  <button
+                    id="btn-lab-connect-port"
+                    onClick={() => selectedLabPort && onConnectLabPort?.(selectedLabPort)}
+                    disabled={!selectedLabPort || deviceConnecting}
+                    className="px-2.5 py-1 rounded bg-[var(--status-success)] text-white text-[11px] font-bold hover:opacity-90 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {deviceConnecting ? 'Connecting...' : 'Connect'}
+                  </button>
+                ) : (
+                  <button
+                    id="btn-lab-disconnect-port"
+                    onClick={() => onDisconnectLabPort?.()}
+                    disabled={isRecording}
+                    title="Release COM port (required before running standalone CLI)"
+                    className="px-2.5 py-1 rounded bg-[var(--status-danger)]/10 text-[var(--status-danger)] border border-[var(--status-danger)]/30 text-[11px] font-bold flex items-center gap-1 hover:bg-[var(--status-danger)]/20 cursor-pointer disabled:opacity-40"
+                  >
+                    <PowerOff size={11} />
+                    <span>Disconnect</span>
+                  </button>
+                )}
+
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                    isHwConnected
+                      ? 'bg-[var(--status-success)]/15 text-[var(--status-success)] border-[var(--status-success)]/40'
+                      : 'bg-[var(--surface-muted)] text-[var(--on-surface-variant)] border-[var(--border-subtle)]'
+                  }`}
+                >
+                  {isHwConnected
+                    ? `CONNECTED · ${deviceRuntimeState?.port || selectedLabPort || 'USB'} · INMP441 · 48 kHz · FW ${deviceRuntimeState?.firmware_version || '1.1.0'}`
+                    : 'DISCONNECTED (Single COM owner)'}
+                </span>
+              </div>
+
+              {/* Experiment Mode Selector & Record 10s */}
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  id="lab-experiment-type"
+                  value={labExperimentType}
+                  onChange={(e) => onChangeLabExperimentType?.(e.target.value as LabExperimentType)}
+                  disabled={isRecording}
+                  className="px-2 py-1 rounded bg-[var(--surface-muted)] border border-[var(--border-subtle)] text-[11px] font-bold text-[var(--accent-oxblood)] disabled:opacity-60"
+                >
+                  <option value="STETHOSCOPE_COUPLING_DIAGNOSTIC">STETHOSCOPE_COUPLING_DIAGNOSTIC (Guided 3-Tap)</option>
+                  <option value="MIC_DIAGNOSTIC">MIC_DIAGNOSTIC (Mic Check)</option>
+                  <option value="QUIET_BASELINE">Q01 — Quiet Baseline (No Taps / Silence)</option>
+                  <option value="PHYSICAL_PHANTOM">P01 — Phantom PCG (40058_AV.wav)</option>
+                </select>
+
+                {labExperimentType === 'PHYSICAL_PHANTOM' && (
+                  <label className="flex items-center gap-1 text-[10px] text-[var(--on-surface)] cursor-pointer px-1.5 py-0.5 rounded bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
+                    <input
+                      type="checkbox"
+                      checked={playReferenceP01}
+                      onChange={(e) => onChangePlayReferenceP01?.(e.target.checked)}
+                      disabled={isRecording}
+                      className="accent-[var(--accent-oxblood)]"
+                    />
+                    <span>Play 40058_AV.wav</span>
+                  </label>
+                )}
+
+                {!isRecording ? (
+                  <button
+                    id="btn-lab-record-10s"
+                    onClick={() => onStartLab10s?.()}
+                    disabled={!canLabRecord10s}
+                    title={!isHwConnected ? 'Connect ESP32-S3 first' : 'Record 10s (480,000 samples @ 48 kHz, INMP441)'}
+                    className="px-3 py-1 rounded bg-[var(--accent-oxblood)] text-white text-[11px] font-bold flex items-center gap-1.5 hover:opacity-90 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                  >
+                    <Disc size={12} />
+                    <span>Record 10s</span>
+                  </button>
+                ) : (
+                  <button
+                    id="btn-lab-stop-10s"
+                    onClick={() => (onStopLab10s ? onStopLab10s() : onStopRecording?.())}
+                    className="px-3 py-1 rounded bg-[var(--status-danger)] text-white text-[11px] font-bold flex items-center gap-1.5 animate-pulse cursor-pointer shadow-xs"
+                  >
+                    <span>Stop ({recordingSamples.toLocaleString()} / 480,000)</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* High-Contrast Guided Visual Protocol Banner (Zero Audible Beeps, Synced to StartAck) */}
+            {(isRecording || labExperimentType === 'STETHOSCOPE_COUPLING_DIAGNOSTIC') && (() => {
+              const tSec = recordingSamples > 0 ? recordingSamples / 48000 : (recordingElapsedSeconds || 0);
+              let cueTitle = 'READY — VISUAL PROTOCOL (NO AUDIBLE BEEPS)';
+              let cueSub = '0–2s SILENCE · 2–3s TAP 1 · 3–4s SILENCE · 4–5s TAP 2 · 5–6s SILENCE · 6–7s TAP 3 · 7–10s SILENCE';
+              let isActionCue = false;
+
+              if (isRecording) {
+                if (labExperimentType === 'STETHOSCOPE_COUPLING_DIAGNOSTIC') {
+                  if (tSec < 2.0) {
+                    cueTitle = 'SILENCE (0–2s) — DO NOT TOUCH DIAPHRAGM';
+                    cueSub = 'Next: TAP 1 at 2.0s';
+                  } else if (tSec < 3.0) {
+                    cueTitle = 'TAP 1 NOW (2–3s) — ONE LIGHT TAP ON DIAPHRAGM';
+                    cueSub = 'Next: SILENCE at 3.0s';
+                    isActionCue = true;
+                  } else if (tSec < 4.0) {
+                    cueTitle = 'SILENCE (3–4s) — HANDS OFF';
+                    cueSub = 'Next: TAP 2 at 4.0s';
+                  } else if (tSec < 5.0) {
+                    cueTitle = 'TAP 2 NOW (4–5s) — ONE LIGHT TAP ON DIAPHRAGM';
+                    cueSub = 'Next: SILENCE at 5.0s';
+                    isActionCue = true;
+                  } else if (tSec < 6.0) {
+                    cueTitle = 'SILENCE (5–6s) — HANDS OFF';
+                    cueSub = 'Next: TAP 3 at 6.0s';
+                  } else if (tSec < 7.0) {
+                    cueTitle = 'TAP 3 NOW (6–7s) — ONE LIGHT TAP ON DIAPHRAGM';
+                    cueSub = 'Next: FINAL SILENCE at 7.0s';
+                    isActionCue = true;
+                  } else {
+                    cueTitle = 'SILENCE (7–10s) — REMAIN QUIET UNTIL COMPLETE';
+                    cueSub = 'Finalizing 480,000 samples...';
+                  }
+                } else if (labExperimentType === 'QUIET_BASELINE') {
+                  cueTitle = 'Q01 QUIET BASELINE (0–10s) — COMPLETE SILENCE';
+                  cueSub = 'No taps, no speech, room quiet. Exciter OFF.';
+                } else if (labExperimentType === 'PHYSICAL_PHANTOM') {
+                  cueTitle = 'P01 PHANTOM PCG (0–10s) — ACQUIRING';
+                  cueSub = playReferenceP01 ? 'Synchronized 40058_AV.wav playback + INMP441 capture active.' : 'INMP441 capture active (playback not enabled in UI).';
+                  isActionCue = true;
+                } else {
+                  cueTitle = 'MIC_DIAGNOSTIC (0–10s) — RECORDING';
+                  cueSub = 'Raw INMP441 verification capture.';
+                }
+              }
+
+              return (
+                <div
+                  id="guided-protocol-banner"
+                  className={`rounded-lg p-3 border-2 flex flex-col gap-1.5 transition-colors ${
+                    isRecording && isActionCue
+                      ? 'bg-[var(--accent-oxblood)] text-white border-[var(--accent-oxblood)] shadow-md'
+                      : isRecording
+                      ? 'bg-emerald-950/90 text-emerald-100 border-emerald-500'
+                      : 'bg-[var(--surface-muted)] text-[var(--on-surface)] border-[var(--border-subtle)]'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-base sm:text-lg font-extrabold tracking-wide uppercase">
+                      {cueTitle}
+                    </span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-black/20">
+                      {isRecording ? `${tSec.toFixed(1)}s / 10.0s (${recordingSamples.toLocaleString()} smp)` : '10.0s Protocol'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] opacity-90">
+                    <span>{cueSub}</span>
+                    <span>
+                      {labAckTimestampUtc
+                        ? `Synced to hardware StartAck (${labAckTimestampUtc.slice(11, 19)} UTC, approx. ±100ms)`
+                        : 'Visual cues only (no audible beeps) · Syncs on hardware StartAck'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Recording Progress Bar or Offline CLI Import */}
+            {isRecording && (
+              <div className="flex flex-col gap-1 pt-1 border-t border-[var(--border-subtle)]/60">
+                <div className="flex items-center justify-between text-[10px] text-[var(--on-surface-variant)]">
+                  <span>
+                    CAPTURING [{labExperimentType}] · {recordingSamples.toLocaleString()} / 480,000 samples · {(recordingElapsedSeconds || 0).toFixed(1)}s / 10.0s
+                  </span>
+                  <span>
+                    CRC Errors: <strong>{deviceStats?.crc_failures ?? 0}</strong> · Gaps: <strong>{deviceStats?.sequence_gaps ?? 0}</strong> · Drops: <strong>{streamQuality?.dropped_blocks ?? 0}</strong>
+                  </span>
+                </div>
+                <div className="h-1.5 w-full rounded bg-[var(--surface-muted)] overflow-hidden">
+                  <div
+                    className="h-full bg-[var(--accent-oxblood)] transition-all duration-150"
+                    style={{ width: `${Math.min(100, (recordingSamples / 480000) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Post-Capture Diagnostic & Tap-Window Verification Card */}
+            {labDiagnosticMetrics && !isRecording && (
+              <div
+                id="lab-diagnostic-metrics-card"
+                className="p-2.5 rounded-lg bg-[var(--surface-muted)]/70 border border-[var(--border-subtle)] flex flex-col gap-2 text-[11px]"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                      labDiagnosticMetrics.is_simulated
+                        ? 'bg-[var(--status-warning)]/20 text-[var(--status-warning)]'
+                        : labDiagnosticMetrics.coupling_verified
+                        ? 'bg-[var(--status-success)]/15 text-[var(--status-success)]'
+                        : 'bg-[var(--accent-oxblood)]/15 text-[var(--accent-oxblood)]'
+                    }`}>
+                      {labDiagnosticMetrics.is_simulated
+                        ? 'SIMULATION MODE — NEVER COUNTS AS PHYSICAL PASS'
+                        : labDiagnosticMetrics.experiment_type === 'STETHOSCOPE_COUPLING_DIAGNOSTIC'
+                        ? (labDiagnosticMetrics.coupling_verified ? 'COUPLING VERIFIED (3/3 TAPS)' : 'COUPLING NOT VERIFIED')
+                        : labDiagnosticMetrics.experiment_type}
+                    </span>
+                    <span>Samples: <strong>{labDiagnosticMetrics.total_samples.toLocaleString()}</strong> ({labDiagnosticMetrics.duration_s}s @ {(labDiagnosticMetrics.sample_rate_hz / 1000).toFixed(0)} kHz)</span>
+                    <span>20–500 Hz RMS: <strong>{labDiagnosticMetrics.band_20_500_rms_fs.toFixed(5)}</strong></span>
+                    <span>Peak: <strong>{labDiagnosticMetrics.peak_fs.toFixed(4)}</strong></span>
+                    <span>Clip: <strong>{labDiagnosticMetrics.clipping_pct}%</strong></span>
+                    <span>Drops: <strong>{labDiagnosticMetrics.stream_quality?.dropped_blocks ?? 0}</strong></span>
+                  </div>
+                </div>
+
+                {labDiagnosticMetrics.tap_windows && labDiagnosticMetrics.tap_windows.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1 border-t border-[var(--border-subtle)]/50 text-[10px]">
+                    <div className="p-1.5 rounded bg-[var(--surface-card)] border border-[var(--border-subtle)]">
+                      <span className="text-[var(--on-surface-variant)] block">SILENCE BASELINE (20–500 Hz)</span>
+                      <strong className="text-[var(--on-surface)]">{labDiagnosticMetrics.silence_baseline_rms_fs.toFixed(5)} FS RMS</strong>
+                    </div>
+                    {labDiagnosticMetrics.tap_windows.map((tw) => (
+                      <div key={tw.label} className={`p-1.5 rounded border ${tw.detected ? 'bg-emerald-950/15 border-emerald-500/40' : 'bg-[var(--surface-card)] border-[var(--border-subtle)]'}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold">{tw.label} ({tw.start_s}–{tw.end_s}s)</span>
+                          <span className={tw.detected ? 'text-emerald-500 font-bold' : 'text-[var(--status-danger)] font-bold'}>
+                            {tw.detected ? 'DETECTED' : 'NOT DETECTED'}
+                          </span>
+                        </div>
+                        <div className="text-[var(--on-surface-variant)]">
+                          Peak: <strong>{tw.local_peak_fs.toFixed(4)}</strong> · Ratio: <strong>{tw.peak_to_baseline_ratio.toFixed(1)}x</strong>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Last Capture Complete Banner + CLI Session Import */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[var(--border-subtle)]/60 text-[10px]">
+              {lastLabCapture ? (
+                <div className="flex flex-wrap items-center gap-2 text-[var(--on-surface)]">
+                  <span className={`px-1.5 py-0.5 rounded font-bold ${lastLabCapture.is_simulated ? 'bg-[var(--status-warning)]/20 text-[var(--status-warning)]' : 'bg-[var(--status-success)]/15 text-[var(--status-success)]'}`}>
+                    {lastLabCapture.is_simulated ? 'SIMULATED' : lastLabCapture.experiment_type}
+                  </span>
+                  <span>Session: <strong>{lastLabCapture.session_id}</strong></span>
+                  <span>Samples: <strong>{lastLabCapture.samples_recorded.toLocaleString()}</strong></span>
+                  <span>SHA: <strong>{lastLabCapture.raw_wav_sha256.slice(0, 10)}...</strong></span>
+                  {onOpenAnalysisSession && (
+                    <button
+                      id="btn-open-capture-analysis"
+                      onClick={() => onOpenAnalysisSession(lastLabCapture.session_id)}
+                      className="px-2 py-0.5 rounded bg-[var(--accent-oxblood)]/15 text-[var(--accent-oxblood)] border border-[var(--accent-oxblood)]/30 font-bold flex items-center gap-1 hover:bg-[var(--accent-oxblood)]/25 cursor-pointer"
+                    >
+                      <BarChart2 size={11} />
+                      <span>Analyze / Compare Reference</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <span className="text-[var(--on-surface-variant)]">
+                  Provenance separated: SIMULATED · MIC_DIAGNOSTIC · QUIET_BASELINE (Q01) · PHYSICAL_PHANTOM (P01)
+                </span>
+              )}
+
+              {cliSessions.length > 0 && onOpenCliSession && (
+                <div className="flex items-center gap-1.5">
+                  <FolderArchive size={12} className="text-[var(--accent-metal)]" />
+                  <select
+                    id="cli-session-select"
+                    value={selectedCliDir}
+                    onChange={(e) => setSelectedCliDir(e.target.value)}
+                    className="px-1.5 py-0.5 rounded bg-[var(--surface-muted)] border border-[var(--border-subtle)] text-[10px] text-[var(--on-surface)] max-w-[240px]"
+                  >
+                    {cliSessions.map((c) => (
+                      <option key={c.session_dir} value={c.session_dir}>
+                        [{c.experiment_type}] {c.session_id} ({c.samples.toLocaleString()} smp)
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    id="btn-import-cli-session"
+                    onClick={async () => {
+                      if (!selectedCliDir) return;
+                      setImportingCli(true);
+                      try {
+                        const item = cliSessions.find(c => c.session_dir === selectedCliDir);
+                        await onOpenCliSession(selectedCliDir, item?.experiment_type);
+                      } finally {
+                        setImportingCli(false);
+                      }
+                    }}
+                    disabled={!selectedCliDir || importingCli}
+                    className="px-2 py-0.5 rounded bg-[var(--surface-muted)] hover:bg-[var(--border-subtle)] border border-[var(--border-strong)] text-[10px] font-bold text-[var(--on-surface)] cursor-pointer disabled:opacity-50"
+                  >
+                    {importingCli ? 'Loading...' : 'Open CLI Recording'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 2. Primary Canvas Enclosure: Oscilloscope & Acoustic Graph */}
         <div
@@ -1494,7 +1922,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
             {isRecording ? (
               <button
                 id="btn-stop-recording"
-                onClick={onStopRecording}
+                onClick={onStopLab10s || onStopRecording}
                 className="h-10 px-4 rounded text-white font-medium text-xs flex items-center gap-2 cursor-pointer shadow-md active:scale-95 animate-pulse"
                 style={{ backgroundColor: 'var(--status-danger)' }}
               >
@@ -1504,9 +1932,9 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
             ) : (
               <button
                 id="btn-start-recording"
-                onClick={onStartRecording}
+                onClick={canLabRecord10s ? onStartLab10s : onStartRecording}
                 disabled={!canRecord}
-                title={localAudition ? 'File audition is local playback; use backend WAV/session replay for recording' : !canRecord ? 'Cannot record: no active backend stream' : 'Start Session Recording'}
+                title={canLabRecord10s ? `Record 10s (${labExperimentType}, 48 kHz, INMP441)` : localAudition ? 'File audition is local playback; connect ESP32-S3 or use backend replay to record' : !canRecord ? 'Cannot record: connect ESP32-S3 or start backend stream' : 'Start Session Recording'}
                 className={`h-10 px-4 rounded transition-all flex items-center gap-2 shadow-xs text-xs font-medium border ${
                   !canRecord
                     ? 'opacity-40 cursor-not-allowed text-[var(--on-surface-variant)]'
@@ -1518,7 +1946,7 @@ export const LiveWorkspace: React.FC<LiveWorkspaceProps> = ({
                 }}
               >
                 <Disc size={16} className={!canRecord ? 'text-[var(--on-surface-variant)]' : 'text-[var(--status-danger)]'} />
-                <span>Record Session</span>
+                <span>{canLabRecord10s ? 'Record 10s' : 'Record Session'}</span>
               </button>
             )}
 

@@ -514,13 +514,22 @@ class StreamManager:
             return "hardware_unverified"
         return "physical_deterministic_g1" if config.source_mode == 1 else "physical_i2s_unqualified"
 
-    def start_recording(self, source_label: Optional[str] = None) -> str:
+    def start_recording(
+        self,
+        source_label: Optional[str] = None,
+        experiment_type: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> str:
         """Start recording incoming blocks into a new session.
 
         Requires an active stream and source.
         """
         if not self.is_streaming or self.source_type == "none":
             raise ValueError("Cannot record: no active stream or source is selected.")
+
+        allowed_exp = {"MIC_DIAGNOSTIC", "STETHOSCOPE_COUPLING_DIAGNOSTIC", "QUIET_BASELINE", "PHYSICAL_PHANTOM"}
+        if experiment_type is not None and experiment_type not in allowed_exp:
+            raise ValueError(f"Unsupported experiment_type '{experiment_type}'. Expected one of {sorted(allowed_exp)}.")
 
         source = source_label or self.active_source_name
         is_hardware = (self.source_type == "hardware")
@@ -542,12 +551,36 @@ class StreamManager:
         else:
             wire_fmt = "synthetic_or_offline_float32"
 
-        processing_profile = {
+        effective_origin = "software_simulated" if simulated else self.acquisition_origin()
+        effective_exp_type = "SIMULATED" if simulated else experiment_type
+
+        processing_profile: dict[str, Any] = {
             "filter_preset": self.filter_preset,
             "low_hz": self.filter_low_hz,
             "high_hz": self.filter_high_hz,
-            "acquisition_origin": self.acquisition_origin(),
+            "acquisition_origin": effective_origin,
         }
+        if effective_exp_type:
+            processing_profile["experiment_type"] = effective_exp_type
+        if notes:
+            processing_profile["notes"] = notes
+        if is_hardware and self.device_runtime.canonical_engine and self.device_runtime.canonical_engine.session.active_start_config:
+            processing_profile["source_mode"] = self.device_runtime.canonical_engine.session.active_start_config.source_mode
+        if effective_exp_type == "STETHOSCOPE_COUPLING_DIAGNOSTIC":
+            processing_profile["expected_tap_windows"] = [
+                {"label": "TAP_1", "start_s": 2.0, "end_s": 3.0},
+                {"label": "TAP_2", "start_s": 4.0, "end_s": 5.0},
+                {"label": "TAP_3", "start_s": 6.0, "end_s": 7.0},
+            ]
+            processing_profile["silence_windows"] = [
+                {"start_s": 0.0, "end_s": 2.0},
+                {"start_s": 3.0, "end_s": 4.0},
+                {"start_s": 5.0, "end_s": 6.0},
+                {"start_s": 7.0, "end_s": 10.0},
+            ]
+        if effective_exp_type == "PHYSICAL_PHANTOM":
+            processing_profile["playback_verified"] = False
+            processing_profile["provenance_note"] = "Physical capture recorded via UI; PCG playback requires verified audio routing."
         if self.source_type == "realtime_wav" and self.source_path:
             processing_profile["source_wav_sha256"] = compute_file_sha256(Path(self.source_path))
         if self.source_type == "session" and self.source_session_id:

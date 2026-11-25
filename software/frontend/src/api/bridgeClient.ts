@@ -112,6 +112,77 @@ export interface RecordingStateData {
   blocks_recorded: number;
   source: string;
   sample_rate_hz: number;
+  experiment_type?: string;
+}
+
+export type LabExperimentType =
+  | 'MIC_DIAGNOSTIC'
+  | 'STETHOSCOPE_COUPLING_DIAGNOSTIC'
+  | 'QUIET_BASELINE'
+  | 'PHYSICAL_PHANTOM';
+
+export interface LabCaptureCompleteData {
+  type: 'lab_capture_complete';
+  session_id: string;
+  experiment_type: string;
+  samples_recorded: number;
+  target_samples: number;
+  termination_reason: string;
+  raw_wav_sha256: string;
+  is_simulated: boolean;
+  port: string;
+  ack_timestamp_utc?: string;
+  playback_active?: boolean;
+}
+
+export interface LabTapWindowResult {
+  label: string;
+  start_s: number;
+  end_s: number;
+  local_peak_fs: number;
+  local_rms_fs: number;
+  peak_to_baseline_ratio: number;
+  detected: boolean;
+}
+
+export interface LabDiagnosticMetrics {
+  session_id: string;
+  experiment_type: string;
+  is_simulated: boolean;
+  sample_rate_hz: number;
+  total_samples: number;
+  duration_s: number;
+  rms_fs: number;
+  peak_fs: number;
+  clipping_count: number;
+  clipping_pct: number;
+  band_20_500_rms_fs: number;
+  band_20_500_peak_fs: number;
+  silence_baseline_rms_fs: number;
+  tap_windows: LabTapWindowResult[];
+  coupling_verified: boolean;
+  psd_top_peaks: { freq_hz: number; power: number }[];
+  stream_quality: {
+    total_blocks?: number;
+    dropped_blocks?: number;
+    is_healthy?: boolean;
+  };
+  raw_wav_sha256: string;
+  started_at_utc: string;
+  termination_reason: string;
+}
+
+export interface CliSessionItem {
+  session_dir: string;
+  session_id: string;
+  experiment_type: string;
+  source: string;
+  samples: number;
+  duration_s: number;
+  sample_rate_hz: number;
+  sha256: string;
+  started_at_utc: string;
+  is_healthy: boolean;
 }
 
 export interface SessionIntegrityCheck {
@@ -201,6 +272,7 @@ class BridgeClient {
   private displayFrameListeners: Set<DisplayFrameCallback> = new Set();
   private stateListeners: Set<StreamStateCallback> = new Set();
   private recordingListeners: Set<RecordingStateCallback> = new Set();
+  private labCaptureCompleteListeners: Set<(data: LabCaptureCompleteData) => void> = new Set();
   private deviceStateListeners: Set<DeviceStateCallback> = new Set();
   private deviceEventListeners: Set<DeviceEventCallback> = new Set();
   private deviceStatsListeners: Set<DeviceStatsCallback> = new Set();
@@ -426,6 +498,9 @@ class BridgeClient {
     } else if (type === 'recording_state') {
       const rec = msg as unknown as RecordingStateData;
       this.recordingListeners.forEach(cb => cb(rec));
+    } else if (type === 'lab_capture_complete') {
+      const comp = msg as unknown as LabCaptureCompleteData;
+      this.labCaptureCompleteListeners.forEach(cb => cb(comp));
     }
   }
 
@@ -472,6 +547,11 @@ class BridgeClient {
   public onRecordingState(cb: RecordingStateCallback) {
     this.recordingListeners.add(cb);
     return () => this.recordingListeners.delete(cb);
+  }
+
+  public onLabCaptureComplete(cb: (data: LabCaptureCompleteData) => void) {
+    this.labCaptureCompleteListeners.add(cb);
+    return () => this.labCaptureCompleteListeners.delete(cb);
   }
 
   public onConnectionChange(cb: ConnectionCallback) {
@@ -528,12 +608,91 @@ class BridgeClient {
     return await resp.json();
   }
 
-  public startRecording(source?: string) {
-    this.sendCommand({ action: 'start_recording', source });
+  public startRecording(source?: string, experimentType?: string, notes?: string) {
+    this.sendCommand({ action: 'start_recording', source, experiment_type: experimentType, notes });
   }
 
   public stopRecording() {
     this.sendCommand({ action: 'stop_recording' });
+  }
+
+  public async startLab10sRecording(params: {
+    experimentType: LabExperimentType;
+    notes?: string;
+    targetSamples?: number;
+    sourceMode?: number;
+    playReference?: boolean;
+  }): Promise<{
+    status: string;
+    session_id: string;
+    usb_session_id: string;
+    experiment_type: string;
+    target_samples: number;
+    source_mode: number;
+    is_simulated: boolean;
+    port: string;
+    ack_timestamp_utc: string;
+    ack_session_reference_time_us: number;
+    playback_active: boolean;
+  }> {
+    const resp = await this.request('/lab/record-10s/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        experiment_type: params.experimentType,
+        notes: params.notes,
+        target_samples: params.targetSamples ?? 480000,
+        source_mode: params.sourceMode ?? 0,
+        play_reference: params.playReference ?? false,
+      }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Failed to start 10s lab recording' }));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
+  public async getLabDiagnosticMetrics(sessionId: string): Promise<LabDiagnosticMetrics | null> {
+    try {
+      const resp = await this.request(`/lab/session/${encodeURIComponent(sessionId)}/diagnostic-metrics`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public async stopLab10sRecording(): Promise<Record<string, unknown>> {
+    const resp = await this.request('/lab/record-10s/stop', { method: 'POST' });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Failed to stop 10s lab recording' }));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+    return await resp.json();
+  }
+
+  public async listCliSessions(): Promise<CliSessionItem[]> {
+    try {
+      const resp = await this.request('/lab/cli-sessions');
+      if (!resp.ok) return [];
+      return await resp.json();
+    } catch {
+      return [];
+    }
+  }
+
+  public async importCliSession(sessionDir: string, experimentType?: string): Promise<{ status: string; session_id: string }> {
+    const resp = await this.request('/lab/import-cli-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_dir: sessionDir, experiment_type: experimentType }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Failed to import CLI session' }));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+    return await resp.json();
   }
 
   // REST API Helpers
