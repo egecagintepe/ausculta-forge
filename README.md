@@ -11,6 +11,15 @@ Authoritative Showcase Branch: `main`
 
 ---
 
+## Latest Milestone — 25 November 2026 Physical Phantom Proof of Concept
+
+> **Accepted Engineering Milestone (`PROTOTYPE_POC_ACCEPTED: YES`, Non-Clinical):**
+> On November 25, 2026, the AuscultaForge team successfully demonstrated an integrated physical PCG phantom proof of concept (`40058_AV.wav` $\rightarrow$ Realtek AUX $\rightarrow$ PAM8403 (5V) $\rightarrow$ 12 $\Omega$ exciter $\rightarrow$ cardboard plate $\rightarrow$ RTV-2 silicone phantom $\rightarrow$ stethoscope $\rightarrow$ INMP441 $\rightarrow$ ESP32-S3 `COM10`). In exploratory trial `trial_20261125_095717_275ae8` (`1–10 s` stable window), the system achieved **`0.8820` coherence (20–250 Hz)**, **`+17.30 dB` contextual SNR**, and **`10/16` (62.5%) S1/S2 matches** with `0` packet loss and `0` CRC errors. Official `Q01` (`0–1 s` startup transient) and official `P01` acceptance remain open engineering tasks.
+>
+> See: [Lab Milestone Report](docs/lab/2026-11-25/LAB_MILESTONE_REPORT.md) · [Session Summary](docs/lab/2026-11-25/LAB_SESSION_SUMMARY.md) · [Experiment Results](docs/lab/2026-11-25/EXPERIMENT_RESULTS.md)
+
+---
+
 ## 1. Project Scope & Purpose
 
 AuscultaForge investigates a complete, reproducible digital stethoscope pipeline from physical acoustic transduction to quantitative quality control:

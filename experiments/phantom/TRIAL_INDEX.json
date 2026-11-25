@@ -1,0 +1,54 @@
+[
+  {
+    "trial_id": "trial_20261124_115342_39a2f5",
+    "timestamp_utc": "2026-11-24T11:53:42.928486+00:00",
+    "operator": "Kaan_Ozan_Ege",
+    "hardware_status": "SIMULATED_BENCH_TEST",
+    "gate_status": "SIMULATION_VERIFIED_PHYSICAL_PENDING",
+    "overall_pass": false,
+    "snr_db": null,
+    "ncc": 0.71228,
+    "match_fraction": 1.0,
+    "notes": "W10_P0_Physical_Phantom (SIMULATE)",
+    "report_dir": "C:\\Users\\Ege Çağın\\Downloads\\AuscultaForge_Lab_Delivery_20261125\\ausculta-forge\\experiments\\phantom\\trial_20261124_115342_39a2f5"
+  },
+  {
+    "trial_id": "trial_20261125_094357_0309bb",
+    "timestamp_utc": "2026-11-25T09:43:57.219512+00:00",
+    "operator": "Kaan_Ozan_Ege",
+    "hardware_status": "PHYSICAL_INCONCLUSIVE",
+    "gate_status": "PHYSICAL_GATE_INCONCLUSIVE",
+    "overall_pass": false,
+    "snr_db": null,
+    "ncc": 0.03522,
+    "match_fraction": 0.0,
+    "notes": "P01_EXPLORATORY_PHYSICAL_PHANTOM",
+    "report_dir": "C:\\Users\\Ege Çağın\\Downloads\\AuscultaForge_Lab_Delivery_20261125\\ausculta-forge\\experiments\\phantom\\trial_20261125_094357_0309bb"
+  },
+  {
+    "trial_id": "trial_20261125_094850_1d84e4",
+    "timestamp_utc": "2026-11-25T09:48:50.252533+00:00",
+    "operator": "Kaan_Ozan_Ege",
+    "hardware_status": "PHYSICAL_INCONCLUSIVE",
+    "gate_status": "PHYSICAL_GATE_INCONCLUSIVE",
+    "overall_pass": false,
+    "snr_db": null,
+    "ncc": 0.0,
+    "match_fraction": 0.0,
+    "notes": "P01_EXPLORATORY_RETEST_02_VOLUME_10",
+    "report_dir": "C:\\Users\\Ege Çağın\\Downloads\\AuscultaForge_Lab_Delivery_20261125\\ausculta-forge\\experiments\\phantom\\trial_20261125_094850_1d84e4"
+  },
+  {
+    "trial_id": "trial_20261125_095717_275ae8",
+    "timestamp_utc": "2026-11-25T09:57:17.276772+00:00",
+    "operator": "Kaan_Ozan_Ege",
+    "hardware_status": "PHYSICAL_INCONCLUSIVE",
+    "gate_status": "PHYSICAL_GATE_INCONCLUSIVE",
+    "overall_pass": false,
+    "snr_db": null,
+    "ncc": 0.06105,
+    "match_fraction": 0.0,
+    "notes": "P01_EXPLORATORY_RETEST_03_VOLUME_20",
+    "report_dir": "C:\\Users\\Ege Çağın\\Downloads\\AuscultaForge_Lab_Delivery_20261125\\ausculta-forge\\experiments\\phantom\\trial_20261125_095717_275ae8"
+  }
+]
