@@ -3,6 +3,12 @@
 - **Theme:** Characterisation Round 1
 - **Overall Status:** `PARTIAL` (Physical G1 PASS on 2026-10-26; Module C Desktop/Spectral/Audio PASS; Module A Transducer Bench & Physical G2 INMP441 PENDING)
 
+## Module A follow-up - 25 November 2026
+
+Kaan's [Week 6 task record](submissions/module-a-kaan/W06_A_first-transducer-gain-bandwidth.md) and [English laboratory report](submissions/module-a-kaan/W06_A_first-transducer-lab-update-report_v01.pdf) now document the actual 18/25 November integration and phantom work. **Current Module A status: PARTIAL**; controlled gain/bandwidth and the Week 8 swept response remain OPEN. Q01 is FAIL and P01 is NOT YET ACCEPTED in the recorded team protocol. The [carry-over register](submissions/module-a-kaan/W06_A_open-work-and-handoff_v01.md) identifies the remaining work.
+
+The table and notes below retain the historical Week 6 window and 17 November snapshot. Later evidence is not backdated, and this Module A update does not close other modules' decisions or declare an academic gate passed.
+
 ## Submission Structure & Status (Week 6 Window)
 
 | Folder | Owner | Module | Status as of 2026-11-17 |
